@@ -1,0 +1,1156 @@
+/* Workbench prototype: existing themes and user typography remain authoritative. */
+/* Shared compact sentence headers: number, selection, information, then actions. */
+html[data-home=false] .entry:has(.editable-example){position:relative}
+html[data-home=false] .entry.has-sentence-actions .entry-head{padding-right:160px;justify-content:flex-start;align-items:center;min-height:30px;gap:7px;margin-bottom:7px}
+html[data-home=false] .entry.has-sentence-actions .entry-head>span{flex:1;min-width:80px;overflow-wrap:anywhere}
+html[data-home=false] .entry.has-sentence-actions .entry-head>label{flex:none;margin:0;display:flex;align-items:center}
+html[data-home=false] #corpus-workspace #results>.entry{padding:10px 16px 12px 44px}
+html[data-home=false] #corpus-workspace #results .sentence-number{top:16px;left:10px;margin:0}
+html[data-home=false] .entry.has-sentence-actions .sentence-actions{position:absolute;top:10px;right:18px;margin:0;display:flex;gap:5px;align-items:center}
+html[data-home=false] .editable-example>.sentence-actions{display:flex;justify-content:flex-end;margin:0 0 6px;gap:5px}
+html[data-home=false] .sentence-actions :is(button,summary){padding:3px 7px;font-size:.75rem;line-height:1.4}
+html[data-home=false] .entry .editable-example .words{gap:6px 12px}
+html[data-home=false] .entry .editable-example .word{padding:0;line-height:1.25}
+html[data-home=false] .entry .editable-example .ipa{margin-bottom:8px;line-height:1.45}
+html[data-home=false] .entry .editable-example .translation{margin-top:8px;padding-top:6px}
+html[data-home=false] .entry .editable-example .sentence-layer{margin:5px 0 7px;line-height:1.35}
+html[data-home=false] .editable-example :is(.sentence-audio,.collaborator-badge){display:inline-flex;align-items:center;vertical-align:middle;min-height:26px;margin-top:0;margin-bottom:5px}
+html[data-home=false] .editable-example :is(.sentence-audio,.collaborator-badge)[hidden]{display:none}
+html[data-home=false] .editable-example :is(.sentence-audio,.collaborator-badge) :is(button,select){box-sizing:border-box;height:26px;min-height:26px;margin:0;padding:2px 6px;font-size:.75rem;line-height:20px}
+html[data-home=false] #workbench-module-nav #analysis-records{max-width:none;width:100%;min-width:0;box-sizing:border-box;flex:auto;overflow:visible}
+#workbench-module-nav .analysis-record{width:100%;box-sizing:border-box;min-width:0}
+#workbench-module-nav .analysis-record button{width:auto;max-width:100%;margin:0;white-space:normal}
+#workbench-module-nav .analysis-record>button:first-child{width:100%;line-height:1.4}
+#workbench-module-nav .analysis-record div{flex-wrap:wrap}
+html[data-home=false] #dictionary-detail .ws-membership-view{padding:8px 10px;min-width:0}
+html[data-home=false] #dictionary-detail .ws-membership-view>details{padding:4px 0;margin:4px 0}
+html[data-home=false] #dictionary-detail .ws-principal-part{padding-left:10px}
+.slot-drag-toggle{display:inline-flex!important;align-items:center;gap:4px;margin:0!important;font-size:.75rem}
+.inline-words .word[draggable=true]{cursor:grab;user-select:none;border:1px solid var(--line);border-radius:4px;padding:5px!important}
+.inline-words .word[draggable=true] input{pointer-events:none}
+.inline-words .word.slot-selected{outline:2px solid var(--green);background:var(--selected)}
+.inline-words [data-slot-drop=before]{box-shadow:-4px 0 var(--green)}
+.inline-words [data-slot-drop=after]{box-shadow:4px 0 var(--green)}
+@media(max-width:600px){html[data-home=false] .entry.has-sentence-actions .entry-head{padding-right:0;padding-top:32px}html[data-home=false] .entry.has-sentence-actions .sentence-actions{right:12px}}
+html[data-home=false] #workspace-sidebar{display:flex;flex-direction:column;padding:18px 14px;gap:12px;overflow:auto}
+html[data-home=false] #workspace-sidebar .brand{margin:0;font-size:1.7rem}html[data-home=false] #workspace-sidebar .brand span{font-size:.8rem}
+#workbench-corpus-nav,#workbench-module-nav{min-height:100px;flex:1;overflow:auto}#workbench-module-nav[hidden],#workbench-corpus-nav[hidden]{display:none}
+#workbench-preferences{flex:none;margin:0;border-top:1px solid var(--line);padding-top:9px;font-size:.8rem}#workbench-preferences summary{cursor:pointer}#workbench-preferences footer{margin:10px 0;padding:0}
+.workbench-language-options{margin-top:5px;font-size:.78rem}.workbench-language-options summary{cursor:pointer}.language-panel{margin:0!important;padding-bottom:8px!important}
+html[data-home=false] #workbench-module-nav #survey-tree{position:static;max-height:none;border:0;padding:0;background:transparent;overflow:visible}
+html[data-home=false][data-workbench=survey] .survey-layout{display:block}
+html[data-home=false] #workbench-module-nav .dictionary-list-panel{height:auto;max-height:none;min-height:0;border:0;background:transparent;display:block}
+html[data-home=false] #workbench-module-nav #dictionary-list{max-height:none;overflow:visible}
+html[data-home=false][data-workbench=dictionary] .dictionary-columns{display:block}html[data-home=false][data-workbench=dictionary] #dictionary-detail{border:0;padding:14px 18px}
+#workbench-module-nav .search-row{display:flex;flex-wrap:wrap;gap:4px}#workbench-module-nav .search-row input{min-width:0;width:100%;flex-basis:100%}#workbench-module-nav .pagination{flex-wrap:wrap;gap:4px}
+#workbench-module-nav .search-row button{width:auto;display:inline-block;margin:0;padding:5px 7px;font-size:.75rem}
+#workbench-module-nav #analysis-records{width:auto;border:0;padding:0;position:static;max-height:none}#workbench-module-nav #analysis-records h2{font-size:1rem}
+html[data-home=false] #workspace-toolbar{background:var(--paper);border-bottom:1px solid var(--line);padding-bottom:5px;margin-bottom:18px}#workbench-tool-toggle{margin-left:auto;font-size:.75rem!important}#workspace-toolbar .toolbar-row[hidden]{display:none}
+html[data-home=false] #corpus-workspace>header{align-items:center;margin-bottom:12px;gap:10px}#corpus-workspace>header .eyebrow{display:none}html[data-home=false] #corpus-workspace>header h1{font-size:1.45rem;margin-bottom:3px}#corpus-workspace>header #subtitle{margin:0;font-size:.8rem}
+.workbench-menu{position:relative;margin:0;display:inline-block}.workbench-menu>summary{list-style:none;cursor:pointer;font-size:.8rem;padding:5px 9px;border:1px solid var(--line);border-radius:5px;white-space:nowrap}.workbench-menu>summary::-webkit-details-marker{display:none}.workbench-menu>summary::after{content:' ▾'}
+.workbench-menu-items{position:absolute;right:0;top:100%;z-index:45;background:var(--paper);border:1px solid var(--line);border-radius:6px;box-shadow:0 6px 20px #0002;min-width:190px;padding:5px;display:flex;flex-direction:column;gap:3px}.workbench-menu:not([open])>.workbench-menu-items{display:none}.workbench-menu-items button{text-align:left;width:100%;white-space:normal}.workbench-menu-items button[hidden]{display:none}
+.workbench-search-options,.workbench-batch{font-size:.8rem;margin:8px 0}.workbench-search-options>summary,.workbench-batch>summary{cursor:pointer;color:var(--muted)}.workbench-batch .organize-bar{margin:5px 0}
+html[data-home=false] #results>.entry{padding:16px 18px;margin:0;border-radius:0;border:0;border-bottom:1px solid var(--line);background:transparent}html[data-home=false] #results>.entry.workbench-origin{background:color-mix(in srgb,var(--green) 7%,var(--paper));box-shadow:inset 3px 0 var(--green)}
+#results .entry-head{font-size:.72rem;color:var(--muted);margin-bottom:8px}#results .inline-tools{margin-top:9px;gap:7px}#results .words{gap:10px 16px}#results .word{line-height:1.35}#results .translation{margin-top:9px}#results .example-notes{margin-top:7px;font-size:.8rem}
+html[data-home=false].workbench-inspecting main{margin-right:360px}html[data-home=false].workbench-inspecting #workspace-toolbar{margin-right:-360px;padding-right:12px}
+html[data-home=false].workbench-inspecting #word-link-dialog{position:fixed;inset:0 0 0 auto;margin:0;width:360px;max-width:90vw;height:100dvh;max-height:100dvh;border-radius:0;border:0;border-left:1px solid var(--line);box-shadow:-5px 0 20px #0001;z-index:55;background:var(--paper)}
+#word-link-dialog.workbench-inspector .dialog-content{padding:12px}#word-link-dialog.workbench-inspector h2{font-size:1.1rem;margin:0 0 8px}#word-link-dialog.workbench-inspector .search-row{flex-wrap:wrap}#word-link-dialog.workbench-inspector .search-row input{min-width:0;width:100%;flex-basis:100%}#word-link-dialog.workbench-inspector #link-context{font-size:.8rem;border-bottom:1px solid var(--line);padding-bottom:8px}
+body:has(#desktop-toolbar) #word-link-dialog.workbench-inspector{top:var(--project-bar-height,42px)!important;height:calc(100dvh - var(--project-bar-height,42px))!important}
+@media(max-width:850px){html[data-home=false].workbench-inspecting main{margin-right:0}html[data-home=false].workbench-inspecting #workspace-toolbar{margin-right:0}.workbench-menu-items{max-width:80vw}}
+
+html[data-home=false] #workspace-sidebar[hidden]{display:none!important}
+html[data-home=false] #workbench-module-nav #survey-tree button{width:auto;display:inline-block;margin:0;background:transparent;border:0;text-align:left;min-height:26px;padding:4px}
+html[data-home=false] #workbench-module-nav #survey-tree .survey-fold{flex:0 0 20px;padding:3px}
+html[data-home=false] #workbench-module-nav #survey-tree [data-node]{flex:1}
+html[data-home=false] #workbench-module-nav #survey-tree [aria-current=true]{background:color-mix(in srgb,var(--green) 13%,var(--paper))}
+.workbench-document-info{margin:6px 0 12px;font-size:.8rem}.workbench-document-info>summary{cursor:pointer;color:var(--muted)}.workbench-document-info .metadata-panel{margin:6px 0}.workbench-result-tools{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}.workbench-result-tools .result-bar{flex:1;gap:12px;margin:4px 0}.workbench-result-tools .pagination{margin:4px 0;padding:0;border:0;gap:5px}html[data-home=false] #corpus-workspace .search{padding:10px 12px;margin:8px 0}html[data-home=false] #corpus-workspace .search input,html[data-home=false] #corpus-workspace .search select{padding:7px 9px}
+html[data-home=false].workbench-inspecting #word-link-dialog{top:calc(var(--toolbar-height,100px) + 18px);height:calc(100dvh - var(--toolbar-height,100px) - 18px);max-height:calc(100dvh - var(--toolbar-height,100px) - 18px)}
+html.workbench-inspecting body:has(#desktop-toolbar) #word-link-dialog{top:calc(var(--toolbar-height,100px) + var(--project-bar-height,42px) + 18px)!important;height:calc(100dvh - var(--toolbar-height,100px) - var(--project-bar-height,42px) - 18px)!important}
+/* In-page dictionary editing keeps the existing complete form and its validation. */
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor):has(#lexeme-editor[open])~.dictionary-columns{display:none}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor):empty{display:none}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) dialog.page-editor[open]{position:static;inset:auto;display:flex;width:100%;max-width:none;height:auto;max-height:none;margin:0 0 12px;border:1px solid var(--line);border-radius:6px;box-shadow:none;overflow:visible;background:var(--surface,var(--paper));box-sizing:border-box;scroll-margin-block-start:calc(var(--toolbar-height,100px) + 18px)}
+body:has(#desktop-toolbar) :is(#dictionary-inline-editor,#morpheme-inline-editor) dialog.page-editor{scroll-margin-block-start:calc(var(--toolbar-height,100px) + var(--project-bar-height,42px) + 18px)}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) .dialog-content{max-height:none;overflow:visible;padding:8px 14px;overscroll-behavior:auto}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) .dialog-top{min-height:0;padding:6px 12px}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) .close{font-size:.8rem}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) .dialog-bottom{position:sticky;bottom:0;padding:8px 14px;z-index:10}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) :is(.ws-components,.ws-parts){display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:8px}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) :is(.ws-component,.ws-part){margin:0;padding:8px;min-width:0}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) :is(input,select,textarea){min-width:0;max-width:100%}
+.lexeme-choice-count{display:block;font-size:.75rem;color:var(--muted);line-height:1.4;margin:2px 0}
+.lexeme-choice-count button{font:inherit;min-height:24px!important;padding:0 6px!important;margin-left:4px!important;vertical-align:middle}
+#morph-base-query{margin-bottom:4px}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) .tag-row{display:flex;flex-wrap:wrap;gap:5px}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) .tag-row :is(input,select){flex:1 1 100px;width:100px}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) .nested-page-editor{border-left:3px solid var(--green)}
+html[data-home=false] #results .sentence-actions{margin-top:0;gap:5px}
+html[data-home=false] #dictionary-workspace:has(:is(#lexeme-editor,#morpheme-editor).page-editor[open]) :is(#new-lexeme,#morpheme-new){display:none}
+html[data-home=false] .slot-drag-toggle::after{content:'（Ctrl 多选 · Shift 连选）';color:var(--muted);font-size:.7rem}
+html[data-home=false] .lex-example.has-sentence-actions{position:relative}
+html[data-home=false] .lex-example.has-sentence-actions>.entry-head{padding-right:160px;min-height:30px;margin-bottom:7px;justify-content:flex-start;align-items:center;gap:6px}
+html[data-home=false] .lex-example.has-sentence-actions .sentence-actions{position:absolute;top:10px;right:18px;margin:0}
+
+/* One shared column origin for entry type, morphology class and short gloss. */
+html[data-home=false] #dictionary-detail{container-type:inline-size;--dictionary-meta-start:42cqw}
+html[data-home=false] #dictionary-detail :is(.lexeme-identity,.lexeme-writing-classes){grid-template-columns:var(--dictionary-meta-start) minmax(0,1fr);column-gap:0;padding-right:0}
+html[data-home=false] #dictionary-detail .lexeme-entry-type{padding-right:0;box-sizing:border-box}
+html[data-home=false] #dictionary-detail .lexeme-writing-classes>.orthography-display{padding-right:16px}
+html[data-home=false] #dictionary-detail .ws-memberships-inline>.ws-membership-view{padding:4px 0}
+html[data-home=false] #dictionary-detail .lex-sense-view{border-left:0;padding-left:0;padding-right:0;box-shadow:inset 2px 0 var(--line)}
+html[data-home=false] #dictionary-detail .lex-sense-view :is(.sense-identity,p){padding-left:12px}
+html[data-home=false] #dictionary-detail .lex-sense-view>.sense-synonyms{margin-left:12px}
+html[data-home=false] #dictionary-detail .sense-heading{grid-template-columns:var(--dictionary-meta-start) minmax(0,1fr);column-gap:0}
+@media(max-width:600px){
+ html[data-home=false][data-workbench=dictionary] #dictionary-detail{padding:12px}
+ html[data-home=false] #dictionary-detail :is(.lexeme-identity,.lexeme-writing-classes,.sense-heading){grid-template-columns:minmax(0,1fr);gap:6px}
+ html[data-home=false] #dictionary-detail .lexeme-entry-type{padding-right:0}
+ html[data-home=false] #dictionary-detail .sense-short-gloss{margin-left:0}
+}
+/* Module titles use the same baseline, typography and vertical rhythm. */
+html[data-home=false] main :is(#corpus-workspace,#dictionary-workspace,#survey-workspace,#analysis-workspace,#timeline-workspace,#grammar-workspace,#example-library)>.workbench-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;min-height:48px;box-sizing:border-box;margin:0 0 12px;padding:0;border:0}
+html[data-home=false] main :is(#corpus-workspace,#dictionary-workspace,#survey-workspace,#analysis-workspace,#timeline-workspace,#grammar-workspace,#example-library)>.workbench-heading h1{font-family:var(--ui-font,system-ui),sans-serif;font-size:1.5rem;font-weight:600;line-height:1.35;margin:0;padding:0}
+html[data-home=false] main .workbench-heading :is(.eyebrow,p,small){display:none}
+html[data-home=false] main .workbench-heading>.tl-controls{padding:0;margin:0}
+/* Track-first timeline: contextual candidate library and editor/video lower row. */
+#timeline-workspace .tl-layout{grid-template-columns:minmax(0,1fr)}
+#timeline-workspace .tl-lower{display:grid;grid-template-columns:minmax(0,1fr) 9px var(--tl-video-width,240px);align-items:stretch;min-width:0}
+#timeline-workspace .tl-video-panel{position:relative;min-width:0;border:1px solid var(--line);border-radius:6px;background:var(--surface);overflow:hidden;padding:30px 8px 8px;contain:size;min-height:180px}
+#tl-video-panel video{width:100%;height:calc(100% - 90px);min-height:0;object-fit:contain;background:#101820}
+#tl-video-panel video[hidden]{display:none}
+#tl-video-toggle{position:absolute;top:2px;right:3px;padding:2px 7px;min-height:24px}
+#tl-video-panel :is(button:not(#tl-video-toggle),.tl-source-info,.tl-job){font-size:.72rem;padding:3px}
+#timeline-workspace .tl-lower.video-collapsed{grid-template-columns:minmax(0,1fr) 0 28px}
+#timeline-workspace .video-collapsed .tl-video-panel{padding:0;min-height:0}
+.video-collapsed #tl-video-panel>:not(#tl-video-toggle),.video-collapsed>.tl-divider{display:none}
+#tl-navigation{display:flex;flex-direction:column;min-height:0;height:100%;gap:8px}
+#tl-side-tools{display:flex;gap:5px;flex-wrap:wrap;padding:0 0 8px;border-bottom:1px solid var(--line)}
+#tl-side-tools button{padding:3px 9px;min-width:32px;min-height:30px;font-size:1rem}
+#tl-candidates{display:flex;flex-direction:column;min-height:0;flex:1}
+#tl-candidates h3{font-size:.85rem;margin:0 0 5px}
+#tl-candidates select{width:100%;min-width:0;padding:5px;font-size:.8rem}
+#tl-candidates .tl-muted{font-size:.7rem;margin:5px 0}
+#tl-candidates .tl-pending{flex:1;min-height:60px;max-height:none;overflow:auto}
+#tl-candidates .tl-pending button{padding:5px 7px}
+#tl-candidates .tl-pages button,#tl-new-sentence{font-size:.75rem;padding:4px 6px}
+html[data-workbench=timeline] #workbench-module-nav{display:flex;flex-direction:column;overflow:hidden}
+#timeline-workspace .tl-edit-layout{grid-template-columns:86px minmax(0,1fr);gap:8px}
+#timeline-workspace .tl-edit-rail{gap:4px;padding-right:6px}
+#tl-error:empty{display:none}
+html[data-home=false] #workspace-toolbar{padding-bottom:3px;margin-bottom:10px}
+html[data-home=false] #workspace-toolbar .workspace-tabs{margin-bottom:4px;gap:4px 16px}
+html[data-home=false] #workspace-toolbar .workspace-tabs button{padding:5px 2px 6px;min-height:28px}
+html[data-home=false] #workspace-toolbar .toolbar-row{gap:3px 7px}
+html[data-home=false] #workspace-toolbar .toolbar-row button{padding:3px 7px;min-height:26px}
+@media(max-width:700px){#timeline-workspace .tl-lower{grid-template-columns:minmax(0,1fr) 7px min(32%,190px)}}
+#tl-video-panel{grid-column:3}
+#tl-video-panel video{height:calc(100% - 28px)}
+.tl-media-details{position:absolute;bottom:5px;left:8px;right:8px;background:var(--surface);font-size:.72rem;max-height:85%;overflow:auto;border-radius:4px}
+.tl-media-details summary{cursor:pointer;padding:3px 0}
+.tl-media-details[open]{border:1px solid var(--line);padding:5px}
+#tl-video-panel:has(video[hidden])::before{content:'当前无视频画面';position:absolute;inset:35px 10px 35px;display:grid;place-items:center;color:var(--muted);font-size:.8rem;pointer-events:none}
+.video-collapsed #tl-video-panel::before{display:none}
+/* Fixed lower workstation: only sentence content scrolls, not its interval rail. */
+#timeline-workspace .tl-lower{height:var(--tl-lower-height,340px);min-height:320px}
+#timeline-workspace .tl-lower>.tl-editor{height:100%;min-height:0;box-sizing:border-box;overflow:hidden;display:flex;flex-direction:column}
+#timeline-workspace .tl-edit-layout{flex:1;min-height:0;height:100%;align-items:stretch}
+#timeline-workspace .tl-edit-rail{position:static;min-height:0;overflow:hidden}
+#timeline-workspace .tl-editor-body{min-height:0;overflow:auto;overscroll-behavior:auto;padding-right:5px}
+#timeline-workspace .tl-lower.video-collapsed #tl-video-panel::before{content:none;display:none}
+
+.tl-status-row{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px 16px;flex:none;margin:3px 0;font-size:.72rem}.tl-status-row #tl-range-note{margin:0}.tl-status-row #tl-selection-label{font-size:inherit;min-height:0}
+.tl-status-row #tl-range-note{font-size:inherit;line-height:inherit}.tl-status-row #tl-selection-label{line-height:inherit}
+#link-lexeme,#link-lexeme option,#segment-link-lexeme,#segment-link-lexeme option{font-family:Junicode,'Microsoft YaHei',serif;font-style:normal;font-weight:500;font-variant:normal}
+#segmentation-dialog .segment-form,#segmentation-dialog #segment-word{font-family:var(--annotation-font,Junicode),'Microsoft YaHei',serif;font-style:var(--form-style,italic);font-weight:var(--form-weight,400)}
+#participant-language-options{display:flex;flex-wrap:wrap;gap:4px 12px}#participant-language-options label{display:flex;align-items:center;gap:4px;margin:0;font-size:.8rem}#participant-languages{border:1px solid var(--line);border-radius:5px;padding:6px 9px;margin:8px 0}#participant-list button{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px}.participant-language-label{font-size:.72rem;color:var(--muted)}
+#tl-editor>.tl-editor-body{flex:1}
+#segment-link-dialog .segment-form{font-family:var(--annotation-font,Junicode),'Microsoft YaHei',serif;font-style:var(--form-style,italic);font-weight:var(--form-weight,400)}
+
+.language-tools{display:flex;gap:4px;flex-wrap:wrap}.language-tools .language-icon{width:32px;height:30px;padding:2px;display:inline-grid;place-items:center}.transfer-result{display:block;text-align:left;width:100%;padding:5px 8px;margin:3px 0}#transfer-results{max-height:230px;overflow:auto}#word-transfer-dialog{width:min(680px,95vw)}
+.language-dialog-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:12px}
+.dialog-bottom .language-dialog-actions{width:100%;margin:0}
+html :is(#language-dialog,#language-delete-dialog) button.language-delete-action{color:var(--danger,#a44237);border-color:var(--danger,#a44237);background:color-mix(in srgb,var(--danger,#a44237) 9%,var(--surface,#fff))}
+html :is(#language-dialog,#language-delete-dialog) button.language-delete-action:not(:disabled):hover{background:color-mix(in srgb,var(--danger,#a44237) 17%,var(--surface,#fff))}
+.language-dialog-actions [hidden]{display:none}
+#language-delete-dialog{width:min(520px,calc(100vw - 32px))}
+#language-delete-error{color:var(--danger,#a44237)}
+html[data-home=false] #example-library .search{padding:10px 12px;margin:8px 0}
+html[data-home=false] #example-library .search :is(input,select){padding:7px 9px}
+#example-library .search-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#example-library .search-row>input{flex:1;min-width:180px}
+#example-library .filters label:empty{display:none}
+#example-library #library-count{font-size:.8rem;color:var(--muted);margin:8px 0}
+.new-sentence-draft{margin:10px 0;border:1px solid var(--line);padding:12px}
+.new-sentence-draft>.entry-head{margin-bottom:8px}
+html[data-home=false] #example-library :is(.search,.workbench-heading,.workbench-batch,.pagination) button{padding:5px 9px;font-size:.8rem;line-height:1.45}
+html[data-home=false] #example-library .search :is(input,select){font-size:.85rem}
+html[data-home=false] #example-library .search-row{margin:0}
+html[data-home=false] #example-library .workbench-heading{justify-content:flex-start}
+html[data-home=false] #example-library .workbench-heading h1{margin-right:auto}
+html[data-home=false] #example-library .search{box-shadow:none;border-radius:3px}
+#example-library #library-bottom:empty{display:none}
+html[data-home=false] #example-library #library-search{background:var(--green);color:var(--button-ink);border-color:var(--green)}
+html[data-home=false] #example-library .workbench-heading .actions{display:flex;gap:6px;align-items:center}
+.dictionary-organization{padding:6px 0 10px;border-bottom:1px solid var(--line);margin-bottom:8px;font-size:.85rem}
+.dictionary-org-actions{display:flex;align-items:center;justify-content:space-between;gap:6px;margin:4px 0}
+.dictionary-org-actions button,.dictionary-organization button{padding:4px 7px;font-size:inherit}
+#semantic-tree{max-height:230px;overflow:auto;margin:5px 0}
+#semantic-tree button{display:block;width:100%;text-align:left;border:0;background:transparent;margin:1px 0;overflow-wrap:anywhere}
+#semantic-tree button[aria-pressed=true]{background:var(--light);font-weight:700;border-left:3px solid var(--green)}
+.dictionary-organization label{display:flex;align-items:center;gap:5px;margin:5px 0}
+#dictionary-order{min-width:0;flex:1;width:100%;padding:5px}
+.semantic-select-row{display:flex;align-items:center;gap:5px}
+.semantic-select-row .lexeme-list-item{flex:1;min-width:0}
+.semantic-choices{max-height:250px;overflow:auto;display:grid;gap:5px}
+.semantic-choices label{display:flex;align-items:center;gap:6px;margin:0}
+.semantic-memberships{font-size:.9rem;color:var(--muted)}
+#order-preview-list{max-height:240px;overflow:auto}
+/* Dictionary and timeline example commands share the IPA row without covering long text. */
+html[data-home=false] :is(#dictionary-workspace,#timeline-workspace) .editable-example .sentence-reading-head{display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 14px;margin:0 0 8px}
+html[data-home=false] :is(#dictionary-workspace,#timeline-workspace) .editable-example .sentence-reading-head>.ipa{flex:1 1 20rem;min-width:0;margin:0;overflow-wrap:anywhere}
+html[data-home=false] :is(#dictionary-workspace,#timeline-workspace) .editable-example .sentence-reading-head>.sentence-actions{position:static;flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;gap:5px;margin:0 0 0 auto}
+html[data-home=false] :is(#dictionary-workspace,#timeline-workspace) .editable-example .sentence-reading-head>.sentence-actions>:is(button,details){margin:0}
+html[data-home=false] :is(#dictionary-workspace,#timeline-workspace) .editable-example .sentence-reading-head>.sentence-actions>button,html[data-home=false] :is(#dictionary-workspace,#timeline-workspace) .editable-example .sentence-reading-head>.sentence-actions>details>summary{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:28px;min-height:28px;margin:0;padding:3px 7px;line-height:1.4;white-space:nowrap}
+#dictionary-workspace .lex-example.has-sentence-actions:has(.sentence-reading-head)>.entry-head{padding-right:0;min-height:0}
+html[data-home=false] #timeline-workspace .editable-example .sentence-reading-head>.sentence-actions{max-width:100%;flex-wrap:wrap;flex-shrink:1}
+html[data-home=false] #timeline-workspace .sentence-reading-head .sentence-actions>:is(.sentence-audio,.collaborator-badge){margin:0;max-width:100%;min-width:0;flex-wrap:wrap;gap:4px}
+html[data-home=false] #timeline-workspace .sentence-reading-head .sentence-actions :is(.sentence-audio,.collaborator-badge) :is(button,select){height:auto;min-height:28px;max-width:100%;white-space:normal;overflow-wrap:anywhere;margin:0}
+html[data-home=false] #example-library .entry-head>div{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+html[data-home=false] #example-library .entry-head label:has([data-punctuation-select]){display:inline-flex;align-items:center;gap:5px;margin:0;line-height:1.4;white-space:nowrap}
+html[data-home=false] #example-library .entry-head [data-punctuation-select]{appearance:auto;flex:0 0 14px;width:14px;height:14px;min-height:0;margin:0;padding:0;align-self:center}
+/* Excel mappings keep all controls readable within a compact scrolling dialog. */
+#excel-dialog {width:min(1000px,94vw);max-width:94vw}
+.excel-toolbar {display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}
+.excel-sheet {border:1px solid var(--line);padding:10px;margin:10px 0}
+.excel-table {max-width:100%;overflow:auto;max-height:300px;margin:8px 0}
+.excel-table table {border-collapse:collapse;min-width:100%}
+.excel-table td,.excel-table th {padding:5px 8px;border:1px solid var(--line);text-align:left;white-space:pre-wrap;min-width:80px}
+.excel-table select,.excel-table input {min-width:140px;width:100%;margin:0}
+#excel-dialog .excel-check {display:flex;align-items:center;gap:7px;margin:7px 0}
+#excel-dialog .excel-check input {width:15px;height:15px;margin:0;flex:none}
+#excel-texts {max-height:300px;overflow:auto;margin:10px 0}
+#excel-dialog [hidden] {display:none!important}
+#docx-dialog {width:min(1000px,94vw);max-width:94vw}
+#docx-dialog [hidden] {display:none!important}
+.docx-toolbar,.docx-card-head {display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.docx-toolbar>label {flex:1;min-width:200px}
+.docx-card {padding:12px 0;border-bottom:1px solid var(--line)}
+.docx-card-head {margin-bottom:8px}
+.docx-card-head>small {flex:1}
+.docx-card-head button,.docx-toolbar button {margin:0}
+.docx-words {display:flex;gap:4px;align-items:flex-start;flex-wrap:wrap;margin:8px 0}
+.docx-slot {display:flex;flex-direction:column;white-space:pre-wrap;max-width:100%;padding:0 3px}
+.docx-slot small {font:12px/1.3 var(--ui-font);color:var(--muted)}
+#docx-dialog .docx-split {padding:1px 3px;margin:0;min-width:0;align-self:center;font-size:13px;opacity:.45}
+#docx-dialog .docx-split:hover,#docx-dialog .docx-split:focus {opacity:1}
+#docx-dialog textarea {min-height:2.2em;margin-bottom:5px}
+#docx-pagination {display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+#text-exchange-dialog [hidden] {display:none!important}
+#texts [data-text-draggable] {cursor:grab;touch-action:none}
+body.text-dragging,body.text-dragging * {cursor:grabbing!important;user-select:none!important}
+#texts .text-drop-before {box-shadow:0 -3px var(--accent)}
+#texts .text-drop-after {box-shadow:0 3px var(--accent)}
+#texts .text-drop-folder {outline:2px solid var(--accent);outline-offset:2px}
+/* Dictionary photos and compact recording controls share the sentence command row. */
+.object-media-controls{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:100%}.object-media-controls button,.object-media-controls select{padding:3px 8px;min-height:28px;font-size:.8rem}.object-media-controls select{max-width:260px}.object-media-speakers{font-size:.8rem;color:var(--muted)}.lexeme-actions .object-media-controls{gap:5px}.editable-example>.object-media-controls{float:right;margin:0 0 8px 12px}.object-media-gallery{margin:12px 0}.object-media-thumbs{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}.object-media-thumbs figure{margin:0;width:170px}.object-media-thumbs button{padding:3px;width:100%}.object-media-thumbs img{width:100%;height:125px;object-fit:contain}.object-media-thumbs figcaption{font-size:.8rem;overflow-wrap:anywhere}.object-media-manager{display:grid;grid-template-columns:minmax(150px,1fr) minmax(0,2fr);gap:18px}.object-media-manager article{padding:10px 0;border-bottom:1px solid var(--line)}.object-media-manager article>button{width:100%;text-align:left;overflow-wrap:anywhere}.object-media-manager article>div{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}.object-media-manager article>div button{padding:3px 7px;font-size:.8rem}.object-media-range{display:flex;gap:12px}.object-media-range label{flex:1;min-width:0}#object-media-people{max-height:160px;overflow:auto}#object-media-people label{display:flex;align-items:center;gap:7px;margin:5px 0}#object-media-dialog{width:min(950px,96vw)}#object-media-viewer{width:min(1100px,96vw)}.object-media-image-scroll{overflow:auto;max-height:65vh}.object-media-image-scroll img{display:block;max-width:none;height:auto}.object-media-image-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.object-media-image-tools label{display:flex;align-items:center;gap:8px;margin:8px 0}@media(max-width:650px){.object-media-manager{grid-template-columns:1fr}.object-media-controls select{max-width:180px}}
+.dictionary-morphology-block{margin:20px 0;border-top:1px solid var(--line);padding-top:12px}.dictionary-morphology-block>summary{font-weight:600;cursor:pointer}.dictionary-morphology-block .ws-memberships-inline{display:block;margin-top:12px}.dictionary-core-columns{margin:14px 0}.dictionary-core-columns.has-media{display:grid;grid-template-columns:minmax(0,1fr) 10px minmax(0,var(--dictionary-media-percent,40%));gap:8px;align-items:start}.dictionary-core-definitions{min-width:0}.dictionary-core-definitions>.lex-usage-view:first-child{margin-top:0}.dictionary-media-divider{display:none;align-self:stretch;min-height:160px;cursor:col-resize;touch-action:none;border-radius:4px;background:linear-gradient(to right,transparent 4px,var(--line) 4px,var(--line) 6px,transparent 6px)}.has-media>.dictionary-media-divider{display:block}.dictionary-media-divider:hover,.dictionary-media-divider:focus-visible{background:var(--accent)}.dictionary-core-columns>.object-media-gallery{margin:0;min-width:0}.dictionary-core-columns .object-media-thumbs figure{width:100%}.dictionary-core-columns .object-media-thumbs img{height:auto;max-height:250px}.dictionary-core-columns.has-media.is-narrow{display:block}.dictionary-core-columns.is-narrow>.dictionary-media-divider{display:none}.dictionary-core-columns.is-narrow>.object-media-gallery{margin-top:18px}.sense-grammar-features{font-size:.9rem;color:var(--muted)}
+/* Keep reading metadata on one wrapping line, without empty blocks reserving rows. */
+html[data-home=false] #dictionary-detail .lexeme-heading{margin-bottom:4px;padding-bottom:3px}
+html[data-home=false] #dictionary-detail .lexeme-writing-classes{margin-top:6px;margin-bottom:0}
+html[data-home=false] #dictionary-detail .lexeme-tags:empty{display:none}
+html[data-home=false] #dictionary-detail .semantic-memberships{margin:5px 0}
+html[data-home=false] #dictionary-detail .dictionary-core-columns{margin:6px 0}
+html[data-home=false] #dictionary-detail .lex-usage-view{margin-top:8px}
+html[data-home=false] #dictionary-detail :is(.usage-heading,.sense-heading){display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px}
+html[data-home=false] #dictionary-detail .usage-heading h3{margin:0}
+html[data-home=false] #dictionary-detail .sense-heading{padding-left:12px}
+html[data-home=false] #dictionary-detail .sense-identity{display:contents;padding:0}
+html[data-home=false] #dictionary-detail .sense-short-gloss{flex:0 1 auto;padding-left:0}
+html[data-home=false] #dictionary-detail :is(.sense-tags,.usage-tags,.sense-grammar-features,.usage-grammar-features):empty{display:none}
+html[data-home=false] #dictionary-detail :is(.sense-grammar-features,.usage-grammar-features){font-size:.9em}
+html[data-home=false] #dictionary-detail .lex-sense-view{margin:5px 0;padding-top:3px;padding-bottom:3px}
+html[data-home=false] #dictionary-detail .lex-sense-view p{margin:4px 0}
+html[data-home=false] #dictionary-detail .sense-synonyms{margin-top:4px;margin-bottom:0;padding-top:4px}
+html[data-home=false] #dictionary-detail .dictionary-morphology-block{margin:8px 0;padding-top:7px}
+html[data-home=false] #dictionary-detail .dictionary-morphology-block>.morpheme-actions{margin:4px 0}
+html[data-home=false] #dictionary-detail .morphology-view{margin:4px 0;padding:4px 0}
+html[data-home=false] #dictionary-detail .morphology-view p{margin:4px 0}
+html[data-home=false] #dictionary-detail .word-structure-view>h3{margin:7px 0 4px}
+html[data-home=false] #dictionary-detail .ws-analysis-view{padding:6px 10px;margin:5px 0}
+html[data-home=false] #dictionary-detail .ws-analysis-view>ol{margin-top:4px}
+html[data-home=false] #dictionary-detail .ws-registry-link{margin:2px 0 4px}
+html[data-home=false] #dictionary-detail .ws-component-view{padding:4px 0}
+/* Language selection shares the first line of the brand language name. */
+#workspace-sidebar .brand-language-row{display:flex;align-items:flex-start;gap:8px;margin-top:10px;line-height:1.5}#workspace-sidebar .brand-language-row #brand-language{flex:1;min-width:0;margin:0}#workspace-sidebar .brand-language-picker{position:relative;display:inline-grid;place-items:center;width:25px;height:24px;flex:none;margin:0;border:1px solid var(--line);border-radius:5px;cursor:pointer}#workspace-sidebar .brand-language-picker:focus-within{outline:2px solid var(--green)}#workspace-sidebar .language-panel{gap:4px;padding-bottom:0!important}#workspace-sidebar .workbench-language-options{margin:2px 0 0}#workbench-corpus-nav>.folder-group:first-child,#texts>.folder-group:first-child{margin-top:4px}
+.folder-group>summary{position:relative;display:flex;align-items:flex-start;gap:5px;list-style:none;min-height:26px}.folder-group>summary::-webkit-details-marker{display:none}.folder-group>summary::before{content:'▸';line-height:26px}.folder-group[open]>summary::before{content:'▾'}.folder-name{flex:1;min-width:0;line-height:26px}.folder-actions{flex:none}.folder-actions>[data-folder-menu]{width:25px;height:25px;padding:0;line-height:1;border:0;background:transparent}.folder-actions .folder-tools{position:absolute;right:0;top:100%;z-index:8;display:grid;gap:2px;margin:0;padding:5px;border:1px solid var(--line);border-radius:6px;background:var(--surface,var(--paper));box-shadow:0 4px 12px #0002;min-width:140px}.folder-tools button{text-align:left;white-space:nowrap;padding:6px 9px}
+
+/* The language popup uses UI typography, independent of the Corporium wordmark. */
+#workspace-sidebar button.brand-language-picker{padding:0;min-height:24px;font:normal .85rem/1 var(--ui-font,system-ui),sans-serif;letter-spacing:0;background:var(--surface,var(--paper));color:var(--ink)}
+#brand-language-menu{position:fixed;z-index:2000;overflow:auto;padding:4px;border:1px solid var(--line);border-radius:7px;background:var(--surface,var(--paper));color:var(--ink);box-shadow:0 6px 20px #0003;font:var(--ui-style,normal) var(--ui-weight,400) .9rem/1.5 var(--ui-font,system-ui),sans-serif;letter-spacing:0}
+#brand-language-menu[hidden],#language-select[hidden]{display:none!important}
+#brand-language-menu>button{display:flex;align-items:baseline;gap:7px;width:100%;margin:0;padding:6px 8px;border:0;border-radius:4px;background:transparent;color:inherit;font:inherit;text-align:left;white-space:normal;overflow-wrap:anywhere}
+#brand-language-menu>button>span:first-child{flex:0 0 1em;color:var(--green)}
+#brand-language-menu>button>span:last-child{min-width:0}
+#brand-language-menu>button[aria-checked=true],#brand-language-menu>button:hover,#brand-language-menu>button:focus-visible{background:var(--accent);outline:none}
+#brand-language-menu>button:focus-visible{box-shadow:inset 0 0 0 1px var(--green)}
+
+/* Keep the native name close without reducing room for IPA diacritics. */
+#workspace-sidebar .brand #brand-native{margin:1px 0 0;line-height:1.5}
+
+/* Dictionary navigation: compact modes, optional conditions, and sorting in one dialog. */
+#workbench-module-nav .dictionary-search-panel{display:block;margin:0 0 7px;padding:3px 0 5px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:.76rem;min-width:0}
+#dictionary-search-panel>summary{font-size:.75rem;line-height:1.4;cursor:pointer;color:var(--muted)}
+#dictionary-search-panel:not([open])>:not(summary){display:none!important}
+#dictionary-search-count{font-size:.7rem;font-weight:400;color:var(--muted);margin-left:4px}
+#workbench-module-nav .dictionary-query-input{margin:4px 0 3px}
+#workbench-module-nav .dictionary-query-input #dictionary-query{width:100%;max-width:100%;min-width:0;margin:0}
+#workbench-module-nav .dictionary-query-line{display:flex;align-items:center;gap:3px;min-width:0}
+#workbench-module-nav #dictionary-mode{flex:1;min-width:0;width:0;max-width:none;margin:0}
+#workbench-module-nav .dictionary-search-panel :is(input,select,button){font-size:.76rem;line-height:1.35;min-height:27px;height:auto;padding:3px 5px;box-sizing:border-box;margin:0}
+:is(#dictionary-search,#dr-find-search){display:inline-flex;align-items:center;justify-content:center;width:28px;flex:0 0 28px;padding:3px}
+:is(#dictionary-search,#dr-find-search) svg,#fieldwork-search-form svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7}
+#dictionary-search-options{margin:3px 0 0;font-size:.76rem}
+:is(#dictionary-search-options,#dr-conditions)>summary{cursor:pointer;padding:2px 0;color:var(--muted)}
+.dictionary-filter-controls{min-width:0;font-size:.76rem}
+.dictionary-filter-controls label{display:flex;align-items:center;gap:5px;margin:4px 0;min-width:0}
+.dictionary-filter-controls :is(select,input,button){font-size:inherit;line-height:1.35;min-height:27px;padding:3px 5px;margin:0;box-sizing:border-box;max-width:100%}
+.dictionary-filter-controls select{min-width:0;flex:1;width:0}
+.dictionary-filter-line{display:flex;align-items:center;flex-wrap:wrap;gap:0 8px}
+.dictionary-filter-line>label{flex:1 1 auto}
+.dictionary-filter-controls .dictionary-check{flex:none;justify-content:flex-start;white-space:nowrap}
+.dictionary-filter-controls .dictionary-check input{flex:0 0 14px;width:14px;min-width:14px;height:14px;min-height:14px;padding:0;margin:0}
+.dictionary-condition{padding:5px 0;border-top:1px solid var(--line);min-width:0}
+.dictionary-filter-controls .dictionary-condition>.dictionary-condition-field{display:block;width:100%}
+.dictionary-condition>div{display:flex;gap:3px;align-items:center;margin-top:3px;min-width:0}
+.dictionary-filter-controls .dictionary-condition-op{flex:0 1 90px}
+.dictionary-filter-controls .dictionary-condition-value{flex:1;min-width:0;width:0}
+.dictionary-filter-actions{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin:3px 0}
+.dictionary-class-filter[hidden]{display:none!important}
+.dictionary-class-filter>summary{font-size:inherit;color:var(--muted);cursor:pointer;padding:3px 0}
+.dictionary-class-filter:not([open])>div{display:none!important}
+#dictionary-class-view{border-bottom:1px solid var(--line);padding-bottom:4px}
+#dictionary-batch-class{margin:0}
+#dictionary-replace-dialog{width:min(840px,94vw)}
+#dictionary-replace-dialog .dr-help{font-size:.8rem;margin:6px 0}
+#dictionary-replace-dialog :is(.replace-options,.dr-query-label){font-size:.8rem}
+#dictionary-replace-dialog .replace-options label{margin:4px 0}
+#dictionary-replace-dialog :is(.replace-options,.dr-query-label) :is(input,select,textarea){min-width:0;max-width:100%;min-height:28px;padding:4px 6px;font-size:inherit;margin:3px 0}
+#dictionary-replace-dialog input[type=checkbox]{width:14px;min-height:14px;height:14px}
+#dr-conditions{padding:3px 0;margin:4px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:.76rem}
+#dr-condition-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
+#dr-condition-controls>:is(.dictionary-class-filter,[id$=condition-rows],.dictionary-filter-actions){grid-column:1/-1}
+#dr-condition-controls .dictionary-class-filter>div{display:flex;gap:12px}
+#dr-condition-controls .dictionary-class-filter label{flex:1}
+#dr-condition-controls .dictionary-condition{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:6px}
+#dr-condition-controls .dictionary-condition>div{margin:0}
+#dictionary-replace-dialog textarea{resize:vertical;max-height:100px}
+#dictionary-replace-dialog .dr-actions{display:flex;align-items:center;gap:5px;margin:5px 0}
+#dictionary-replace-dialog .replace-row>pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;margin:6px 0}
+@media(max-width:600px){#dr-condition-controls{grid-template-columns:1fr}#dr-condition-controls .dictionary-condition{grid-template-columns:1fr}#dr-condition-controls .dictionary-class-filter>div{display:block}}
+#dictionary-sort-open{width:26px;height:26px;padding:0;margin:0 5px 0 0;flex:none;line-height:1}
+#dictionary-order-manager{width:min(650px,94vw)}
+#dictionary-order-editor h3{margin:12px 0 6px}
+#standard-class-editor[hidden],#semantic-class-editor[hidden],#dictionary-class-view[hidden],#dictionary-search-options[hidden],#dictionary-replace-open[hidden],#dictionary-batch-class[hidden]{display:none!important}
+
+#classes-dialog:has(#semantic-class-editor:not([hidden])) [form="class-form"],#classes-dialog:has(#semantic-class-editor[hidden]) [form="semantic-form"]{display:none!important}
+
+#workbench-module-nav .dictionary-search-panel,#workbench-module-nav .dictionary-search-panel>*,#dictionary-search-options .dictionary-condition{min-width:0;max-width:100%;box-sizing:border-box}
+#workbench-module-nav #dictionary-search-options .dictionary-check input{flex:0 0 14px;width:14px;height:14px;min-width:14px;margin:0;padding:0}
+#dictionary-search-options .dictionary-check{line-height:1.5;white-space:nowrap}
+#dictionary-search-options .dictionary-condition-field{display:block;width:100%;box-sizing:border-box}
+#dictionary-search-options .dictionary-condition>div{min-width:0;max-width:100%}
+
+/* Docoid: neutral reading surfaces, blue module navigation, pale command ribbon. */
+html[data-theme="docoid"]{
+ color-scheme:light;
+ --ink:#24282e;--muted:#626a73;--paper:#fff;--surface:#fff;--sidebar:#f0f1f3;--line:#d5d9df;
+ --green:#185b9d;--accent:#e1edf9;--hover:#e8eef5;--selected:#dceafa;--body-text:#24282e;--ipa:#24282e;--gloss:#363c43;
+ --gold:#185b9d;--hit:#fff0b3;--danger:#a32626;--warning:#875600;--primary-hover:#104a82;--button-ink:#fff;--focus:#256bb0;--edit-surface:#f4f7fb;
+ --docoid-nav:#185b9d;--docoid-tools:#f1f4f8;--docoid-gutter:clamp(20px,3vw,48px);
+}
+html[data-theme="docoid"][data-home="false"] body>main{padding-left:var(--docoid-gutter);padding-right:var(--docoid-gutter)}
+html[data-theme="docoid"][data-home="false"] #workspace-toolbar{padding:0;margin:0 calc(-1 * var(--docoid-gutter)) 20px;background:var(--docoid-tools);border-bottom:1px solid var(--line);box-shadow:none}
+html[data-theme="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs{margin:0;padding:0 16px;gap:0 10px;background:var(--docoid-nav);border:0}
+html[data-theme="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs button{margin:0;padding:10px 9px 8px;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;color:#fff;box-shadow:none}
+html[data-theme="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs button:hover{background:#ffffff1f}
+html[data-theme="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs button[aria-pressed="true"]{color:#fff;background:#ffffff12;border-bottom-color:#fff;font-weight:600}
+html[data-theme="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs button:focus-visible{outline:2px solid #fff;outline-offset:-5px}
+html[data-theme="docoid"][data-home="false"] #workspace-toolbar .toolbar-row{padding:6px 16px;background:var(--docoid-tools);color:var(--ink);gap:5px 8px}
+html[data-theme="docoid"][data-home="false"] #workspace-toolbar .toolbar-row button{border-radius:3px}
+html[data-theme="docoid"] #workspace-history{padding:8px 16px;background:var(--docoid-tools)}
+html[data-theme="docoid"] :is(button,input:not([type=checkbox]),select,textarea){border-radius:3px}
+html[data-theme="docoid"] :is(dialog,.metadata-panel,.ws-box,.usage-editor,.variant-editor,.object-media-gallery){border-radius:4px;box-shadow:none}
+html[data-theme="docoid"] :is(.dialog-top,.dialog-bottom){background:var(--docoid-tools)}
+html[data-theme="docoid"] dialog::backdrop{background:#172b444d}
+html[data-theme="docoid"] :is(.folder-tools,#brand-language-menu,.workbench-menu-items){background:var(--surface);border-color:var(--line);border-radius:4px;box-shadow:0 4px 12px #182b4020}
+html[data-theme="docoid"] #workspace-sidebar :is(.nav.active,.lexeme-list-item.active){background:var(--selected);box-shadow:inset 3px 0 var(--green);border-color:transparent;border-radius:3px}
+html[data-theme="docoid"] #workspace-sidebar .lexeme-list-item:not(.active){background:transparent;box-shadow:none}
+html[data-theme="docoid"] header::after{display:none}
+html[data-theme="docoid"] ::selection{background:#c8def7;color:#162d48}
+html[data-theme="docoid"] #timeline-workspace{--tl-accent:#185b9d}
+html[data-theme="docoid"][data-home="false"] :is(#add,:is(#new-lexeme,#morpheme-new)){border-radius:4px;box-shadow:none}
+@media(max-width:600px){
+ html[data-theme="docoid"]{--docoid-gutter:12px}
+ html[data-theme="docoid"][data-home="false"]:not(.sidebar-collapsed) #workspace-toolbar{margin-left:calc(var(--sidebar-width) - var(--docoid-gutter))}
+ html[data-theme="docoid"][data-home="false"] #workspace-toolbar :is(.workspace-tabs,.toolbar-row){padding-left:10px;padding-right:10px}
+}
+
+/* Shared timeline density: every skin uses the same single-row controls. */
+#timeline-workspace .tl-toolbar{display:flex;flex-wrap:nowrap;align-items:center;gap:8px;flex:none;overflow-x:auto;padding:3px 0 6px;border-bottom:1px solid var(--line);font-size:.75rem;white-space:nowrap;scrollbar-width:thin}
+#timeline-workspace .tl-tool-group{display:flex;align-items:center;gap:4px;flex:none}
+#timeline-workspace .tl-tool-group+.tl-tool-group{border-left:1px solid var(--line);padding-left:8px}
+#timeline-workspace .tl-toolbar button,#timeline-workspace .tl-toolbar select{height:29px;min-height:29px;padding:3px 6px;font-size:inherit;line-height:1.2;margin:0;width:auto}
+#timeline-workspace .tl-toolbar .tl-transport-icon{width:29px;padding:5px;display:inline-flex;align-items:center;justify-content:center}
+.tl-transport-icon svg{width:17px;height:17px;display:block}
+#timeline-workspace .tl-toolbar button[aria-pressed=true]{background:var(--green);color:var(--button-ink,#fff);border-color:var(--green);box-shadow:inset 0 -2px 0 currentColor}
+#timeline-workspace .tl-toolbar label{display:flex;align-items:center;gap:4px;margin:0;white-space:nowrap;font-size:inherit}
+#timeline-workspace .tl-toolbar input[type=checkbox]{width:auto;margin:0}
+#timeline-workspace #tl-volume{width:64px;min-width:64px;padding:0;margin:0;accent-color:var(--green)}
+#timeline-workspace #tl-volume-label{width:4ch;text-align:right;font-variant-numeric:tabular-nums}
+#timeline-workspace #tl-clock{flex:0 0 8ch;width:8ch;font-size:inherit}
+#timeline-workspace .tl-status-row{flex-wrap:nowrap;gap:12px;white-space:nowrap;overflow-x:auto;scrollbar-width:thin;align-items:center;margin:2px 0;min-height:20px}
+#timeline-workspace .tl-status-row>*{flex:none}
+#timeline-workspace .tl-status-help{color:var(--muted);margin-left:auto}
+
+/* Edge-mounted sidebar toggle shares behavior and geometry across all skins. */
+#sidebar-toggle{position:fixed;left:calc(var(--sidebar-width) - 1px);top:50dvh;transform:translateY(-50%);z-index:31;display:flex;align-items:center;justify-content:center;width:15px;height:68px;min-height:0;margin:0;padding:0;border:1px solid var(--line);border-radius:0 5px 5px 0;background:var(--sidebar);color:var(--ink);cursor:pointer}
+#sidebar-toggle:hover{background:var(--selected)}
+#sidebar-toggle:focus-visible{outline:2px solid var(--focus,var(--green));outline-offset:2px}
+#sidebar-toggle svg{width:10px;height:24px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+html.sidebar-collapsed #sidebar-toggle{left:0}
+html.sidebar-collapsed #sidebar-toggle svg{transform:rotate(180deg)}
+html[data-home=true] #sidebar-toggle{display:none}
+/* The inspector reserves main-content space, but navigation still spans its top. */
+@media(min-width:851px){html[data-theme=docoid][data-home=false].workbench-inspecting #workspace-toolbar{margin-right:calc(-360px - var(--docoid-gutter));padding-right:0}}
+@media(max-width:850px){html[data-theme=docoid][data-home=false].workbench-inspecting #workspace-toolbar{margin-right:calc(-1 * var(--docoid-gutter));padding-right:0}}
+
+/* Keep the association title and its existing close form on one shared row. */
+
+/* Waveform display gain is independent of audio volume, shared by every skin. */
+#timeline-workspace .tl-wave-title{display:flex;align-items:flex-start;justify-content:space-between;gap:4px}
+#timeline-workspace .tl-wave-zoom{display:flex;flex-direction:column;align-items:center;gap:2px;margin:0;font-size:.65rem;flex:none}
+#timeline-workspace #tl-wave-gain{writing-mode:vertical-lr;direction:rtl;width:18px;height:clamp(28px,calc(var(--tl-wave-height) - 28px),320px);min-width:0;padding:0;margin:0;accent-color:var(--green);cursor:ns-resize}
+#tl-wave-gain-label{line-height:1.2;font-variant-numeric:tabular-nums}
+#timeline-workspace .tl-wave-zoom{width:4.5ch;flex:0 0 4.5ch;text-align:center}
+#tl-wave-gain-label{display:block;width:100%;white-space:nowrap}
+html[data-home=false] #workspace-toolbar .workspace-tabs #workbench-tool-toggle{margin-left:auto}
+#timeline-workspace .tl-edge{width:10px;max-width:50%}
+
+/* Shared form alignment: checkbox captions and inline filter labels. */
+html[data-home=false] label:has(>input[type=checkbox]){display:flex;flex-direction:row;align-items:center;gap:6px;min-width:0;max-width:100%;line-height:1.5}
+html[data-home=false] input[type=checkbox]{flex:0 0 auto;width:1em;height:1em;min-width:1em;margin:0;padding:0;vertical-align:middle;accent-color:var(--green)}
+html[data-home=false] label[hidden]{display:none!important}
+html[data-home=false] .filters{flex-wrap:wrap;gap:8px 20px;align-items:center}
+html[data-home=false] .filters>label{display:inline-flex;align-items:center;gap:8px;min-width:0;max-width:100%;margin:0;line-height:1.5}
+html[data-home=false] .filters>label:has(>select){white-space:nowrap}
+html[data-home=false] .filters>label>select{min-width:0;max-width:100%;margin:0;flex:0 1 auto}
+html[data-home=false] #workspace-toolbar .brief-control{display:inline-flex;align-items:center;gap:6px;margin:0 8px;white-space:nowrap}
+#link-unit-picker{position:relative;margin:5px 0 12px}
+#link-unit-picker summary{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:5px;padding:8px 10px;cursor:pointer;list-style:none}
+#link-unit-picker summary::after{content:'▾';margin-left:auto;flex:none}
+#link-unit-current{min-width:0;overflow-wrap:anywhere}
+#link-unit-options{position:absolute;left:0;right:0;top:100%;z-index:10;max-height:260px;overflow:auto;background:var(--surface,var(--paper));border:1px solid var(--line);border-radius:5px;box-shadow:0 4px 12px #0002;padding:4px}
+#link-unit-options button{display:block;width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere;margin:0;border:0;padding:8px}
+#link-unit-options button[aria-pressed=true]{background:var(--accent)}
+#link-unit-picker .link-unit-form{font-family:var(--annotation-font,Junicode),"Microsoft YaHei",serif;font-style:var(--form-style,italic);font-weight:var(--form-weight,400)}
+#link-unit-picker .gloss{font-style:normal;font-variant-caps:normal}
+.tl-wave-layer{overflow:hidden}
+html[data-home=false] :is(.analysis-view-options>label,label:has(>#analysis-counts-mode),label:has(>#page-size),label:has(>#dictionary-page-size)){display:inline-flex;align-items:center;gap:8px;min-width:0;max-width:100%}
+html[data-home=false] .analysis-scope-grid label>:is(select,input:not([type=checkbox])){margin-top:4px}
+
+/* Shared sentence commands: reserve real header space; media has its own flowing row. */
+html[data-home=false] :is(.entry,.lex-example).has-sentence-actions .entry-head{padding-right:250px;min-height:30px}
+html[data-home=false] .sentence-actions{align-items:center;flex-wrap:wrap}
+html[data-home=false] .sentence-actions>button,html[data-home=false] .sentence-actions>.sentence-menu>summary{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:28px;min-height:28px;margin:0;padding:3px 7px;font-size:.75rem;line-height:1.4;white-space:nowrap}
+html[data-home=false] .sentence-actions>.sentence-menu{margin:0}
+html[data-home=false] :is(#corpus-workspace,#dictionary-workspace,#example-library,#survey-workspace,#grammar-workspace,#timeline-workspace,#analysis-workspace) .editable-example .sentence-actions{margin:0;gap:5px}
+html[data-home=false] :is(#corpus-workspace,#dictionary-workspace,#example-library,#survey-workspace,#grammar-workspace,#timeline-workspace,#analysis-workspace) .editable-example .sentence-actions>.sentence-menu{margin:0}
+html[data-home=false] #dictionary-detail .lex-example.has-sentence-actions .sentence-actions{top:13px}
+html[data-home=false] #example-library .entry.has-sentence-actions .sentence-actions{top:23px}
+html[data-home=false] :is(#corpus-workspace,#dictionary-workspace,#example-library,#survey-workspace,#grammar-workspace,#timeline-workspace,#analysis-workspace) .editable-example .sentence-actions>button{padding:3px 7px;background:transparent;border:1px solid var(--line);color:var(--ink)}
+html[data-home=false] .editable-example>.object-media-controls{float:none;display:flex;justify-content:flex-end;width:100%;min-width:0;margin:4px 0 8px;gap:6px;clear:both}
+html[data-home=false] .editable-example>.object-media-controls :is(select,.object-media-speakers){min-width:0;max-width:100%;overflow-wrap:anywhere}
+@media(max-width:600px){html[data-home=false] :is(.entry,.lex-example).has-sentence-actions .entry-head{padding-right:0;padding-top:36px}}
+
+/* Shared morpheme registry, using the current theme's surfaces and controls. */
+.morpheme-tabs{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.morpheme-tabs button[aria-selected=true]{background:var(--accent);border-color:var(--ink)}
+.morpheme-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:8px 0}
+.morpheme-actions>input{flex:1 1 140px;min-width:0}
+#morpheme-detail{padding:14px 18px;min-width:0}
+#morpheme-detail sub,#morpheme-list sub{font-size:.65em}
+#morpheme-list .dictionary-wordform{display:inline}
+.morpheme-component-evidence{border-top:1px solid var(--line);padding:12px 0}
+.morpheme-component-choice{display:flex;align-items:baseline;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line)}
+.morpheme-component-choice input{flex:none;margin:0}
+.morpheme-component-choice>span{min-width:0;overflow-wrap:anywhere}
+.morpheme-component-choice small{display:block;margin-top:4px;color:var(--muted)}
+#morpheme-components{max-height:40vh;overflow:auto;margin-bottom:12px}
+#morpheme-organize select,#morpheme-merge-dialog select{width:100%;min-width:0}
+#morpheme-list-panel[hidden],#morpheme-detail[hidden],#dictionary-detail[hidden],.dictionary-search-panel[hidden]{display:none!important}
+
+/* Example source rows share a baseline; review borders never touch text. */
+html[data-home=false] #dictionary-detail .lex-example.needs-review{padding-left:14px;padding-right:8px}
+html[data-home=false] #dictionary-detail .lex-example-source{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:.9rem;line-height:1.5}
+html[data-home=false] #dictionary-detail .lex-example-source>:is(strong,span,small){font-size:inherit;line-height:inherit;margin:0}
+html[data-home=false] #dictionary-detail .lex-example-source.entry-head{align-items:center}
+html[data-home=false] #dictionary-detail .lex-example-footer{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:10px}
+html[data-home=false] #dictionary-detail .lex-example-footer>button{margin:0}
+
+/* Shared compact sentence media row and dictionary tabs, for every theme. */
+html[data-home=false] .example-media-head{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;margin:8px 0 12px;clear:both;min-width:0}
+html[data-home=false] :is(#example-library,#dictionary-workspace) .editable-example .example-media-head>.ipa{flex:1 1 100px;min-width:0;overflow-wrap:anywhere;margin:0}
+html[data-home=false] .example-media-head>:is(.object-media-controls,.sentence-audio,.collaborator-badge){float:none;flex:0 1 auto;max-width:100%;margin:0;justify-content:flex-end}
+html[data-home=false] .example-media-head>.object-media-controls{margin-left:auto}
+html[data-home=false] .example-media-head select{max-width:min(260px,100%)}
+html[data-home=false] .morpheme-tabs{gap:0;border-bottom:1px solid var(--line);align-self:stretch}
+html[data-home=false] .morpheme-tabs button{border:0;border-radius:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);padding:7px 12px;margin:0;box-shadow:none;font-size:.9rem}
+html[data-home=false] .morpheme-tabs button[aria-selected=true]{border-bottom-color:var(--green);color:var(--ink);background:var(--light);font-weight:700}
+.component-picker{position:relative;margin:5px 0;min-width:0}.component-picker summary{padding:8px;border:1px solid var(--line);border-radius:4px;overflow-wrap:anywhere;cursor:pointer}.component-picker>div{max-height:300px;overflow:auto;border:1px solid var(--line);background:var(--paper);padding:4px}.component-picker button{display:block;width:100%;text-align:left;margin:2px 0;white-space:normal;overflow-wrap:anywhere}.component-picker .component-form{font-family:var(--annotation-font,Junicode),serif;font-style:var(--form-style,italic);font-weight:var(--form-weight,400)}
+html[data-home=false] .slot-drag-toggle:has([data-slot-split])::after{content:none}
+.morpheme-save-review{max-width:700px}.morpheme-save-review label{display:block;margin:12px 0}.morpheme-save-review select{display:block;width:100%}
+
+.homophone-types{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:0 0 14px}.homophone-types button{border:0;border-radius:0;background:transparent;border-bottom:2px solid transparent;padding:7px 12px}.homophone-types button[aria-pressed=true]{border-bottom-color:var(--green);background:var(--accent);font-weight:600}
+.homophone-options{display:flex;align-items:center;flex-wrap:wrap;gap:12px 18px}.homophone-options label{display:flex;gap:7px;align-items:center;margin:0}.homophone-options input[type=checkbox]{margin:0;flex:none}.homophone-options input:not([type=checkbox]){min-width:150px}.homophone-group{border-top:1px solid var(--line);padding:12px 0}.homophone-group>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:12px}.homophone-group h3.ipa{margin:0 0 10px!important}.homophone-group h3 small{font-family:var(--ui-font);font-size:.75rem;color:var(--muted)}.homophone-entry{border:1px solid var(--line);border-radius:5px;padding:10px;min-width:0;overflow-wrap:anywhere}.homophone-entry>div:first-child{display:flex;align-items:baseline;flex-wrap:wrap;gap:6px}.homophone-entry small{color:var(--muted)}.homophone-writing{font-size:1.2rem}.homophone-writing small{font-size:.7rem;margin-left:6px}.homophone-links{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.homophone-links button{font-size:.8rem;padding:3px 7px;white-space:normal;overflow-wrap:anywhere}#homophone-review{margin-top:18px}#homophone-review-results{display:grid;gap:10px;margin-top:10px}#morpheme-writings .ws-writing{display:flex;gap:8px;align-items:end;flex-wrap:wrap}#morpheme-writings label{flex:1;min-width:100px}
+/* Shared sound-table layout: color comes exclusively from the active theme. */
+.phonology-controls{padding-bottom:10px;border-bottom:1px solid var(--line);margin-bottom:10px}
+.hp-final{border-top:1px solid var(--line);padding:14px 0}.hp-final>h2.ipa{margin:0 0 12px!important;text-align:center}
+.hp-final>summary.ipa{margin:0 0 12px!important;text-align:center;font-size:1.4rem;font-weight:600}
+.hp-initial{display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.hp-initial>h3.ipa{margin:4px 0!important;overflow-wrap:anywhere}.hp-tone-cells{display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px 10px;min-width:0}
+.hp-tone{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;flex:0 1 auto;max-width:100%;min-width:0;padding:4px 6px;border:1px solid var(--line);border-radius:5px}.hp-tone h4{flex:none;display:inline;margin:0;color:var(--muted)}
+.hp-writing-item{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:4px;max-width:100%;margin:0}.hp-writing-item>span{min-width:0;overflow-wrap:anywhere}
+#homophone-panel .hp-writing-item{font-size:1rem;line-height:1.4;min-height:30px;padding:3px 7px}
+.hp-reading.ipa{font-size:.9rem;margin:0 0 6px!important}.hp-morpheme{white-space:normal;text-align:left;overflow-wrap:anywhere}.hp-morpheme small{font-weight:normal}
+.hp-pending-row{padding:6px 0;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+/* IPA paragraph margins must not offset an inline classification control. */
+.hp-pending-row>button.ipa{margin:0!important}
+#homophone-panel .hp-pending-row>input[type=checkbox]{flex:none;min-height:0;padding:0;margin:0}
+.hp-pending-row>.homophone-links{flex-basis:100%;align-items:center;gap:4px 6px;margin:0}
+#homophone-review-results{gap:6px;margin-top:6px}
+#homophone-review-results>.homophone-entry{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:6px 8px}
+#homophone-review-results .ipa{margin:0!important}
+#homophone-review-results .homophone-links{align-items:center;gap:4px 6px;margin:0}
+#hp-pending{margin:16px 0}#hp-settings-dialog{width:min(900px,94vw)}.hp-inventory-row{display:grid;grid-template-columns:minmax(90px,1fr) minmax(100px,1.4fr) auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}.hp-inventory-row label{min-width:0}.hp-inventory-row input,.hp-inventory-row textarea{width:100%;box-sizing:border-box}.hp-inventory-row .homophone-links{max-width:180px}#hp-copy{width:100%;box-sizing:border-box}#hp-candidates{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+#hp-inspector{position:fixed;right:0;top:var(--toolbar-height,100px);bottom:0;width:min(var(--hp-width,420px),calc(100vw - 48px));box-sizing:border-box;background:var(--paper);color:var(--ink);border-left:1px solid var(--line);box-shadow:-5px 0 20px #0001;z-index:55;display:flex;flex-direction:column}
+#hp-inspector{left:auto;margin:0;padding:0;overflow:visible;height:auto}#hp-inspector[hidden]{display:none}#hp-inspector header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line)}#hp-inspector h2{font-size:1.1rem;margin:0}#hp-inspector-content{padding:14px;overflow:auto;min-height:0;overflow-wrap:anywhere}#hp-words article{padding:12px 0;border-top:1px solid var(--line)}#hp-words p{margin:6px 0}.hp-resize{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:col-resize;touch-action:none}.hp-resize:hover,.hp-resize:focus-visible{background:var(--accent)}
+html[data-home=false].hp-inspecting main{margin-right:var(--hp-width,420px)}html[data-home=false].hp-inspecting #workspace-toolbar{margin-right:calc(-1 * var(--hp-width,420px));padding-right:12px}
+body:has(#desktop-toolbar) #hp-inspector{top:calc(var(--toolbar-height,100px) + var(--project-bar-height,42px))}
+#hp-inspector header{margin-bottom:0;flex-shrink:0}#hp-inspector-content{flex:1 1 auto}
+html[data-home=true] #hp-inspector{display:none}
+@media(max-width:1000px){html[data-home=false].hp-inspecting main{margin-right:0}html[data-home=false].hp-inspecting #workspace-toolbar{margin-right:0}.hp-inventory-row{grid-template-columns:1fr 1fr}.hp-inventory-row .homophone-links{grid-column:1/-1;max-width:none}}
+.grammar-label sub,.gloss sub{font-size:.7em!important;vertical-align:sub!important;line-height:0;font-variant-caps:normal!important}.grammar-label sup,.gloss sup{font-size:.7em!important;vertical-align:super!important;line-height:0;font-variant-caps:normal!important}
+.ws-writing{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}.ws-writing>label{flex:1 1 130px;margin:8px 0 0}.ws-writing>button{height:36px;margin:0}.ws-writing :is(input,select){height:36px;margin:0!important}
+.ui-icon{display:inline-block;vertical-align:middle;flex:none}.language-tools .language-transfer-button{display:inline-flex;align-items:center;gap:5px;width:auto;min-width:62px;padding:4px 8px}.tl-icon-grid button:has(.ui-icon){display:flex;align-items:center;justify-content:center;gap:3px;font-size:.72rem;grid-column:auto}
+#homophone-form{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:14px}#homophone-panel,#hp-inspector{font-family:var(--ui-font,system-ui),sans-serif;font-size:.82rem}#homophone-panel :is(button,input,select),#hp-inspector button{font-size:.82rem;line-height:1.5;padding:5px 9px;min-height:30px}#homophone-panel .homophone-options{gap:8px}#hp-inspector-content p{margin:7px 0}#hp-inspector h3{font-size:1rem;margin:10px 0}#hp-inspector .form,#homophone-panel .form{font-family:var(--annotation-font,Junicode),serif}
+#morpheme-detail{padding:0;font-size:1rem}#morpheme-detail>h2{margin:0 0 10px;font-size:1.55rem}#morpheme-detail>p{margin:8px 0}#morpheme-detail button,#morpheme-list-panel :is(button,input,select){font-size:.82rem;min-height:30px;padding:5px 9px}#morpheme-list-panel{font-family:var(--ui-font,system-ui),sans-serif}#morpheme-list .lexeme-list-item{width:100%;text-align:left;padding:12px}#morpheme-list .lexeme-list-item strong{font-size:1.25rem}#morpheme-list .lexeme-list-item small{font-size:.75rem}
+.sense-synonyms{margin:8px 0;border-top:1px solid var(--line);padding-top:8px;font-size:.82rem}.sense-synonyms button{padding:4px 8px;font-size:.8rem}#synonym-results{display:flex;flex-direction:column;gap:6px;max-height:45vh;overflow:auto}#synonym-results button{text-align:left}.morpheme-sense-editor{border-top:1px solid var(--line);padding:8px 0}
+.morpheme-detail-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}.morpheme-detail-head h2{margin:0;font-size:1.55rem}.morpheme-detail-head>span{font-size:.82rem;color:var(--muted)}.morpheme-detail-head .morpheme-actions{margin:0 0 0 auto}#morpheme-detail [data-morpheme-sense]{border-left:2px solid var(--line);padding:6px 12px;margin:12px 0}#morpheme-detail [data-morpheme-sense]>p{margin:4px 0}#morpheme-detail>p:empty{display:none}#morpheme-detail .morpheme-writings p{margin:8px 0}
+
+/* Compact controls shared by every skin. */
+#workspace-sidebar{--sidebar-divider:color-mix(in srgb,var(--line) 65%,var(--muted))}
+#workspace-sidebar .side-actions,#workspace-sidebar #workbench-preferences{border-top-color:var(--sidebar-divider)}
+#survey-picker .search-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#survey-picker .search-row input{flex:1 1 180px;min-width:0}
+#survey-picker .search-row select{max-width:100%;min-width:130px;flex:1 1 160px}
+#survey-picker-pages{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px}
+#survey-picker-pages label{display:inline-flex;flex-direction:row;align-items:center;white-space:nowrap;gap:6px;margin:0;flex:none}
+#survey-picker-pages input{width:64px;min-width:0}
+.morpheme-form,#hp-inspector .form,#homophone-panel .form{font-family:var(--annotation-font,Junicode),serif!important;font-style:var(--form-style,italic)!important;font-weight:var(--form-weight,400)!important}
+#hp-inspector .dictionary-wordform{font-family:Junicode,'Microsoft YaHei',serif;font-style:normal;font-weight:500}
+.synonym-destination{outline:2px solid var(--green);outline-offset:4px;scroll-margin-block:100px}
+.sense-synonyms [data-open-synonym]{text-align:left;white-space:normal}
+#analysis-counts-panel{padding:14px;margin:0 0 14px;font-size:.82rem}
+#analysis-counts-panel>summary{display:none}
+#analysis-counts-form{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin:0}
+#analysis-counts-form>label{display:flex;align-items:center;gap:8px;margin:0;flex:1 1 340px}
+#analysis-counts-form select{min-width:0;max-width:100%;flex:1}
+#analysis-counts-form :is(button,input,select){font-size:.82rem;line-height:1.5;padding:5px 9px;min-height:30px;box-sizing:border-box}
+#analysis-counts-form>.analysis-help{order:3;flex-basis:100%;margin:0;font-size:.76rem;line-height:1.6}
+#analysis-counts-selection{order:2;flex-basis:100%;margin:0;border-top:1px solid var(--line);padding-top:10px}
+#analysis-counts-selection>div:has(button){display:inline-flex;flex-wrap:wrap;gap:6px;margin:0 8px}
+#analysis-counts-selection label{display:flex;align-items:center;gap:7px;margin:0;line-height:1.5}
+#analysis-counts-selection input[type=checkbox]{min-height:0;padding:0;margin:0;flex:none}
+#analysis-workspace .analysis-table{font-size:.82rem}
+/* Keep script placement visible in tag tables and rich dictionary selectors alike. */
+.grammar-label sub,.gloss sub{vertical-align:baseline!important;position:relative;top:.35em}
+.grammar-label sup,.gloss sup{vertical-align:baseline!important;position:relative;top:-.55em}
+#hp-inventories :is(.hp-label,.hp-matches),#hp-choice select,#hp-candidates button,.hp-final>summary,.hp-initial>h3,.hp-tone>h4,.hp-reading{font-family:IPAPANNEW,serif!important}
+#morpheme-list .lexeme-list-item{display:flex;align-items:baseline;gap:12px;padding:8px 12px}
+#morpheme-list .lexeme-list-item>strong{flex:0 1 auto;min-width:0;overflow-wrap:anywhere}
+#morpheme-list .lexeme-list-item>span{flex:1;min-width:0;overflow-wrap:anywhere}
+#morpheme-list .lexeme-list-item>span:empty{display:none}
+/* Dictionary kinds share canonical form typography and compact sidebar geometry. */
+:is(#dictionary-list,#morpheme-list) .lexeme-list-item{display:block;padding:7px 10px;min-height:0;line-height:1.4}
+#morpheme-list .lexeme-list-heading{display:flex;align-items:baseline;gap:10px;min-width:0;line-height:1.4}
+#morpheme-list .lexeme-title-mask{display:block;flex:1;min-width:0;overflow:hidden;white-space:nowrap}
+#morpheme-list .lexeme-title{display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:1.1rem;font-weight:700}
+#morpheme-list .lexeme-list-item .lexeme-title{font-size:1.1rem}
+#morpheme-list .lexeme-list-pos{flex:0 1 auto;max-width:48%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.74rem;color:var(--muted)}
+#morpheme-list .lexeme-list-pos:empty{display:none}
+:is(#dictionary-list,#morpheme-list) .lexeme-title,:is(#dictionary-list,#morpheme-list) .morpheme-form{font-family:var(--annotation-font,Junicode),'Microsoft YaHei',serif!important;font-style:var(--form-style,normal)!important;font-variant:normal!important;font-weight:700!important}
+#morpheme-list .morpheme-form{display:inline;font-size:inherit}
+#dictionary-detail .dictionary-wordform,#morpheme-detail :is(.morpheme-form,.dictionary-wordform),#word-structure-editor .ws-component input[data-ws="form"]{font-family:var(--annotation-font,Junicode),'Microsoft YaHei',serif!important;font-style:var(--form-style,normal)!important;font-variant:normal!important;font-weight:700!important}
+#workspace-sidebar .dictionary-list-controls>label{display:inline-flex;align-items:center;gap:4px;margin:0;font-size:.75rem;line-height:1.3}
+#workspace-sidebar #dictionary-page-size{width:4em;min-width:0;max-width:4em;height:max(26px,1.8em);min-height:26px;padding:1px 1px 1px 4px;font-size:.75rem;line-height:1.3}
+#workspace-sidebar :is(#dictionary-sort-open,#dictionary-batch-open){height:max(26px,1.8em);min-height:26px;width:26px;min-width:26px;padding:0;margin:0;font-size:inherit;line-height:1}
+#dictionary-batch-class[hidden],#batch-confirm-label[hidden]{display:none!important}
+#dictionary-batch-dialog{width:min(820px,95vw)}
+.batch-selection-tools,.batch-apply-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0}
+#batch-selection-list{display:flex;gap:4px;flex-wrap:wrap;max-height:90px;overflow:auto}
+#batch-selection-list button{padding:2px 5px;font-size:.75rem}
+.batch-hint{font-size:.78rem;color:var(--muted);margin:7px 0}
+.batch-field{border-top:1px solid var(--line);padding:5px 0}
+.batch-field .batch-field-toggle{display:flex;align-items:center;gap:6px;margin:0;font-size:.85rem}
+.batch-field fieldset{border:0;margin:4px 0 0;padding:0;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.batch-field fieldset[disabled]{display:none}
+.batch-field select{max-width:100%;min-height:28px;padding:3px 6px;font-size:.8rem}
+.batch-choices{display:flex;align-items:center;flex-wrap:wrap;gap:3px 12px;max-height:150px;overflow:auto}
+.batch-choices label{display:flex;align-items:center;gap:4px;margin:0;font-size:.8rem}
+.batch-tags{width:100%;min-width:0}.batch-tags .tag-row{flex-wrap:wrap}.batch-tags .tag-row input{min-width:60px}
+#batch-result{font-size:.82rem;max-height:200px;overflow:auto}#batch-result p{margin:5px 0}#batch-result ul{margin:4px 0;padding-left:22px}
+#batch-confirm-label{display:flex;align-items:center;gap:6px;font-size:.82rem}
+#morpheme-inline-editor .page-editor{margin:0 0 10px;width:100%;max-width:none;padding:0}
+#morpheme-inline-editor h2{margin:0 0 7px}#morpheme-inline-editor h3{margin:9px 0 5px}
+#dictionary-workspace:has(#morpheme-editor[open]) #morpheme-detail{display:none}
+#morpheme-form label{margin:5px 0}#morpheme-form :is(input,textarea,select){max-width:100%;min-width:0}
+#morpheme-form input:not([type=checkbox]),#morpheme-form select{padding:5px 7px;min-height:30px}
+#morpheme-variants .variant-editor{padding:8px;margin:6px 0}
+#morpheme-detail .morpheme-actions{display:flex;flex-wrap:wrap;gap:5px;max-width:100%;min-width:0}
+#morpheme-detail .object-media-controls{max-width:100%}#morpheme-detail .object-media-controls select{max-width:160px}
+#morpheme-detail .morpheme-variants-view{margin:8px 0}
+#morpheme-detail .morpheme-variants-view .usage-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px}
+#morpheme-detail .dictionary-core-definitions>[data-morpheme-sense]:first-child{margin-top:0}
+html[data-home=false] #dictionary-detail .lex-example-classification{display:flex;align-items:baseline;justify-content:space-between;gap:4px 14px;flex-wrap:wrap;margin:5px 0;font-size:.85rem}
+html[data-home=false] #dictionary-detail .lex-example-classification>.morph-evidence{margin-left:auto;font-size:inherit}
+.morph-evidence[hidden]{display:none!important}
+html[data-home=false] #dictionary-detail .lex-example-bottom{display:flex;align-items:baseline;gap:6px 14px;flex-wrap:wrap}
+html[data-home=false] #dictionary-detail .lex-example-bottom>.example-notes{flex:1 1 180px;min-width:0;margin:6px 0;padding:3px 0;border:0}
+html[data-home=false] #dictionary-detail .lex-example-bottom>.lex-example-footer{flex:none;margin:0 0 0 auto;gap:5px}
+html[data-home=false] .editable-example .object-media-speakers{font-family:var(--ui-font),'Microsoft YaHei',sans-serif;font-size:.75rem;line-height:20px}
+/* Form buttons keep the sentence's reading size instead of command typography. */
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .editable-example{font-size:.9375rem}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .editable-example .word .form{font-size:calc(1.125rem * var(--form-scale,1))}
+.hp-sound-choice,#hp-reading,#hp-pending-list button.ipa,#hp-inspector .ipa{font-family:IPAPANNEW,serif!important}
+
+/* Long tasks share theme colors; the native modal keeps the work area inert. */
+.long-task-dialog{width:min(34rem,calc(100vw - 3rem));box-sizing:border-box;padding:1.4rem;}
+.long-task-dialog progress{display:block;width:100%;height:1rem;margin:1rem 0;accent-color:var(--accent);}
+.long-task-dialog .long-task-hint{font-size:.9em;opacity:.8;}
+/* Shared editor fields: align controls, while keeping compact rows readable. */
+#lexeme-form .orthography-editor{grid-template-columns:minmax(100px,1fr) minmax(90px,1fr) minmax(130px,2fr) minmax(100px,1fr) auto;align-items:end;gap:10px}
+#lexeme-form .orthography-editor label{margin:0;min-width:0;line-height:1.45}
+#lexeme-form .orthography-editor :is(input,select){height:2.65rem;margin:5px 0 0;box-sizing:border-box;line-height:1.3}
+#lexeme-form .orthography-editor .remove-orthography{height:2.65rem;margin:0;align-self:end;white-space:nowrap}
+#lexeme-form :is(.sense-tags,.usage-tags){display:block;width:100%;min-width:0}
+#lexeme-editor #lexeme-form .tag-rows{width:100%;min-width:0}
+#lexeme-editor #lexeme-form .tag-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#lexeme-editor #lexeme-form .tag-row :is(input,select){flex:1 1 150px;width:auto;min-width:0;margin:0}
+#lexeme-editor #lexeme-form .tag-row input[aria-label="标签说明"]{flex-grow:1.4}
+#lexeme-editor #lexeme-form .tag-row button{flex:none;margin:0}
+#synonym-dialog .search-row{display:grid;grid-template-columns:6em minmax(0,1fr) auto;align-items:center;gap:8px}
+#synonym-dialog .search-row :is(input,select){width:100%;min-width:0;margin:0}
+#text-reading-dialog{width:min(960px,94vw)}
+#text-reading-settings #dialogue-controls{margin:0 0 12px}
+#text-reading-settings .metadata-panel{margin:0}
+#hp-settings-dialog .hp-inventory-row{grid-template-columns:1.5rem minmax(65px,100px) minmax(100px,176px) minmax(max-content,1fr);gap:8px;align-items:end;padding:5px 0}
+#hp-settings-dialog .hp-inventory-row label{margin:0;line-height:1.4}
+#hp-settings-dialog .hp-inventory-row :is(input,textarea){height:2.4rem;min-height:2.4rem;margin:4px 0 0;padding:5px 8px;line-height:1.35;box-sizing:border-box}
+#hp-settings-dialog .hp-inventory-row textarea{resize:vertical}
+#hp-settings-dialog .hp-inventory-row .homophone-links{display:flex;flex-wrap:nowrap;gap:4px;max-width:none;grid-column:auto;margin:0;align-items:center;height:2.4rem}
+#hp-settings-dialog .hp-inventory-row .homophone-links button{margin:0;padding:4px 8px;white-space:nowrap;height:2.4rem}
+#hp-settings-dialog .hp-row-grip{padding:0;width:1.5rem;height:2.4rem;cursor:grab;touch-action:none;border:0;background:transparent}
+.hp-row-dragging{opacity:.45}.hp-inventory-row[data-row-drop=before]{box-shadow:0 -2px var(--green)}.hp-inventory-row[data-row-drop=after]{box-shadow:0 2px var(--green)}
+@media(max-width:800px){#lexeme-form .orthography-editor{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}#lexeme-form .orthography-editor .remove-orthography{justify-self:end}}
+@media(max-width:640px){#hp-settings-dialog .hp-inventory-row{grid-template-columns:1.5rem minmax(60px,1fr) minmax(100px,1.5fr)}#hp-settings-dialog .hp-inventory-row .homophone-links{grid-column:2/-1}}
+.long-task-check{display:flex;align-items:center;gap:.5rem;line-height:1.5;margin:.8rem 0;}
+.long-task-check input{flex:none;width:auto;margin:0;}
+
+/* Shared columns keep morphemes, separators and glosses vertically aligned. */
+html[data-home=false] .editable-example .inline-words>.word{display:grid;grid-template-columns:repeat(var(--inline-columns,1),max-content);column-gap:2px;align-content:start}
+html[data-home=false] .editable-example .inline-words>.word>.inline-parts{display:grid;grid-template-columns:subgrid;grid-column:1/-1;gap:2px;align-items:center}
+html[data-home=false] .editable-example .inline-words>.word>.extra-layer{grid-column:1/-1}
+html[data-home=false] .editable-example .inline-words input.inline-piece{width:auto!important;min-width:0;max-width:none;margin:0;justify-self:stretch;box-sizing:border-box}
+@supports(field-sizing:content){
+ html[data-home=false] .editable-example .inline-words input.inline-piece{field-sizing:content;min-width:calc(1.5ch + 10px);max-width:40ch}
+ html[data-home=false] .editable-example .inline-words>.compact-symbol input.inline-piece{min-width:0;max-width:none}
+}
+html[data-home=false] .editable-example .words{column-gap:0!important}
+html[data-home=false] .editable-example .words>.word{margin-inline:0 14px}
+html[data-home=false] .editable-example .words>:is(.punctuation-unit,.phonological-boundary,.compact-symbol){margin-inline:0 4px}
+/* Share the existing 14 + 4 pixels equally around a symbol; keep runs compact. */
+html[data-home=false] .editable-example .words>.word:has(+ :is(.punctuation-unit,.phonological-boundary,.compact-symbol)){margin-inline-end:9px}
+html[data-home=false] .editable-example .words>:is(.punctuation-unit,.phonological-boundary,.compact-symbol):not(:first-child):has(+ .word:not(.punctuation-unit,.phonological-boundary,.compact-symbol)){margin-inline-end:9px}
+html[data-home=false] .editable-example .words>:is(.punctuation-unit,.phonological-boundary,.compact-symbol):has(+ :is(.punctuation-unit,.phonological-boundary,.compact-symbol)){margin-inline-end:4px}
+html[data-home=false] .editable-example .inline-words>.compact-symbol{padding-inline:2px!important;grid-template-columns:minmax(0,calc(var(--symbol-columns,1)*1ch + 12px))}
+html[data-home=false] .editable-example .inline-words>.compact-symbol input.inline-piece{padding-inline:2px!important;width:100%!important}
+html[data-home=false]:has(.editable-example [data-inline-save]) #add{visibility:hidden}
+.inspection-origin{outline:1px dashed color-mix(in srgb,var(--ink) 78%,var(--muted));outline-offset:3px;border-radius:3px;background:color-mix(in srgb,var(--green) 5%,transparent)}
+html[data-home=false] .editable-example .words:not(.inline-words)>.word:not(.punctuation-unit,.phonological-boundary){cursor:pointer}
+
+/* One compact row per text. Only overflowing titles animate, while hovered. */
+html[data-home=false] #texts [data-text]{display:flex;align-items:center;gap:10px;padding:7px 10px;margin:4px 0;min-height:0;line-height:1.5;overflow:hidden}
+#texts .text-title-mask{display:block;flex:1;min-width:0;overflow:hidden;white-space:nowrap}
+#texts .text-title{display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#texts .text-sentence-count{flex:none;margin-left:auto;font-size:.78rem;font-variant-numeric:tabular-nums;color:var(--muted)}
+#dictionary-list .lexeme-list-item{padding:7px 10px;min-height:0}
+#dictionary-list .lexeme-list-heading{display:flex;align-items:baseline;gap:10px;min-width:0;line-height:1.4}
+#dictionary-list .lexeme-title-mask{display:block;flex:1;min-width:0;overflow:hidden;white-space:nowrap}
+#dictionary-list .lexeme-title{display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:1.1rem;font-weight:700}
+#dictionary-list .lexeme-list-pos{flex:0 1 auto;max-width:48%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.74rem;color:var(--muted)}
+#dictionary-list .lexeme-list-pos:empty{display:none}
+#dictionary-list .lexeme-list-item>small{font-size:.72rem;line-height:1.4;overflow-wrap:anywhere}
+.text-dragging #texts .text-title{animation:none!important}
+#texts .title-overflows:hover .text-title,#texts [data-text]:focus-visible .title-overflows .text-title,#dictionary-list .title-overflows:hover .lexeme-title,#dictionary-list [data-lexeme]:focus-visible .title-overflows .lexeme-title{width:max-content;overflow:visible;text-overflow:clip;animation:sidebar-title-pan var(--title-duration,8s) linear infinite}
+@keyframes sidebar-title-pan{0%,12%,100%{transform:translateX(0)}45%,57%{transform:translateX(var(--title-travel,0px))}90%{transform:translateX(0)}}
+@media(prefers-reduced-motion:reduce){#texts .title-overflows .text-title,#dictionary-list .title-overflows .lexeme-title{animation:none!important}}
+html[data-home=false] #workspace-sidebar .sidebar-text-actions{flex:none;display:flex;gap:6px;margin:0;padding:9px 0 0;border-top:1px solid var(--sidebar-divider)}
+html[data-home=false] #workspace-sidebar .sidebar-text-actions[hidden]{display:none}
+html[data-home=false] #workspace-sidebar .sidebar-text-actions>button,html[data-home=false] #workspace-sidebar .sidebar-text-actions .sidebar-create>summary{display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:none;min-height:29px;margin:0;padding:4px 5px;font-size:.78rem;line-height:1.4;white-space:nowrap;background:transparent}
+.sidebar-text-actions .ui-icon{width:15px;height:15px;flex:none}
+.sidebar-create>.workbench-menu-items{top:auto;bottom:calc(100% + 5px);left:0;right:auto}
+
+/* Both complete forms share the dictionary inspector's placement and tabs. */
+html[data-home=false].workbench-inspecting :is(#word-link-dialog,#segmentation-dialog).workbench-inspector{position:fixed;inset:calc(var(--toolbar-height,100px) + 18px) 0 0 auto;margin:0;width:360px;max-width:90vw;height:calc(100dvh - var(--toolbar-height,100px) - 18px);max-height:calc(100dvh - var(--toolbar-height,100px) - 18px);border:0;border-left:1px solid var(--line);border-radius:0;box-shadow:-5px 0 20px #0001;z-index:55;background:var(--paper)}
+html[data-home=false].workbench-inspecting body:has(#desktop-toolbar) :is(#word-link-dialog,#segmentation-dialog).workbench-inspector{top:calc(var(--toolbar-height,100px) + var(--project-bar-height,42px) + 18px)!important;height:calc(100dvh - var(--toolbar-height,100px) - var(--project-bar-height,42px) - 18px)!important;max-height:calc(100dvh - var(--toolbar-height,100px) - var(--project-bar-height,42px) - 18px)}
+.workbench-inspector[hidden]{display:none!important}
+:is(#word-link-dialog,#segmentation-dialog).workbench-inspector>.dialog-title-row{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"title close" "tabs tabs";align-items:center;gap:6px;padding:8px 12px}
+:is(#word-link-dialog,#segmentation-dialog).workbench-inspector>.dialog-title-row h2{grid-area:title;min-width:0;margin:0!important;font-size:1rem!important;line-height:1.4}
+:is(#word-link-dialog,#segmentation-dialog).workbench-inspector>.dialog-title-row form{grid-area:close;margin:0}
+:is(#word-link-dialog,#segmentation-dialog).workbench-inspector>.dialog-title-row .close{display:grid;place-items:center;width:28px;height:28px;min-height:28px;margin:0;padding:0;font-size:1.1rem;line-height:1}
+.sentence-inspector-tabs{display:flex;grid-column:1/-1;border-bottom:1px solid var(--line);gap:0}
+:is(#word-link-dialog,#segmentation-dialog).workbench-inspector .sentence-inspector-tabs{grid-area:tabs;width:100%;margin:0}
+:is(#word-link-dialog,#segmentation-dialog).workbench-inspector .sentence-inspector-tabs button{flex:1;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:5px 8px;font-size:.82rem;line-height:1.4}
+:is(#word-link-dialog,#segmentation-dialog).workbench-inspector .sentence-inspector-tabs button[aria-selected=true]{border-bottom-color:var(--green);color:var(--green);background:var(--selected,var(--accent))}
+#segmentation-dialog.workbench-inspector .dialog-content{padding:12px;font-size:.82rem;line-height:1.5}
+#segmentation-dialog.workbench-inspector .dialog-content>p:first-child{margin-top:0;font-size:.75rem;color:var(--muted)}
+#segmentation-dialog.workbench-inspector h3{font-size:.9rem;margin:12px 0 7px}
+#segmentation-dialog.workbench-inspector :is(input:not([type=checkbox]),select,textarea){width:100%;min-width:0;max-width:100%}
+#segmentation-dialog.workbench-inspector .segment-member{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px;margin:7px 0}
+#segmentation-dialog.workbench-inspector .segment-unit{padding:7px 9px;margin:7px 0}
+#segmentation-dialog.workbench-inspector button{font-size:.78rem;padding:4px 7px}
+#segmentation-dialog.workbench-inspector .segment-unit button{margin:5px 5px 0 0}
+
+/* DAWoid: charcoal workstation chrome, restrained semantic colour and track families.
+   Geometry, typography choices and controls continue to use the shared workbench. */
+html[data-theme="dawoid"]{
+ color-scheme:dark;
+ --ink:#edf0f3;--muted:#acb3bd;--paper:#181a1d;--surface:#22252a;--sidebar:#1d2024;--line:#444a53;
+ --green:#8abce6;--accent:#303b48;--hover:#323941;--selected:#314357;--body-text:#e5e8ed;--ipa:#edf0f3;--gloss:#cdd3dc;
+ --gold:#d8bd87;--hit:#61512d;--danger:#f0a2a4;--warning:#e8c181;--primary-hover:#a9d0ed;--button-ink:#17232f;--focus:#a5d5f5;--edit-surface:#252d36;
+ --daw-controls:#2a2e34;--daw-chrome:#25292e;--daw-word:var(--ipa);
+ --speaker-0:#2b3c49;--speaker-1:#304237;--speaker-2:#48392e;--speaker-3:#3c344b;--speaker-4:#45402d;
+ scrollbar-color:#606873 #202327;
+}
+html[data-theme="dawoid"] :is(button,input:not([type=checkbox]),select,textarea){border-radius:3px;background-color:var(--daw-controls)}
+html[data-theme="dawoid"] button.primary{background:var(--green);color:var(--button-ink);border-color:var(--green)}
+html[data-theme="dawoid"] button.primary:hover{background:var(--primary-hover)}
+html[data-theme="dawoid"] :is(dialog,.metadata-panel,.ws-box,.usage-editor,.variant-editor,.object-media-gallery,.search,.entry,.survey-card,#survey-tree,.tl-stage,.tl-editor,.tl-sidebar){border-radius:4px;box-shadow:none}
+html[data-theme="dawoid"] :is(.dialog-top,.dialog-bottom,.dialog-title-row){background:var(--daw-chrome)}
+html[data-theme="dawoid"] dialog::backdrop{background:#07090bb3}
+html[data-theme="dawoid"] :is(.folder-tools,#brand-language-menu,.workbench-menu-items){background:var(--surface);border-color:var(--line);border-radius:4px;box-shadow:0 5px 16px #0006}
+html[data-theme="dawoid"] header::after{display:none}
+html[data-theme="dawoid"] .brand::after{color:var(--muted)}
+html[data-theme="dawoid"] ::selection{background:#426585;color:#fff}
+html[data-theme="dawoid"][data-home="false"] #workspace-toolbar{background:var(--daw-chrome);box-shadow:none}
+html[data-theme="dawoid"][data-home="false"] #workspace-toolbar .workspace-tabs{background:var(--sidebar);border-bottom-color:var(--line)}
+html[data-theme="dawoid"][data-home="false"] #workspace-toolbar .workspace-tabs button{background:transparent;color:var(--muted);border-radius:0;box-shadow:none}
+html[data-theme="dawoid"][data-home="false"] #workspace-toolbar .workspace-tabs button:hover{background:var(--hover);color:var(--ink)}
+html[data-theme="dawoid"][data-home="false"] #workspace-toolbar .workspace-tabs button[aria-pressed="true"]{background:var(--accent);color:var(--ink);border-bottom-color:var(--green)}
+html[data-theme="dawoid"][data-home="false"] #workspace-toolbar .toolbar-row{background:var(--daw-chrome)}
+html[data-theme="dawoid"] #workspace-history{background:var(--daw-chrome)}
+html[data-theme="dawoid"] #workspace-sidebar :is(.nav,.lexeme-list-item){background:transparent;box-shadow:none}
+html[data-theme="dawoid"] #workspace-sidebar :is(.nav.active,.lexeme-list-item.active){background:var(--selected);box-shadow:inset 3px 0 var(--green);border-color:transparent}
+html[data-theme="dawoid"] #workspace-sidebar :is(.nav,.lexeme-list-item):hover{background:var(--hover)}
+html[data-theme="dawoid"] :is(.form,.morpheme-form),html[data-theme="dawoid"] .word .form{color:var(--daw-word)}
+html[data-theme="dawoid"] .grammar-label{color:var(--gold)}
+html[data-theme="dawoid"] :is(.entry-head,.language-note,.analysis-hit-head,.tl-source-info){color:var(--muted)}
+html[data-theme="dawoid"] #timeline-workspace{--tl-accent:#8abce6}
+html[data-theme="dawoid"] :is(.tl-stage,.tl-editor){background:var(--surface)}
+html[data-theme="dawoid"] :is(.tl-ruler,.tl-track-title,.tl-wave-title){background:var(--sidebar)}
+html[data-theme="dawoid"] .tl-speaker-group{background:var(--daw-chrome)}
+html[data-theme="dawoid"] .tl-track{--tl-track-edge:color-mix(in srgb,var(--tl-track-color) 70%,#dfe7ee)}
+html[data-theme="dawoid"] .tl-track-title{box-shadow:inset 3px 0 var(--tl-track-edge);color:var(--ink)}
+html[data-theme="dawoid"] .tl-track-title small{color:var(--muted)}
+html[data-theme="dawoid"] .tl-lane{background-color:#1b1e22}
+html[data-theme="dawoid"] .tl-block{background:color-mix(in srgb,var(--tl-track-color) 35%,var(--surface));border-color:var(--tl-track-edge);color:#f5f6f8;border-radius:3px}
+html[data-theme="dawoid"] .tl-block:hover{box-shadow:inset 0 0 0 1px var(--tl-track-edge)}
+html[data-theme="dawoid"] .tl-block.selected{outline-color:color-mix(in srgb,var(--tl-track-color) 50%,#fff);background:color-mix(in srgb,var(--tl-track-color) 35%,var(--surface));box-shadow:inset 0 0 0 1px #ffffff35}
+html[data-theme="dawoid"] .tl-block.outside{background:repeating-linear-gradient(135deg,transparent 0 5px,#0003 5px 10px),color-mix(in srgb,var(--tl-track-color) 35%,var(--surface))}
+html[data-theme="dawoid"] .tl-playhead{background:#efcf83}
+html[data-theme="dawoid"] #tl-play[aria-label="暂停"]{color:#9ed3ad;background:#2c4033;border-color:#7ca98a}
+html[data-theme="dawoid"] :is(#tl-loop,#tl-mute)[aria-pressed="true"]{background:#57472d;color:#f3d6a1;border-color:#b79a64}
+@media(forced-colors:active){html[data-theme="dawoid"] .tl-block.selected{outline-color:Highlight}}
+
+/* Track colour settings are shared controls; DAWoid alone applies the track fills. */
+#tl-track-form .tl-track-colors{margin:12px 0;padding:8px 10px;border:1px solid var(--line);border-radius:4px;min-width:0}
+#tl-track-form .tl-track-colors legend{font-size:.85rem;padding:0 4px}
+#tl-track-form .tl-color-inherit{display:flex;align-items:center;gap:7px;margin:0 0 8px;font-size:.82rem}
+#tl-track-form .tl-color-inherit[hidden]{display:none}
+#tl-track-form .tl-color-inherit input{width:14px;height:14px;margin:0;flex:none}
+.tl-color-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+#tl-track-form #tl-track-color{width:36px;height:30px;min-height:30px;padding:2px;flex:none;cursor:pointer}
+#tl-track-form #tl-track-color-hex{width:94px;min-width:0;height:30px;box-sizing:border-box;padding:4px 6px;font:normal .8rem/1.4 monospace}
+.tl-color-presets{display:flex;align-items:center;flex-wrap:wrap;gap:5px}
+#tl-track-form .tl-color-swatch{width:20px;height:20px;min-height:20px;min-width:20px;margin:0;padding:0;background:var(--swatch);border:1px solid var(--muted);border-radius:3px}
+#tl-track-form .tl-color-swatch[aria-pressed=true]{outline:2px solid var(--ink);outline-offset:2px}
+#tl-track-form .tl-track-colors .tl-muted{font-size:.75rem;margin:8px 0 0}
+.workbench-language-options[hidden],.language-panel[hidden]{display:none!important}
+
+/* Page selection remains available even when a single page needs no navigation. */
+#dictionary-page-bar{display:flex;align-items:flex-start;gap:4px;min-width:0}
+#dictionary-page-bar[hidden],#dictionary-top-pagination[hidden],#morpheme-pagination[hidden]{display:none!important}
+#dictionary-page-bar .dictionary-page-pick{display:flex;align-items:center;justify-content:center;flex:0 0 16px;min-width:0;margin:10px 0 0;padding:0}
+#dictionary-page-bar .dictionary-page-pick input{width:14px;height:14px;margin:0;padding:0;min-width:14px;min-height:14px}
+#dictionary-page-bar #dictionary-top-pagination{flex:1;min-width:0;margin:0 0 4px}
+#dictionary-page-bar .top-pagination>button{padding:3px 5px}
+#dictionary-page-bar:has(#dictionary-top-pagination[hidden]){margin:0 0 3px}
+#dictionary-page-bar:has(#dictionary-top-pagination[hidden]) .dictionary-page-pick{margin-top:3px}
+#morpheme-pagination{padding:4px 0;margin:0;gap:4px;font-size:.8rem}
+#workspace-sidebar #dictionary-page-size{width:5em;max-width:5em}
+.ws-component>.ws-registry-picker{margin:0 0 5px;border-bottom:1px solid var(--line);padding-bottom:5px}
+.ws-registry-picker>summary{font-size:.82rem;cursor:pointer}
+.ws-registry-picker .morpheme-actions{display:flex;gap:4px;margin:4px 0}
+.ws-registry-picker .ws-registry-query{min-width:0;flex:1;width:0}
+.ws-registry-picker :is(input,select,button){font-size:.8rem;padding:4px 6px;min-height:28px;margin:0}
+.ws-registry-picker .ws-registry-target{width:100%}
+.ws-registry-picker .ws-registry-form{width:100%;margin-top:4px}
+.ws-registry-form[hidden]{display:none!important}
+.ws-registry-values{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px;margin:4px 0 7px;padding:4px 0}
+.ws-registry-values[hidden],.ws-component>label[hidden]{display:none!important}
+.ws-registry-values .ipa{margin:0;font-size:1.05rem}.ws-registry-values .dictionary-wordform{font-family:var(--annotation-font,Junicode);font-style:var(--form-style,italic)}
+.morpheme-source-missing{font-size:.8rem;color:var(--muted);margin:5px 0}
+/* The existing sentence search controls live inside the sticky toolbar. */
+#sentence-search-dock{min-width:0;color:var(--ink);background:var(--paper)}
+#sentence-search-dock[hidden],#sentence-search-dock [hidden]{display:none!important}
+#sentence-search-dock>.search{padding:5px 12px 3px;margin:0;box-shadow:none;border:0;border-bottom:1px solid var(--line);border-radius:0;max-height:min(38dvh,300px);overflow:auto;background:var(--paper);font-size:.76rem}
+#sentence-search-dock .search-row{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin:0;min-width:0}
+#sentence-search-dock .search-row>select{flex:0 1 11em;max-width:100%;width:auto;min-width:0}
+#sentence-search-dock .search-row>input{flex:1 1 12em;width:0;min-width:100px;max-width:100%}
+#sentence-search-dock :is(input,select,button){font-size:.76rem;line-height:1.35;padding:3px 6px;min-height:27px;margin:0;box-sizing:border-box}
+#sentence-search-dock .workbench-search-options{margin:1px 0 0}#sentence-search-dock .workbench-search-options>summary{font-size:.73rem;cursor:pointer;padding:2px 0;color:var(--muted)}
+#sentence-search-dock .filters{display:flex;align-items:center;flex-wrap:wrap;gap:3px 10px;margin:2px 0 0;padding:0;font-size:.76rem}
+#sentence-search-dock .filters label{display:inline-flex;align-items:center;gap:4px;margin:0;font-size:inherit;min-width:0}
+#sentence-search-dock .filters select{max-width:15em;min-width:0}
+#sentence-search-dock input[type=checkbox]{width:14px;height:14px;min-height:14px;padding:0;flex:none}
+#sentence-search-dock #sentence-search-grip{display:flex;align-items:center;justify-content:center;width:56px;height:12px;min-height:12px;margin:0 auto;padding:0;border:1px solid var(--line);border-top:0;border-radius:0 0 5px 5px;background:var(--sidebar);color:var(--muted);cursor:pointer}
+#sentence-search-grip svg{width:24px;height:10px;fill:none;stroke:currentColor;stroke-width:1.5}
+#sentence-search-dock.search-open #sentence-search-grip svg{transform:rotate(180deg)}
+#sentence-search-dock #sentence-search-grip:hover{color:var(--ink);background:var(--selected)}
+#sentence-search-grip:focus-visible{outline:2px solid var(--green);outline-offset:1px}
+#workspace-loading{display:none}
+html[data-app-loading="true"][data-home="false"] #workspace-loading{display:grid!important;position:fixed;inset:0;z-index:1000;place-content:center;gap:12px;text-align:center;background:var(--paper);color:var(--muted);font-size:.85rem;cursor:progress}
+html[data-app-loading="true"][data-home="false"] #workspace-loading::before{content:"Corporium";font:2rem/1.3 var(--ui-font,serif);color:var(--ink)}
+.ws-registry-results{grid-column:1/-1;min-width:0;margin-top:3px;border:1px solid var(--line);border-radius:4px;padding:5px}
+.ws-registry-results[hidden]{display:none}.ws-registry-candidates{max-height:170px;overflow:auto;display:grid;gap:3px;margin-top:3px}
+.ws-registry-candidates>button{display:flex;align-items:baseline;gap:8px;text-align:left;padding:4px 6px;min-width:0;flex-wrap:wrap;font-size:.85rem}
+.ws-registry-candidates>button[aria-pressed=true]{background:var(--selected)}.ws-registry-candidates>button>span{flex:1;min-width:0;overflow-wrap:anywhere}.ws-registry-results nav{display:flex;gap:5px;align-items:center;margin-top:4px}.ws-registry-results nav button{padding:3px 6px;font-size:.75rem}
+:root{--morph-clitic:#176488;--morph-infix:#71468e;--morph-circumfix:#9a502d;--morph-connector:#276b5b;--morph-multipart:#76512f;--morph-reduplication:#934661}
+html[data-theme="docoid"]{--morph-infix:#176488;--morph-circumfix:#276b5b;--morph-connector:#9a502d;--morph-clitic:#71468e}
+html[data-theme="dawoid"],html[data-theme="night"]{--morph-clitic:#9dd1e3;--morph-infix:#d2b2f1;--morph-circumfix:#efb18f;--morph-connector:#9bd6bd;--morph-multipart:#d8c5a4}
+html[data-theme="docoid"]{--morph-reduplication:#9b4566}
+html[data-theme="ivory"]{--morph-reduplication:#91445f}
+html[data-theme="forest"]{--morph-reduplication:#934661}
+html[data-theme="dawoid"]{--morph-reduplication:#d9a3b8}
+html[data-theme="night"]{--morph-reduplication:#d8a6bd}
+.morph-tone-base { color: var(--morph-display-base, var(--ipa, var(--ink))); }
+.morph-tone-affix { color: var(--morph-display-affix, var(--gold)); }
+.morph-tone-clitic { color: var(--morph-display-clitic, var(--morph-clitic)); }
+.morph-tone-infix { color: var(--morph-display-infix, var(--morph-infix)); }
+.morph-tone-circumfix { color: var(--morph-display-circumfix, var(--morph-circumfix)); }
+.morph-tone-connector { color: var(--morph-display-connector, var(--morph-connector)); }
+.morph-tone-multipart { color: var(--morph-display-multipart, var(--morph-multipart)); }
+.morph-tone-reduplication { color: var(--morph-display-reduplication, var(--morph-reduplication)); }
+.morph-unclassified { color: var(--morph-display-base, var(--ipa, var(--ink))); }
+html .morph-unclassified .grammar-label { color: inherit; }
+#morph-color-settings{margin:12px 0;padding:8px 10px;border:1px solid var(--line);border-radius:4px;min-width:0}
+.global-settings-section{border:1px solid var(--line);border-radius:4px;margin:6px 0;min-width:0}
+.global-settings-section>summary{padding:7px 10px;font-size:.9rem;font-weight:600;color:var(--ink);cursor:pointer}
+.global-settings-section>summary::marker{color:var(--muted)}
+.global-settings-section[open]>summary{border-bottom:1px solid var(--line)}
+.global-settings-body{padding:7px 10px;min-width:0;font-size:.84rem}
+.global-settings-body>label{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:5px 0;font-size:inherit}
+.global-settings-body>label>select{flex:1;min-width:150px;width:auto;margin:0;padding:4px 6px;font-size:inherit;min-height:30px}
+.global-settings-body>label>input[type=checkbox]{width:auto;min-width:14px;margin:0}
+.global-settings-body p{margin:5px 0;line-height:1.45;font-size:inherit;color:var(--muted)}
+.global-settings-body p small{font-size:.95em}
+.global-settings-section>#morph-color-settings{border:0;margin:0;padding:7px 10px}
+#morph-color-settings legend{font-size:.9rem;padding:0 4px}#morph-color-theme{font-size:.75rem;margin-left:6px}
+#morph-color-settings label{display:flex;align-items:center;gap:6px;margin:0;font-size:.82rem;min-width:0}
+#morph-color-settings input[type=checkbox]{width:14px;height:14px;min-width:14px;min-height:14px;margin:0;flex:none}
+#morph-color-settings .morph-color-hint{font-size:.75rem;color:var(--muted);margin:5px 0 8px;line-height:1.45}
+.morph-color-row{display:grid;grid-template-columns:minmax(0,1fr) 34px 86px 28px;gap:5px;align-items:center;margin:4px 0;min-width:0}
+#morph-color-settings input:not([type=checkbox]){width:100%;height:28px;min-height:28px;margin:0;padding:2px 5px;font-size:.78rem;min-width:0}
+#morph-color-settings input[type=color]{padding:2px;cursor:pointer}
+#morph-color-settings [data-color-hex]{font-family:monospace}#morph-color-settings [data-color-hex]:invalid{outline:1px solid var(--danger)}
+#morph-color-settings button{font-size:.76rem;padding:2px 5px;min-height:28px;margin:0}
+.morph-color-preview{display:flex;flex-wrap:wrap;gap:4px 10px;border-top:1px solid var(--line);padding-top:6px;margin-top:7px;font-size:.8rem}
+.morph-color-bottom{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px;margin-top:6px}.morph-color-bottom small{font-size:.72rem}
+#management-backup{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+#text-reading-target{display:flex;align-items:center;gap:8px;margin:0 0 10px;font-size:.82rem}#text-reading-target select{flex:1;min-width:0;padding:5px 8px;font-size:inherit}
+#text-reading-empty{font-size:.82rem;color:var(--muted);margin:8px 0}
+/* In DAWoid the inspector's old positional swatches defer to sentence roles. */
+html[data-theme=dawoid] #segmentation-dialog .segment-unit{border-left-color:var(--line)}
+html[data-theme=dawoid] #segmentation-dialog .segment-color{border-bottom-color:var(--line)}
+#homophone-panel .top-pagination{flex-wrap:wrap;gap:6px 10px}
+#homophone-panel .hp-page-size{display:inline-flex;align-items:center;gap:4px;margin:0;white-space:nowrap;font-size:inherit}
+#homophone-panel .hp-page-size select{width:4.5em;min-width:0;margin:0;padding:3px 5px;font-size:inherit;min-height:28px}
+/* Quick editing keeps one sense or morpheme per row; results temporarily open below it. */
+#lexeme-quick-editor{width:min(1100px,96vw)}
+#lexeme-quick-editor #lexeme-usages{overflow-x:auto}
+#lexeme-quick-editor .quick-usage-row{display:block;padding:2px 6px;margin:4px 0;min-width:520px}
+#lexeme-quick-editor .quick-usage-row>:not(.quick-sense-list){display:none!important}
+.quick-sense-row{display:grid;grid-template-columns:24px 36px minmax(100px,.45fr) minmax(180px,1fr) 6.2rem;gap:6px;align-items:center;padding:3px 0}
+.quick-sense-number{font-size:.75rem;color:var(--muted);white-space:nowrap}
+.quick-sense-tools{display:flex;gap:3px;justify-content:flex-end}
+#lexeme-quick-editor .quick-sense-tools button{padding:1px 6px;min-height:26px}
+#lexeme-quick-editor .quick-component-table{overflow:auto;margin:4px 0;border:1px solid var(--line);border-radius:4px;background:var(--paper)}
+.quick-component-sheet{min-width:var(--quick-component-width)}
+#lexeme-quick-editor #word-structure-editor .ws-components{display:block;margin:0;padding:0}
+#lexeme-quick-editor #word-structure-editor .ws-components>.quick-component-row{display:block;max-width:none;width:100%;margin:0;padding:0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent}
+#lexeme-quick-editor .quick-component-row>:not(.quick-component-line){display:none!important}
+.quick-component-line,.quick-component-head{display:grid;grid-template-columns:var(--quick-component-columns);gap:8px;align-items:center;padding:4px 6px}
+.quick-component-head{font-size:.73rem;color:var(--muted);padding-top:3px;padding-bottom:3px;background:var(--surface,var(--paper))}
+.quick-component-head>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quick-component-search{display:flex;gap:3px;align-items:center;min-width:0}
+#lexeme-quick-editor .quick-component-search .ws-registry-query{width:0;flex:1;min-width:0}
+#lexeme-quick-editor .quick-component-search button{flex:none;width:25px;height:29px;min-height:0;padding:3px}
+.quick-component-search svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;vertical-align:middle}
+#lexeme-quick-editor .quick-component-search select{flex:none;width:28px;min-width:0;padding:2px;height:29px}
+#lexeme-quick-editor .quick-component-search .ws-registry-form{width:6.5em;font-size:.8rem}
+.quick-component-writings{display:contents}
+#lexeme-quick-editor :is(.quick-row-input,.quick-sense-pos,.quick-component-search input){min-width:0;width:100%;margin:0;height:2rem;padding:3px 6px;font-size:.8125rem;line-height:1.3}
+#lexeme-quick-editor .quick-row-input[readonly]{background:transparent;border-color:transparent;color:var(--ink)}
+.quick-component-form{font-family:var(--annotation-font,Junicode),serif;font-style:var(--form-style,normal);font-weight:var(--form-weight,600)}
+.quick-component-readings{font-family:var(--ipa-font,IPAPANNEW),serif;font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400)}
+#lexeme-quick-editor :is(.quick-row-grip,.quick-row-remove){padding:0;width:24px;height:28px;min-height:0;border-color:transparent;background:transparent}
+.quick-row-grip{touch-action:none;cursor:grab;color:var(--muted)}
+.quick-row-dragging{opacity:.6}.quick-sort-row[data-quick-drop=before]{box-shadow:inset 0 2px var(--green)}.quick-sort-row[data-quick-drop=after]{box-shadow:inset 0 -2px var(--green)}
+.quick-component-line>.ws-registry-results{grid-column:1/-1;margin:0 0 2px 32px;background:var(--surface,var(--paper))}
+.ws-registry-candidates>button>.ws-candidate-writing{flex:none;white-space:pre-wrap}
+.ws-registry-candidates>button>.ws-candidate-gloss{flex:1}
+#lexeme-quick-editor .ws-analysis>.ws-row-tools{display:inline-flex;margin:4px 0 0 8px}
+#lexeme-quick-editor .ws-analysis>.ws-row-tools button{padding:2px 6px;font-size:.75rem}
+#lexeme-quick-editor .ws-analysis>.ws-add-component{padding:3px 7px;font-size:.8rem}
+
+#lexeme-quick-editor .quick-writing-add{display:inline-block;width:auto;max-width:10rem;margin:3px 8px;padding:3px 6px;font-size:.75rem;height:1.8rem}
+#lexeme-quick-editor .quick-writing-add[hidden]{display:none}
+#lexeme-quick-editor :is(.quick-row-grip,.quick-row-remove){font-size:.9rem;line-height:1}
+#lexeme-quick-editor #lexeme-orthographies .orthography-editor label{font-size:0;line-height:0}
+#lexeme-quick-editor #lexeme-orthographies .orthography-editor :is(input,select){font-size:.8125rem;height:2rem;line-height:1.3;margin:0;padding:3px 6px}
+#lexeme-quick-editor #lexeme-orthographies .remove-orthography{font-size:.8rem;height:2rem;min-height:0;padding:3px 7px}
+
+#lexeme-quick-editor #lexeme-form>.metadata-grid{margin-top:2px}
+#lexeme-quick-editor label:has(>#lexeme-headword){display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px;margin:0}
+#lexeme-quick-editor #lexeme-headword{height:2rem;min-width:0;margin:0;padding:3px 7px;font-size:.9rem}
+#lexeme-quick-editor #lexeme-form h3{font-size:.85rem;line-height:1.3;margin:6px 0 3px}
+#lexeme-quick-editor #lexeme-orthographies .orthography-editor{padding-bottom:3px}
+#lexeme-quick-editor :is(#add-usage,#add-orthography){font-size:.8rem;min-height:0;padding:2px 7px}
+#lexeme-quick-editor .quick-usage-row{margin:2px 0;padding-top:1px;padding-bottom:1px}
+#lexeme-quick-editor .dictionary-morphology-block{margin:6px 0}
+
+#lexeme-quick-editor .quick-sense-tools button{font-size:.75rem;line-height:1.3}
+
+/* A small readability increase without adding rows or changing compact row heights. */
+#lexeme-quick-editor :is(.quick-row-input,.quick-sense-pos,.quick-component-search input){font-size:.875rem}
+#lexeme-quick-editor #lexeme-orthographies .orthography-editor :is(input,select){font-size:.875rem}
+#lexeme-quick-editor #lexeme-headword{font-size:.95rem}
+#lexeme-quick-editor .quick-component-head{font-size:.8rem}
+#lexeme-quick-editor .quick-sense-number{font-size:.8rem}
+#lexeme-quick-editor :is(.quick-sense-tools button,.quick-writing-add){font-size:.8rem}
+.ws-registry-candidates>button>.ws-candidate-writing{max-width:100%}
+/* Large "all" pages keep the complete accessible list but paint visible rows only. */
+#dictionary-list>.semantic-select-row,#morpheme-list>.lexeme-list-item{content-visibility:auto;contain-intrinsic-block-size:auto 2.465rem}
+.dictionary-search-progress{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;color:var(--muted)}
+.dictionary-search-progress button{font-size:inherit;min-height:0;padding:2px 6px}
+.dictionary-virtual-row{min-width:0;overflow-anchor:none}
+:is(#dictionary-list,#morpheme-list){overflow-anchor:none}
+/* The shared morpheme editor keeps its required fields in two compact rows. */
+.morpheme-core-fields{display:flex;align-items:end;gap:.5rem;flex-wrap:wrap}
+.morpheme-core-fields>label{flex:1 1 12rem;min-width:0}
+.morpheme-core-fields input,.morpheme-core-fields textarea{width:100%;box-sizing:border-box}
+.morpheme-type-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}
+.morpheme-type-fields label{min-width:0}.morpheme-type-fields select{width:100%;min-width:0}
+#morpheme-form>details{margin:.5rem 0;padding:.35rem 0;border-top:1px solid var(--line)}
+.morpheme-meta,.morpheme-evidence-heading{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap}
+.morpheme-meta span{font-size:.85em;color:var(--muted);border:1px solid var(--line);padding:.08rem .4rem;border-radius:3px}
+.morpheme-evidence-heading h3{margin:.65rem 0}.morpheme-example-section h4{margin:.65rem 0 .35rem}
+.morpheme-example-section .lex-example{margin:.35rem 0;padding:.5rem 0}
+.morpheme-sense-editor{padding:.4rem 0;border-bottom:1px solid var(--line)}
+.morpheme-sense-editor label{margin:0}.morpheme-sense-editor details{margin:.15rem 0}
+.morpheme-meanings-view p:empty,#morpheme-detail>p:empty{display:none}
+.morpheme-original-usage p{margin:.2rem 0}.morpheme-original-usage{padding:.35rem 0}
+#morpheme-conversion{width:min(650px,90vw)}#morpheme-conversion-preview p{margin:.4rem 0}
+@media(max-width:700px){.morpheme-type-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.morpheme-type-fields>label[hidden]{display:none!important}
+.replace-issues{margin:6px 0;padding:6px 8px;border:1px solid var(--line);border-radius:4px}
+.replace-issues ul{padding-left:1.3rem;margin:5px 0;max-height:12rem;overflow:auto}
+.replace-issues li{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:.85rem}
+.replace-issues li span{flex:1;min-width:0;overflow-wrap:anywhere}
+.replace-issues li button{flex:none;padding:3px 7px;font-size:.8rem}
+.replace-review-target{outline:2px solid var(--accent);outline-offset:2px}
+.morpheme-meaning-context:empty{display:none}
+.morpheme-meanings-view section p{margin:5px 0}
+.morpheme-type-fields.affix-fields-hidden{grid-template-columns:minmax(0,1fr)}
+#lexeme-quick-editor #lexeme-form>.quick-identity-row{grid-template-columns:minmax(0,1fr) minmax(12rem,.7fr);align-items:center;gap:6px 14px}
+#lexeme-quick-editor .quick-entry-type{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:8px;margin:0}
+#lexeme-quick-editor #morph-entry-type{width:100%;min-width:0;height:2rem;margin:0;padding:3px 7px;font-size:.875rem}
+@media(max-width:600px){#lexeme-quick-editor #lexeme-form>.quick-identity-row{grid-template-columns:minmax(0,1fr)}}
+/* Brief reading keeps only playback and plain speaker names, including cached views. */
+.sentence-brief-names{display:none}
+html[data-home=false] .editable-example .dialogue-brief-speaker{display:none}
+html.brief-mode .sentence-brief-names{display:inline}
+html.brief-mode .sentence-full-names,
+html.brief-mode .collaborator-badge>button,
+html.brief-mode :is(.editable-example,.analysis-hit) :is(.sentence-audio-choice,.sentence-audio-status),
+html.brief-mode .editable-example .object-media-controls :is([data-media-choice],[data-media-manage]),
+html.brief-mode .analysis-hit-head>div>button{display:none!important}
+html.brief-mode .editable-example:not(:has([data-inline-save])) .inline-tools>:not(.sentence-audio):not(.collaborator-badge):not(.object-media-controls){display:none!important}
+html.brief-mode .editable-example:not(:has([data-inline-save])) .inline-tools:not(:has(.sentence-audio:not([hidden]),.collaborator-badge:not([hidden]),[data-media-play])),
+html.brief-mode .editable-example .object-media-controls:not(:has([data-media-play])){display:none!important}
+html.brief-mode .editable-example .collaborator-badge,
+html.brief-mode .editable-example .object-media-speakers{font-family:var(--ui-font),'Microsoft YaHei',sans-serif;font-size:.75rem;line-height:1.5;color:var(--muted);overflow-wrap:anywhere;min-width:0}
+html.brief-mode .editable-example .dialogue-brief-speaker:not([hidden]){display:inline-flex}
+html.brief-mode .editable-example .collaborator-badge[hidden]{display:none!important}
+html.brief-mode .analysis-hit-head>div{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap;min-width:0;max-width:100%}
+html.brief-mode .analysis-hit-head .analysis-speaker-names{overflow-wrap:anywhere;min-width:0}
+html.brief-mode .dialogue-entry>.dialogue-row-head>:not(.dialogue-original){display:none!important}
+html.brief-mode .editable-example:has(.collaborator-badge:not([hidden]) .sentence-brief-names:not(:empty)) .object-media-speakers,
+html.brief-mode .editable-example:has(.sentence-audio:not([hidden])) .object-media-controls>[data-media-play]{display:none!important}
+html.brief-mode .editable-example:has(.sentence-audio:not([hidden])) .object-media-controls:not(:has(.object-media-speakers:not(:empty))),
+html.brief-mode .editable-example:has(.sentence-audio:not([hidden])):has(.collaborator-badge:not([hidden]) .sentence-brief-names:not(:empty)) .object-media-controls{display:none!important}
+#auto-candidate-actions{display:inline-flex;align-items:center;gap:7px 10px;flex-wrap:wrap;margin-right:auto;min-width:0}
+#auto-link-dialog>.dialog-bottom{align-items:center}
+
+html[data-home=false] dialog.gloss-source-dialog{width:min(640px,94vw);background:var(--surface,var(--paper))}
+.gloss-source-dialog select{display:block;width:100%;margin-top:5px}
+.gloss-source-dialog [data-source-hint]{font-size:.82rem;color:var(--muted)}
+.word>.form.is-linked{border-bottom:1px dotted var(--ink)}
+html[data-home="false"] .word>.form.is-linked{border-bottom-color:var(--ink)}
+#auto-candidate-actions[hidden]{display:none}
+#auto-candidate-actions>label{display:inline-flex;align-items:center;gap:5px;margin:0;white-space:nowrap}
+#auto-candidate-actions input{margin:0}
+.auto-match .auto-match-pair>.form{font-size:1.125rem;font-style:var(--form-style,italic);font-weight:var(--form-weight,400);font-variant:normal}
+.word.dictionary-evidence{border-radius:4px;box-shadow:0 0 0 1px var(--green);background-image:linear-gradient(color-mix(in srgb,var(--green) 12%,transparent),color-mix(in srgb,var(--green) 12%,transparent))}
+.dictionary-evidence-hint{display:block;margin:2px 0;line-height:1.35}
+/* Command button padding must never shift a reading form away from its gloss. */
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .editable-example .words:not(.inline-words)>.word>.form{padding:0;margin:0;min-height:0;border-bottom:1px dotted transparent;text-align:start;line-height:1.5;font-style:var(--form-style,italic);font-weight:var(--form-weight,400)}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .editable-example .words:not(.inline-words)>.word>.form:is(.is-linked,.word-dictionary:hover){border-bottom-color:var(--ink)}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .editable-example .words:not(.inline-words)>.word>.form :is(sub,sup){line-height:0}
+@supports(grid-template-columns:subgrid){
+ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .editable-example .words>.interlinear-word{display:grid;grid-template-columns:repeat(var(--word-columns),minmax(0,auto));column-gap:1px;align-content:start}
+ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .interlinear-word>.form{grid-column:1/span var(--morph-columns);display:grid;grid-template-columns:subgrid;align-items:baseline}
+ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .interlinear-word>.gloss{grid-column:1/-1;display:grid;grid-template-columns:subgrid;gap:normal;align-items:baseline}
+ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .interlinear-word>.extra-layer{grid-column:1/-1}
+ .interlinear-word .interlinear-part{min-width:0;overflow-wrap:anywhere;white-space:pre-wrap}
+ .interlinear-word>.gloss>.code-gloss-text{display:contents}
+ .interlinear-word>.gloss>.code-word-label{margin-inline-start:.35em}
+}
+#auto-candidate-selection{font-size:.8rem;color:var(--muted)}
+
+/* Each sentence resets all four rows from its own language, including mixed-language views. */
+#language-dialog .language-typography-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,.8fr);gap:0 12px;align-items:end}
+#language-dialog .language-typography-grid label{min-width:0}#language-dialog .language-typography-grid select{width:100%;min-width:0}
+@media(max-width:600px){#language-dialog .language-typography-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}#language-dialog .language-typography-grid label:nth-child(3n+1){grid-column:1/-1}}
+.language-body .word:not(.analysis-context-word) .form{font-size:calc(1.125rem * var(--form-scale,1))}
+.language-body .gloss{font-style:var(--gloss-style,normal)}
+.language-body .word:not(.analysis-context-word) .gloss{font-size:calc(1rem * var(--gloss-scale,1))}
+.language-body .translation,.language-body [data-inline-field=translation],#editor #translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(.9375rem * var(--translation-scale,1))}
+html[data-home=false] .editable-example .words:not(.inline-words)>.word.hit{padding-inline:0}
+#home-example-original{font-style:var(--form-style,italic);font-weight:var(--form-weight,400);font-size:calc(clamp(1.05rem,2vw,1.25rem) * var(--form-scale,1) * var(--home-example-scale))}
+#home-example-original.home-ipa{font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400);font-size:calc(clamp(1.05rem,2vw,1.25rem) * var(--ipa-scale,1) * var(--home-example-scale))}
+#home-example-translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(1rem * var(--translation-scale,1) * var(--home-example-scale))}
+
+#standalone-editor #standalone-ipa{font-family:var(--ipa-font,IPAPANNEW);font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400);font-size:calc(1.1875rem * var(--ipa-scale,1))}
+#standalone-editor #standalone-translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(.9375rem * var(--translation-scale,1))}
+
+#editor #ipa{font-family:var(--ipa-font,IPAPANNEW);font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400)}
+
+/* Optional inflection tables keep column order at narrow widths. */
+.paradigm-scroll{overflow:auto;max-width:100%;margin-block:12px}
+.paradigm-view table{border-collapse:collapse;width:100%;min-width:420px;text-align:start}
+.paradigm-view th,.paradigm-view td{border:1px solid var(--line,#bbb);padding:8px 12px;vertical-align:top;text-align:start}
+.paradigm-view td small{display:block;margin-top:5px;white-space:pre-wrap}
+.paradigm-view th{font-weight:600}
+.paradigm-view button{white-space:normal}
+.paradigm-table-editor,.paradigm-row,.paradigm-realization,.paradigm-meaning{padding:12px;border:1px solid var(--line,#bbb);border-radius:8px;margin-block:10px;min-width:0}
+.paradigm-table-editor{border-width:2px}
+.paradigm-toolbar,.paradigm-new-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-block:8px}
+.paradigm-new-form input{flex:1;min-width:160px}
+.paradigm-labels{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.paradigm-meaning textarea{min-height:52px}
+#paradigm-template-manager{max-width:760px}
+
+/* Quick paradigms keep the normal view to a single line per form. */
+#paradigm-editor.paradigm-quick{margin:8px 0}
+.paradigm-quick>p:not([role="status"]){display:none}
+.paradigm-quick>h3{font-size:.95rem;margin:5px 0}
+.paradigm-quick .paradigm-toolbar{margin:5px 0;gap:6px}
+.paradigm-quick .paradigm-toolbar :is(button,select){font-size:.8rem;padding:3px 6px;min-height:0}
+.paradigm-quick-add{font-size:.8rem;margin:4px 0}
+.paradigm-quick-add>summary{cursor:pointer;color:var(--muted)}
+.paradigm-quick-table{margin:6px 0;border:1px solid var(--line,#bbb);border-radius:5px;padding:5px;min-width:0}
+.paradigm-quick-heading{display:flex;gap:8px;align-items:center;min-width:0;font-size:.8rem}
+.paradigm-quick-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.paradigm-quick-heading :is(input,select,button){font-size:inherit;padding:3px 6px;min-height:0;margin:0}
+.paradigm-quick-default{display:flex;align-items:center;gap:5px;min-width:0;margin:0;white-space:nowrap}
+.paradigm-quick-default select{width:auto;max-width:200px;min-width:80px}
+.paradigm-quick-table-settings{display:flex;align-items:end;gap:8px;padding-block:6px;font-size:.8rem}
+.paradigm-quick-table-settings label{flex:1;min-width:0;margin:0}
+.paradigm-quick-table-settings :is(input,select){width:100%;min-width:0;font-size:inherit;padding:3px 5px}
+.paradigm-quick-table-settings button{font-size:inherit;padding:3px 6px;min-height:0}
+.paradigm-quick-table .paradigm-scroll{margin:5px 0 0}
+.paradigm-quick-table table{width:100%;min-width:480px;table-layout:fixed;border-collapse:collapse;font-size:.8rem}
+.paradigm-quick-table .pq-category-col{width:18%}
+.paradigm-quick-table .pq-form-col{width:25%}
+.paradigm-quick-table .pq-gloss-col{width:23%}
+.paradigm-quick-table .pq-tools-col{width:34px}
+.paradigm-quick-table :is(th,td){border:1px solid var(--line,#bbb);padding:3px 5px;text-align:start;vertical-align:middle}
+.paradigm-quick-table th{overflow-wrap:anywhere;font-weight:500}
+.paradigm-quick-table td :is(input,textarea,select){width:100%;min-width:0;box-sizing:border-box;margin:0;padding:3px 5px;min-height:0;font-size:inherit;line-height:1.4;border-radius:3px}
+.paradigm-quick-table .paradigm-quick-tools{text-align:center;padding:0}
+.paradigm-quick-table .paradigm-quick-tools button{font-size:1rem;padding:1px 6px;margin:0;min-height:0;line-height:1.3}
+#lexeme-quick-editor .paradigm-quick-row input{height:auto;min-height:0;margin:0;padding:2px 5px;font-size:.8rem;line-height:1.3}
+#lexeme-quick-editor .paradigm-quick-tools button{height:auto;min-height:0;margin:0;padding:1px 5px;line-height:1.3}
+.paradigm-quick-result{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.paradigm-quick-result.invalid{color:var(--danger,#aa3434);white-space:normal}
+.paradigm-independent-badge{margin-inline-end:5px;opacity:.75;font-size:.85em}
+.paradigm-quick-table .paradigm-quick-detail>td{padding:6px 10px}
+.paradigm-quick-meaning-notes{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.paradigm-quick-meaning-notes label{margin:0;font-size:.85em;min-width:0}
+.paradigm-quick-row-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:5px}
+.paradigm-quick-row-actions label{display:flex;align-items:center;gap:5px;margin:0}
+.paradigm-quick-row-actions :is(button,select){font-size:.8rem;padding:3px 6px;min-height:0}
+.paradigm-quick-row-actions .paradigm-quick-state{width:auto}
+.paradigm-quick-table [hidden],.paradigm-quick-add[hidden]{display:none!important}
+.paradigm-quick-empty{font-size:.8rem;color:var(--muted);margin-block:5px}
+.paradigm-view .paradigm-gloss-line{display:flex;align-items:baseline;gap:.6em;flex-wrap:wrap}
+.paradigm-view td .paradigm-inheritance{display:inline;white-space:nowrap;margin:0;font-size:.8em;color:var(--muted)}
+.paradigm-view :is(th,td){padding:5px 10px;vertical-align:middle}
+.paradigm-view .dictionary-wordform{padding:3px 9px;min-height:0;margin:0}
+.paradigm-gloss-controls{display:grid;grid-template-columns:minmax(100px,.7fr) minmax(120px,1fr);gap:5px;min-width:0;margin-block:5px}
+.paradigm-gloss-controls :is(input,select,output){min-width:0;width:100%;margin:0;box-sizing:border-box}
+.paradigm-gloss-controls>input,.paradigm-addition-row,.paradigm-gloss-preview{grid-column:1/-1}
+.paradigm-addition-row{display:grid;grid-template-columns:minmax(90px,1fr) minmax(80px,.8fr);gap:4px}
+.paradigm-gloss-preview{font-size:.85em;overflow-wrap:anywhere;color:var(--muted)}
+.paradigm-gloss-preview.invalid{color:var(--danger,#aa3434)}
+.paradigm-gloss-controls [hidden]{display:none!important}
+.paradigm-template-preset{display:grid;grid-template-columns:minmax(100px,1fr) minmax(90px,1fr) minmax(90px,1fr);align-items:center;gap:6px;margin-block:5px}
+.paradigm-template-preset :is(input,select){min-width:0;width:100%;margin:0;padding:5px}
+.example-select-all{display:inline-flex;align-items:center;gap:.35em;white-space:nowrap;margin:0}
+.example-select-all input,.lex-example-source>[data-example-select]{width:auto;flex:none;margin:0 .35em 0 0}
+[data-example-page-actions]{flex-wrap:wrap;gap:.4em}
+
+/* Tag reference/discovery controls stay compact and separate from definitions. */
+.grammar-candidate-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0}.grammar-candidate-tools label{display:flex;align-items:center;gap:4px;margin:0}.grammar-candidate-tools input:not([type=checkbox]){width:16em;min-width:8em}.grammar-candidate-tools input[type=checkbox],.grammar-candidate-row input[type=checkbox],.grammar-reference-row input[type=checkbox]{width:auto;margin:0;min-height:0}.grammar-candidate-rows{max-height:18rem;overflow:auto}.grammar-candidate-row{display:grid;grid-template-columns:minmax(7em,1fr) minmax(8em,2fr) auto auto;gap:8px;align-items:center;padding:3px 0;border-bottom:1px solid var(--border)}.grammar-candidate-row label{display:flex;gap:6px;align-items:center;margin:0;overflow-wrap:anywhere}.grammar-candidate-row button,.grammar-candidate-tools button,#grammar-ignored-list button{padding:3px 8px;min-height:28px}.grammar-reference-row{display:grid;grid-template-columns:auto 5em 1fr 8em;gap:8px;align-items:center;margin:0;padding:4px 0;border-bottom:1px solid var(--border)}#grammar-reference,#grammar-batch{width:min(760px,92vw)}.grammar-batch-scroll{max-height:55vh;overflow:auto}.grammar-batch-scroll table{width:100%}.grammar-batch-scroll td,.grammar-batch-scroll th{padding:4px}.grammar-batch-scroll input{box-sizing:border-box;width:100%;min-width:0;padding:4px 6px}.grammar-batch-scroll td:first-child{width:20%}.grammar-batch-scroll td:nth-child(3){width:22%}.grammar-tag-input,#grammar-symbol,#grammar-aliases{font-family:Junicode,serif;font-variant-caps:all-small-caps}#grammar-reference-error,#grammar-batch-error{color:var(--warning)}#grammar-ignored-list{display:flex;flex-wrap:wrap;gap:5px;max-height:12rem;overflow:auto}.inline-words .gloss{font-variant-caps:normal}
+@media(max-width:650px){.grammar-candidate-row{grid-template-columns:minmax(6em,1fr) minmax(6em,1fr) auto}.grammar-candidate-row>button:last-child{display:none}.grammar-reference-row{grid-template-columns:auto 4em 1fr}.grammar-reference-row small{display:none}}
+
+/* A stable left gutter preserves alignment of IPA, words, and translation. */
+.judgment-area{padding-inline-start:2.3em;box-sizing:border-box}.judgment-anchor{position:relative}.judgment-mark{position:absolute;inset-inline-end:calc(100% + .3em);top:0;display:inline-block;min-width:1.25em;width:max-content;max-width:2.1em;padding:0;border:0;background:transparent;color:var(--text);font-family:Junicode,serif;font-size:1.2em;font-weight:700;line-height:inherit;text-align:center;overflow-wrap:anywhere;box-shadow:none}.judgment-mark.is-legal{opacity:0}.judgment-mark.is-legal:hover,.judgment-mark.is-legal:focus-visible,.editable-example:hover .judgment-mark.is-legal{opacity:.45}.judgment-mark[data-judgment-edit]{cursor:pointer}.judgment-inline{display:inline-flex;align-items:center;gap:5px;margin:0}.judgment-inline select{width:auto;max-width:15em;padding:3px 6px;min-height:28px}.judgment-editor-row{display:flex;align-items:center;gap:8px}.judgment-editor-row select{width:auto;max-width:22em}#judgment-picker{width:min(420px,90vw)}#judgment-picker-form{display:flex;gap:8px}#judgment-picker-value{flex:1;min-width:0}#judgment-manager{width:min(660px,92vw)}#judgment-type-list{max-height:35vh;overflow:auto;margin:10px 0}.judgment-type-row{display:grid;grid-template-columns:5em 1fr auto auto;gap:8px;align-items:center;border-bottom:1px solid var(--border);padding:5px 0}.judgment-type-row button{padding:3px 8px;min-height:28px}.judgment-type-symbol{font-size:1.2em;overflow-wrap:anywhere}.judgment-type-fields{display:flex;align-items:end;gap:10px;flex-wrap:wrap}.judgment-type-fields label:first-child{flex:1}.judgment-type-fields label:nth-child(2){max-width:9em}.judgment-type-fields input:not([type=checkbox]){width:100%}.judgment-type-fields label:last-child{display:flex;align-items:center;gap:5px}#judgment-type-enabled{width:auto}.analysis-full-view>.ipa.judgment-anchor{margin-top:0}
+
+.judgment-type-fields label:has(#judgment-type-position){max-width:5em}
+
+/* Compact shared reduplication editor; colors follow every skin. */
+#redup-dialog{width:620px;max-width:calc(100vw - 32px)}
+.redup-pair{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px}.redup-pair select{width:100%;min-width:0}.redup-row,.redup-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.redup-row{padding:5px 0}.redup-row>span{flex:1;min-width:120px}.redup-actions{margin:8px 0}.redup-actions label{display:flex;align-items:center;gap:6px;margin:0}.redup-summary,.redup-candidate{font-size:.8em;opacity:.85}.redup-summary button{font:inherit;padding:1px 5px}#redup-notes{width:100%}#redup-help{display:block;margin-top:6px}
+.redup-actions label{white-space:nowrap}.redup-actions label select{width:auto;min-width:100px}

@@ -1,0 +1,66 @@
+// Discovery is separate from the official inventory. All mutations are scoped
+// to one language and are a single undoable request.
+let grammarReferencePromise=null,grammarUnknown=[],grammarCandidateBusy=false;
+function grammarReference(){return grammarReferencePromise??=api('grammar-reference').catch(e=>{grammarReferencePromise=null;throw e;});}
+async function openGrammarCandidate(u){try{const ref=u.reference||(await grammarReference()).items.find(r=>r.symbol.toLowerCase()===u.symbol.toLowerCase());openGrammar({...ref,...u});}catch(e){$('grammar-notice').textContent=e.message;}}
+function grammarCandidateSelection(rows,indices){
+ const selected=indices.map(i=>rows[i]).filter(Boolean);
+ if(!selected.length)throw Error('请先勾选候选。');
+ if(selected.length>200)throw Error('每次最多处理 200 个候选，请缩小筛选范围。');
+ if(new Set(selected.map(r=>r.language_id)).size!==1)throw Error('请一次选择同一种语言的候选。');
+ return selected;
+}
+function grammarRegistrationRows(rows){
+ const seen=new Set();return rows.filter(r=>{const key=r.symbol.toLowerCase();if(seen.has(key))return false;seen.add(key);return true;}).map(r=>({symbol:r.symbol,description:r.description??r.reference?.description??'',category:r.category??r.reference?.category??'',aliases:r.aliases||[]}));
+}
+function drawGrammarCandidates(data){
+ grammarUnknown=data.unknown;
+ const host=$('grammar-unknown');
+ host.innerHTML='<div class="grammar-candidate-tools"><input id="grammar-candidate-query" aria-label="筛选候选" placeholder="筛选候选或参考解释"><label><input type="checkbox" id="grammar-candidate-all">选中所示</label><button id="grammar-candidate-register" disabled>登记选中</button><button id="grammar-candidate-ignore" disabled>忽略选中</button><small id="grammar-candidate-count"></small></div><div id="grammar-candidate-rows" class="grammar-candidate-rows"></div><small>参考解释仅供核对；登记后才成为本语言正式标签。忽略按语言和原写法保存，不改原句。</small>';
+ function selected(){return grammarCandidateSelection(grammarUnknown,[...host.querySelectorAll('[data-candidate-pick]:checked')].map(n=>+n.dataset.candidatePick));}
+ function sync(){const boxes=[...host.querySelectorAll('[data-candidate-pick]')],n=boxes.filter(b=>b.checked).length;boxes.forEach(b=>b.disabled=grammarCandidateBusy);$('grammar-candidate-all').checked=!!boxes.length&&n===boxes.length;$('grammar-candidate-all').indeterminate=n>0&&n<boxes.length;$('grammar-candidate-all').disabled=grammarCandidateBusy||!boxes.length;for(const id of ['grammar-candidate-register','grammar-candidate-ignore'])$(id).disabled=grammarCandidateBusy||!n;$('grammar-candidate-count').textContent=`${boxes.length} / ${grammarUnknown.length} 个候选 · 已选 ${n}`;}
+ function rows(){const q=$('grammar-candidate-query').value.toLowerCase();const filtered=grammarUnknown.map((u,i)=>({u,i})).filter(({u})=>[u.symbol,u.reference?.description||'',u.reference?.category||''].join(' ').toLowerCase().includes(q));const shown=filtered.slice(0,200);$('grammar-candidate-rows').innerHTML=shown.map(({u,i})=>`<div class="grammar-candidate-row"><label><input type="checkbox" data-candidate-pick="${i}" ${grammarCandidateBusy?'disabled':''}><span>${esc(u.symbol)}</span></label><span>${esc(u.reference?.description||'自定义候选')}${activeLanguage==='all'?' · '+esc(languageList.find(l=>l.id===u.language_id)?.name):''}</span><button data-candidate-uses="${i}">${u.uses} 次 · 用例</button><button data-candidate-edit="${i}">登记</button></div>`).join('')||'<p>没有符合条件的候选。</p>';if(filtered.length>200)$('grammar-candidate-rows').insertAdjacentHTML('beforeend','<small>仅显示前 200 个，请输入标签或解释缩小范围。</small>');host.querySelectorAll('[data-candidate-pick]').forEach(b=>b.onchange=sync);host.querySelectorAll('[data-candidate-edit]').forEach(b=>b.onclick=()=>openGrammarCandidate(grammarUnknown[+b.dataset.candidateEdit]));host.querySelectorAll('[data-candidate-uses]').forEach(b=>b.onclick=grammarSafe(async()=>{grammarCandidateFocus=grammarUnknown[+b.dataset.candidateUses];grammarFocus='';grammarPage=1;$('grammar-issue').value='unknown';$('grammar-query').value='';await loadGrammar();$('grammar-results').scrollIntoView({block:'start'});}));sync();}
+ $('grammar-candidate-query').oninput=rows;
+ $('grammar-candidate-all').onchange=()=>{host.querySelectorAll('[data-candidate-pick]').forEach(b=>b.checked=$('grammar-candidate-all').checked);sync();};
+ $('grammar-candidate-register').onclick=grammarSafe(()=>{const chosen=selected();openGrammarBatch(chosen,chosen[0].language_id);});
+ $('grammar-candidate-ignore').onclick=grammarSafe(async()=>{if(grammarCandidateBusy)return;const chosen=selected();grammarCandidateBusy=true;sync();try{await api('grammar-ignore',{_language:chosen[0].language_id,items:chosen.map(({symbol,language_id})=>({symbol,language_id}))});await loadGrammar();}finally{grammarCandidateBusy=false;sync();}});
+ rows();
+ const ignored=$('grammar-ignored-list');ignored.innerHTML=(data.ignored||[]).map((u,i)=>`<button data-candidate-restore="${i}" title="恢复该写法的候选检查">${esc(u.symbol)}${activeLanguage==='all'?' · '+esc(languageList.find(l=>l.id===u.language_id)?.name):''} · 恢复检查</button>`).join('')||'<small>尚无忽略项。</small>';
+ ignored.querySelectorAll('[data-candidate-restore]').forEach(b=>b.onclick=grammarSafe(async()=>{if(b.disabled)return;b.disabled=true;try{const u=data.ignored[+b.dataset.candidateRestore];await api('grammar-unignore',{_language:u.language_id,items:[u]});await loadGrammar();}finally{b.disabled=false;}}));
+}
+
+makeDialog('grammar-batch','<h2>确认登记标签</h2><p id="grammar-batch-language"></p><small>可修改标签、解释和分类。仅新增所列定义，保留原句和已有标签；整批可一次撤销。</small><form id="grammar-batch-form"><div class="grammar-batch-scroll"><table><thead><tr><th>标签</th><th>解释</th><th>分类</th><th></th></tr></thead><tbody id="grammar-batch-rows"></tbody></table></div><p id="grammar-batch-error" role="alert"></p><button type="submit" id="grammar-batch-save" class="primary">确认登记</button></form>');
+let grammarBatchLanguage='',grammarBatchRows=[],grammarBatchDirty=false,grammarBatchSaving=false;
+function openGrammarBatch(rows,lid){
+ grammarBatchLanguage=lid;grammarBatchRows=grammarRegistrationRows(rows);grammarBatchDirty=true;
+ $('grammar-batch-language').textContent='加入：'+(languageList.find(l=>l.id===lid)?.name||'');
+ $('grammar-batch-error').textContent='';
+ $('grammar-batch-rows').innerHTML=grammarBatchRows.map((r,i)=>`<tr data-batch-index="${i}"><td><input data-batch-field="symbol" class="grammar-tag-input" aria-label="标签 ${i+1}" value="${esc(r.symbol)}" required></td><td><input data-batch-field="description" aria-label="解释 ${i+1}" value="${esc(r.description)}"></td><td><input data-batch-field="category" aria-label="分类 ${i+1}" value="${esc(r.category)}"></td><td><button type="button" data-batch-remove="${i}" aria-label="移除 ${esc(r.symbol)}">−</button></td></tr>`).join('');
+ $('grammar-batch-rows').querySelectorAll('[data-batch-remove]').forEach(b=>b.onclick=()=>b.closest('tr').remove());
+ $('grammar-batch').showModal();
+}
+$('grammar-batch-form').onsubmit=async e=>{
+ e.preventDefault();if(grammarBatchSaving)return;grammarBatchSaving=true;const controls=[...$('grammar-batch').querySelectorAll('input,button')];controls.forEach(n=>n.disabled=true);let saved=false;
+ try{const items=[...$('grammar-batch-rows').querySelectorAll('tr')].map(tr=>{const row={...grammarBatchRows[+tr.dataset.batchIndex]};tr.querySelectorAll('[data-batch-field]').forEach(n=>row[n.dataset.batchField]=n.value);return row;});await api('grammar-register-batch',{_language:grammarBatchLanguage,items});saved=true;grammarBatchDirty=false;$('grammar-batch').close();await loadGrammar();}
+ catch(error){$(saved?'grammar-notice':'grammar-batch-error').textContent=saved?'标签已登记，但检查刷新失败：'+error.message:error.message;}
+ finally{grammarBatchSaving=false;controls.forEach(n=>n.disabled=false);}
+};
+function grammarBatchClose(e){if(grammarBatchSaving){e.preventDefault();return;}guardDialogDiscard(e,grammarBatchDirty,'放弃尚未登记的这批标签？');}
+$('grammar-batch').addEventListener('cancel',grammarBatchClose);$('grammar-batch').querySelector('form[method="dialog"]').addEventListener('submit',grammarBatchClose);$('grammar-batch').addEventListener('close',()=>grammarBatchDirty=false);
+window.addEventListener('beforeunload',e=>{if(grammarBatchDirty){e.preventDefault();e.returnValue='';}});
+
+makeDialog('grammar-reference','<h2>常见标签参考库</h2><p><small>参考条目独立于语言标签表；勾选后确认登记才生效。解释可按研究需要修改。</small></p><div class="grammar-candidate-tools"><label>加入语言<select id="grammar-reference-language"></select></label><input id="grammar-reference-query" aria-label="搜索参考库" placeholder="搜索缩写、中文解释或分类"><label><input type="checkbox" id="grammar-reference-all">选中所示</label><button id="grammar-reference-add" disabled>核对选中</button></div><div id="grammar-reference-rows" class="grammar-candidate-rows"></div><small id="grammar-reference-status"></small><p><a href="https://www.eva.mpg.de/lingua/resources/glossing-rules.php" target="_blank" rel="noopener">参考来源：莱比锡标注规则</a></p><p id="grammar-reference-error" role="alert"></p>');
+let grammarReferenceRows=[],grammarReferenceTags=[],grammarReferenceSelected=new Set(),grammarReferenceSeq=0,grammarReferenceLoading=false;
+function drawGrammarReference(){
+ if(grammarReferenceLoading)return;
+ const q=$('grammar-reference-query').value.toLowerCase(),known=new Set(grammarReferenceTags.flatMap(t=>[t.symbol,...t.aliases]).map(s=>s.toLowerCase()));
+ const rows=grammarReferenceRows.filter(r=>[r.symbol,r.description,r.category].join(' ').toLowerCase().includes(q));
+ $('grammar-reference-rows').innerHTML=rows.map(r=>{const exists=known.has(r.symbol.toLowerCase());return `<label class="grammar-reference-row"><input type="checkbox" data-reference-symbol="${esc(r.symbol)}" ${exists?'disabled':grammarReferenceSelected.has(r.symbol)?'checked':''}><span>${grammarLabel(r.symbol,$('grammar-reference-language').value)}</span><span>${esc(r.description)}</span><small>${esc(r.category)}${exists?' · 已登记':''}</small></label>`;}).join('');
+ function sync(){const available=[...$('grammar-reference-rows').querySelectorAll('input:not(:disabled)')],n=available.filter(b=>b.checked).length;$('grammar-reference-all').checked=!!available.length&&n===available.length;$('grammar-reference-all').indeterminate=n>0&&n<available.length;$('grammar-reference-all').disabled=!available.length;$('grammar-reference-add').disabled=!grammarReferenceSelected.size;$('grammar-reference-status').textContent=`所示 ${rows.length} 个 · 已选 ${grammarReferenceSelected.size} 个`;}
+ $('grammar-reference-rows').querySelectorAll('input').forEach(b=>b.onchange=()=>{b.checked?grammarReferenceSelected.add(b.dataset.referenceSymbol):grammarReferenceSelected.delete(b.dataset.referenceSymbol);sync();});
+ $('grammar-reference-all').onchange=()=>{const checked=$('grammar-reference-all').checked;$('grammar-reference-rows').querySelectorAll('input:not(:disabled)').forEach(b=>{b.checked=checked;checked?grammarReferenceSelected.add(b.dataset.referenceSymbol):grammarReferenceSelected.delete(b.dataset.referenceSymbol);});sync();};sync();
+}
+async function loadGrammarReference(){const seq=++grammarReferenceSeq;grammarReferenceLoading=true;$('grammar-reference-add').disabled=true;$('grammar-reference-all').disabled=true;$('grammar-reference-rows').textContent='正在读取…';grammarReferenceSelected.clear();const lid=$('grammar-reference-language').value;try{const [ref,tags]=await Promise.all([grammarReference(),api('grammar-tags?language='+encodeURIComponent(lid))]);if(seq!==grammarReferenceSeq)return;grammarReferenceRows=ref.items;grammarReferenceTags=tags;grammarReferenceLoading=false;drawGrammarReference();$('grammar-reference-error').textContent='';}catch(e){if(seq===grammarReferenceSeq){grammarReferenceLoading=false;$('grammar-reference-rows').textContent='';$('grammar-reference-error').textContent=e.message;}}}
+$('grammar-reference-open').onclick=()=>{$('grammar-reference-language').innerHTML=languageOptions();$('grammar-reference-language').value=activeLanguage==='all'?languageList[0]?.id:activeLanguage;$('grammar-reference-query').value='';$('grammar-reference').showModal();loadGrammarReference();};
+$('grammar-reference-language').onchange=loadGrammarReference;$('grammar-reference-query').oninput=drawGrammarReference;
+$('grammar-reference-add').onclick=()=>{const lid=$('grammar-reference-language').value,rows=grammarReferenceRows.filter(r=>grammarReferenceSelected.has(r.symbol));if(!rows.length)return;$('grammar-reference').close();openGrammarBatch(rows,lid);};

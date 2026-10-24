@@ -1,0 +1,16 @@
+.sentence-dictionary-dialog {width:min(760px,calc(100vw - 32px));max-width:calc(100vw - 32px)}
+.sentence-dictionary-dialog .intake-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}
+.sentence-dictionary-dialog label {min-width:0}
+.sentence-dictionary-dialog input,.sentence-dictionary-dialog select {width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+.sentence-dictionary-dialog [hidden] {display:none!important}
+.sentence-dictionary-dialog .sentence-gloss-tools {display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.sentence-gloss-row {padding:10px 0;border-bottom:1px solid var(--line)}
+.sentence-gloss-row>div {display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}
+.sentence-gloss-row label,.sentence-gloss-row small,.sentence-gloss-row strong {font-family:var(--ui-font,inherit);font-style:normal}
+.sentence-gloss-row select {font-family:var(--gloss-font,inherit);font-style:normal;font-variant-caps:normal}
+.sentence-gloss-row .form {overflow-wrap:anywhere}
+#intake-source {overflow-wrap:anywhere}
+#intake-wordform {font-family:var(--annotation-font,Junicode);font-style:var(--form-style,italic);font-weight:var(--form-weight,400)}
+#intake-gloss {font-family:var(--gloss-font,Junicode);font-style:normal;font-variant-caps:normal}
+@container (max-width:500px) {.sentence-dictionary-dialog .intake-fields {grid-template-columns:minmax(0,1fr)}}
+@media (max-width:600px) {.sentence-dictionary-dialog .intake-fields {grid-template-columns:minmax(0,1fr)}}

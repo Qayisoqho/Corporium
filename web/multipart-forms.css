@@ -1,0 +1,13 @@
+.multipart-form-editor{min-width:0;display:grid;gap:6px;align-content:start}
+.multipart-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;min-width:0}
+.multipart-heading>label{margin:0!important}.multipart-heading .multipart-toggle{display:flex;align-items:center;gap:5px;font-size:.75rem;white-space:nowrap;font-weight:normal}
+.multipart-form-editor>input{width:100%;min-width:0}.multipart-parts{display:flex;flex-wrap:wrap;gap:6px}
+.multipart-part{display:flex;gap:4px;flex:1 1 170px;min-width:0}.multipart-part>input{width:0;min-width:65px;flex:1;padding:7px 9px!important}
+.multipart-part>button{padding:3px 7px;min-width:26px;flex:none}.multipart-hint{color:var(--muted);line-height:1.4;font-size:.72rem}
+.multipart-form-editor [hidden]{display:none!important}.multipart-form-editor .multipart-toggle input{margin:0}
+#segmentation-dialog .segment-manual{border-top:1px solid var(--line);margin:12px 0;padding-top:8px}
+#segmentation-dialog .segment-manual>summary{cursor:pointer;font-weight:600}#segmentation-dialog .segment-manual label{margin:7px 0}
+#segmentation-dialog .segment-manual .metadata-grid{grid-template-columns:minmax(120px,1fr) minmax(120px,1fr);gap:8px}
+#segmentation-dialog .segment-unit{padding:5px 8px;margin:3px 0}#segmentation-dialog h3{font-size:.95rem;margin:12px 0 5px}
+.ws-legacy-parts{color:var(--muted);font-size:.78rem}
+.morpheme-core-fields{align-items:flex-start}.morpheme-core-fields>.multipart-form-editor{flex:1 1 18rem}.morpheme-core-fields>label{margin:0}

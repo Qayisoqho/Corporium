@@ -1,0 +1,77 @@
+/* Standard Word text exchange. Preview recipes never contain client-supplied words. */
+class CorporiumDocxDraft{
+ constructor(groups){this.original=structuredClone(groups);this.groups=structuredClone(groups);}
+ reset(){this.groups=structuredClone(this.original);}
+ merge(index,left,right){
+  const a=this.groups[index],b=this.groups[index+1];if(!a||!b||a.end!==b.start)throw Error('请选择相邻句子');
+  const merged={start:a.start,end:b.end};
+  if(['ipa','translation','notes','original'].some(k=>Object.hasOwn(a,k)||Object.hasOwn(b,k)))for(const key of ['ipa','translation','notes','original'])merged[key]=[left[key],right[key]].filter(v=>v!=='').join('\n');
+  this.groups.splice(index,2,merged);
+ }
+ split(index,at){const g=this.groups[index];if(!g||!Number.isInteger(at)||at<=g.start||at>=g.end)throw Error('请选择句内词格之间的位置');this.groups.splice(index,1,{...g,end:at},{start:at,end:g.end});}
+}
+(()=>{
+ const mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+ makeDialog('docx-dialog',`<h2 id="docx-heading">Word 文本导入</h2><p id="docx-language"></p><div id="docx-controls"><section id="docx-import-pane"><div class="docx-toolbar"><label>标准 DOCX 文件<input id="docx-file" type="file" accept=".docx"></label><button id="docx-template">下载空白模板</button></div><p class="compact-help">每句范围可包含多个词格表；表格换行不分句。导入为新文本，可整体撤销。旧 .doc 请先另存为 .docx。</p><div id="docx-settings" hidden><label>文本标题<input id="docx-title" maxlength="500"></label><details id="docx-layer-settings" hidden><summary>附加标注层</summary><div id="docx-layers"></div></details><div class="docx-toolbar"><button id="docx-preview">更新预览</button><button id="docx-reset">恢复原始分句</button><small id="docx-summary"></small></div><p class="compact-help">点词格间的 ↵ 拆句；可与下句合并。拆句后请核对 IPA、译文和备注：原句字段保留在含原句起点的部分。</p><nav id="docx-pagination"></nav><div id="docx-preview-content"></div><button id="docx-commit" class="primary" disabled>确认导入</button></div></section><section id="docx-export-pane" hidden><label>导出的文本<select id="docx-text"></select></label><details><summary>排版选项</summary><label>每段最多词格<select id="docx-segment-size"><option value="0">按内容宽度自动分段</option>${[4,6,8,10,12,20].map(n=>`<option value="${n}">${n} 格</option>`).join('')}</select></label></details><p class="compact-help">导出 IPA、语素、当前有效标注、翻译、备注及附加层。长句分成多段表格，仍在同一例句范围内。词典关联等研究关系请使用语言数据包保存。</p><button id="docx-generate" class="primary">生成 DOCX</button><button id="docx-save" hidden>选择保存位置</button></section></div><p id="docx-error" role="alert"></p><p id="docx-status" role="status"></p>`);
+ let owner='',loaded=null,draft=null,receipt=null,exported=null,busy=false,page=1,mode='import',items=new Map(),expanded=new Set();
+ function check(){if(owner!==activeLanguage)throw Error('语言已切换，请关闭后重新打开 Word 导入导出');}
+ function invalidate(){receipt=null;$('docx-commit').disabled=true;}
+ function payload(){return {token:loaded.token,title:$('docx-title').value,groups:draft.groups,layer_map:Object.fromEntries([...$('docx-layers').querySelectorAll('select')].map(s=>[s.dataset.source,s.value==='@ignore'?null:s.value])),_language:owner};}
+ async function run(fn){if(busy)return;busy=true;$('docx-controls').inert=true;for(const id of ['docx-commit','docx-generate'])$(id).disabled=true;$('docx-dialog').setAttribute('aria-busy','true');$('docx-error').textContent='';try{check();await fn();}catch(e){$('docx-error').textContent=e.message;$('docx-status').textContent='未完成，请按提示核对后重试。';}finally{busy=false;$('docx-controls').inert=false;$('docx-commit').disabled=!receipt;$('docx-generate').disabled=false;$('docx-dialog').removeAttribute('aria-busy');}}
+ async function save(result){
+  check();
+  if(window.pywebview?.api?.save_docx_export){const r=await window.pywebview.api.save_docx_export(result.token,result.name);if(r.error)throw Error(r.error);$('docx-status').textContent=r.cancelled?'已取消保存。':'已保存：'+r.path;return;}
+  if(window.showSaveFilePicker){try{const handle=await window.showSaveFilePicker({suggestedName:result.name,types:[{description:'Word 文档',accept:{[mime]:['.docx']}}]});const out=await handle.createWritable();try{await out.write(Uint8Array.from(atob(result.data),c=>c.charCodeAt(0)));await out.close();}catch(e){await out.abort().catch(()=>{});throw e;}$('docx-status').textContent='已保存：'+handle.name;}catch(e){if(e.name==='AbortError'){$('docx-status').textContent='已取消保存。';return;}throw e;}return;}
+  download(result.name,Uint8Array.from(atob(result.data),c=>c.charCodeAt(0)),mime);$('docx-status').textContent='已交给浏览器下载；保存位置由浏览器下载设置控制。';
+ }
+ function drawLayers(){
+  $('docx-layer-settings').hidden=!loaded.source_layers.length;
+  $('docx-layers').innerHTML=loaded.source_layers.map(d=>{const options=loaded.layers.filter(l=>(l.anchor||'word')===d.anchor),same=options.find(l=>l.id===d.key),names=options.filter(l=>l.name===d.name),match=same||(names.length===1?names[0]:null);return `<label>${esc(d.name)} · ${d.anchor==='word'?'词级':'句级'}<select data-source="${esc(d.key)}"><option value="">请选择对应层</option><option value="@ignore">不导入此层</option>${options.map(l=>`<option value="${esc(l.id)}" ${l.id===match?.id?'selected':''}>${esc(l.name)}</option>`).join('')}</select></label>`;}).join('');
+ }
+ async function fetchPage(number,draw=true){const p=await api('docx-preview',{...payload(),page:number});check();for(const item of p.items)items.set(item.index,item);if(draw){page=p.page;receipt=p.signature;render(p);$('docx-commit').disabled=false;}return p;}
+ function render(p){
+  $('docx-summary').textContent=`${p.total} 句 · ${p.slots} 个词格`;
+  topPagination($('docx-pagination'),p.page,p.pages,n=>run(()=>fetchPage(n)));$('docx-pagination').hidden=p.pages<=1;
+  const meta=JSON.parse(languageList.find(l=>l.id===owner)?.metadata||'{}'),layerNames=new Map(loaded.layers.map(l=>[l.id,l.name]));
+  $('docx-preview-content').innerHTML=p.items.map(s=>{
+   const g=draft.groups[s.index],b={...s.body,...Object.fromEntries(['ipa','translation','notes'].filter(k=>Object.hasOwn(g,k)).map(k=>[k,g[k]]))},words=expanded.has(s.index)?b.words:b.words.slice(0,200),wordCells=new Map();
+   for(const cell of s.cells){if(!wordCells.has(cell.word))wordCells.set(cell.word,[]);wordCells.get(cell.word).push(cell);}
+   return `<article class="docx-card" data-docx-index="${s.index}"><div class="docx-card-head"><strong>第 ${s.index+1} 句</strong><small>原文件第 ${s.sources.join('、')} 句${s.split?' · 拆分部分':''}</small>${s.index<draft.groups.length-1?`<button data-docx-merge="${s.index}">与下句合并</button>`:''}</div><div class="language-body" style="${languageTypography(meta)}"><div class="ipa preserve-lines">${rich(b.ipa)}</div><div class="docx-words">${words.map((w,i)=>`<div class="docx-slot"><span class="form">${rich(w.form)||'&nbsp;'}</span><span class="gloss">${richGloss(w.gloss,owner)||'&nbsp;'}</span>${(wordCells.get(i)||[]).map(c=>`<small>${esc(layerNames.get(c.layer_id)||'')}：${esc(c.value)}</small>`).join('')}</div>${s.breaks[i]<s.end?`<button class="docx-split" data-docx-split="${s.index}" data-at="${s.breaks[i]}" aria-label="第 ${s.index+1} 句第 ${i+1} 词格后拆句" title="从这里拆为下一句">↵</button>`:''}`).join('')}</div>${b.words.length>words.length?`<button data-docx-expand="${s.index}">显示其余 ${b.words.length-words.length} 个词格</button>`:''}<div class="translation preserve-lines">${rich(b.translation)}</div></div><details><summary>编辑 IPA、翻译与备注</summary>${[['ipa','IPA'],['translation','翻译'],['notes','备注']].map(([k,n])=>`<label>${n}<textarea rows="1" data-docx-field="${k}">${esc(b[k]||'')}</textarea></label>`).join('')}${(wordCells.get(null)||[]).map(c=>`<p>${esc(layerNames.get(c.layer_id)||'')}：${esc(c.value)}</p>`).join('')}</details></article>`;
+  }).join('');$('docx-status').textContent='预览完成，尚未写入文本。';
+ }
+ $('docx-file').onchange=()=>run(async()=>{
+  const file=$('docx-file').files[0];loaded=null;draft=null;invalidate();$('docx-settings').hidden=true;items.clear();expanded.clear();
+  if(!file)return;if(!file.name.toLowerCase().endsWith('.docx'))throw Error('请选择 .docx 文件；旧 .doc 请先另存为 .docx');if(file.size>14*1024*1024)throw Error('文件超过 14 MB');
+  $('docx-status').textContent='正在读取 Word 文件…';const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(Error('文件读取失败'));reader.readAsDataURL(file);});
+  loaded=await api('docx-inspect',{data,filename:file.name,_language:owner});check();draft=new CorporiumDocxDraft(loaded.groups);$('docx-title').value=loaded.title;drawLayers();$('docx-settings').hidden=false;
+  if([...$('docx-layers').querySelectorAll('select')].some(s=>!s.value)){$('docx-layer-settings').open=true;$('docx-status').textContent='请先选择附加标注层的对应关系，再更新预览。';return;}
+  await fetchPage(1);
+ });
+ $('docx-title').oninput=invalidate;$('docx-layers').onchange=invalidate;
+ $('docx-preview').onclick=()=>run(async()=>{if(!draft)throw Error('请先选择文件');await fetchPage(page);});
+ $('docx-reset').onclick=()=>run(async()=>{if(!await corporiumConfirm('恢复文件原始分句和句子字段？预览中的调整将被放弃。'))return;draft.reset();items.clear();expanded.clear();invalidate();await fetchPage(1);});
+ $('docx-preview-content').addEventListener('input',e=>{const field=e.target.dataset.docxField;if(!field)return;const index=Number(e.target.closest('[data-docx-index]').dataset.docxIndex);draft.groups[index][field]=e.target.value;if(items.has(index))items.get(index).body[field]=e.target.value;invalidate();});
+ $('docx-preview-content').addEventListener('click',e=>{
+  const button=e.target.closest('[data-docx-merge],[data-docx-split],[data-docx-expand]');if(!button)return;
+  run(async()=>{
+   if(button.dataset.docxExpand!==undefined){const index=Number(button.dataset.docxExpand);expanded.add(index);await fetchPage(page);return;}
+   if(button.dataset.docxMerge!==undefined){const index=Number(button.dataset.docxMerge);if(!items.has(index+1))await fetchPage(Math.floor((index+1)/20)+1,false);draft.merge(index,items.get(index).body,items.get(index+1).body);}
+   else draft.split(Number(button.dataset.docxSplit),Number(button.dataset.at));
+   invalidate();items.clear();expanded.clear();await fetchPage(page);
+  });
+ });
+ $('docx-commit').onclick=()=>run(async()=>{
+  if(!receipt)throw Error('请先更新预览');$('docx-status').textContent=`正在导入 ${draft.groups.length} 句，请稍候…`;const result=await api('docx-import',{...payload(),signature:receipt});invalidate();$('docx-settings').hidden=true;loaded=null;draft=null;items.clear();
+  $('docx-status').textContent=`已导入 ${result.count} 句，创建了新文本；可整体撤销。`;await loadTexts();if(result.ids[0])await selectText(result.ids[0]);
+ });
+ $('docx-template').onclick=()=>run(async()=>save(await api('docx-template',{_language:owner})));
+ $('docx-generate').onclick=()=>run(async()=>{exported=null;$('docx-save').hidden=true;$('docx-status').textContent='正在生成 Word 文档…';exported=await api('docx-export',{id:$('docx-text').value,words_per_table:Number($('docx-segment-size').value),_language:owner});check();$('docx-save').hidden=false;$('docx-status').textContent='已生成文档，请选择保存位置。';});
+ $('docx-save').onclick=()=>run(async()=>{if(exported)await save(exported);});
+ for(const id of ['docx-text','docx-segment-size'])$(id).onchange=()=>{exported=null;$('docx-save').hidden=true;};
+ window.CorporiumDocxExchange={open:async function(which){
+  if(busy)return;if(activeLanguage==='all'){await corporiumAlert('请先选择一种语言');return;}
+  owner=activeLanguage;mode=which;loaded=null;draft=null;receipt=null;exported=null;items.clear();expanded.clear();page=1;$('docx-commit').hidden=mode!=='import';$('docx-commit').disabled=true;$('docx-generate').hidden=mode!=='export';
+  $('docx-heading').textContent=(mode==='import'?'导入文本':'导出文本')+' · Word';$('docx-language').textContent='当前语言：'+(languageList.find(l=>l.id===owner)?.name||owner);$('docx-import-pane').hidden=mode!=='import';$('docx-export-pane').hidden=mode!=='export';$('docx-settings').hidden=true;$('docx-save').hidden=true;$('docx-error').textContent=$('docx-status').textContent='';$('docx-file').value='';$('docx-preview-content').replaceChildren();$('docx-dialog').showModal();
+  if(mode==='export')await run(async()=>{await loadTexts();check();$('docx-text').innerHTML=texts.filter(t=>t.language_id===owner).map(t=>`<option value="${esc(t.id)}">${esc(t.title)}</option>`).join('');if(selected)$('docx-text').value=selected;});
+ }};
+})();

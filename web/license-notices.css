@@ -1,0 +1,29 @@
+#legal-notices-dialog{width:min(850px,94vw)}
+@font-face{font-family:CorporiumAboutJunicode;src:url('/licenses/developer-font') format('truetype');font-weight:400;font-style:normal;font-display:block}
+.legal-notices-content{min-width:0}
+.about-summary{font: .875rem/1.5 var(--ui-font),'Microsoft YaHei',sans-serif}
+.about-title{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px}
+.about-name{font:400 2rem/1.1 CorporiumAboutJunicode,Junicode,Georgia,serif;letter-spacing:-.025em}
+.about-version{font-size:.85rem;color:var(--muted)}
+.about-description{margin:8px 0 6px;color:var(--muted)}
+.about-credit{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px;margin:6px 0}
+.about-developer{font-family:CorporiumAboutJunicode,Junicode,serif!important;font-weight:400!important;font-style:normal!important;font-variant:normal!important;letter-spacing:normal;font-size:1.25rem;line-height:1.25}
+.about-actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin:10px 0 0}
+.about-actions a{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.about-actions button{font:inherit;padding:4px 9px;margin-left:auto}
+.about-status{margin:6px 0 0;font-size:.85rem;color:var(--muted)}
+.about-status:empty{display:none}
+.legal-notices-section{border-top:1px solid var(--line);padding-top:10px;margin:12px 0 0;font-size:.85rem}
+.legal-notices-section>summary{cursor:pointer;color:var(--muted);padding:2px 0}
+.legal-notices-intro{font-size:.85rem;color:var(--muted);margin:6px 0 10px}
+.legal-notices-choice{display:flex;align-items:center;gap:8px;font-size:.85rem;margin:6px 0}
+.legal-notices-choice select{flex:1;min-width:0;max-width:100%;padding:5px 7px}
+.legal-notices-status{margin:5px 0;font-size:.85rem;color:var(--warning,var(--ink))}
+.legal-notices-status:empty{display:none}
+.legal-notices-text{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:55vh;min-height:9rem;padding:12px;border:1px solid var(--line);border-radius:4px;background:var(--surface,var(--paper));color:var(--ink);font: .875rem/1.65 var(--ui-font),'Microsoft YaHei',sans-serif;margin:10px 0 0}
+body.legal-page{margin:0;padding:24px;background:var(--paper);color:var(--ink)}
+body.legal-page main{margin:0 auto;padding:0;max-width:900px}
+body.legal-page h1{font-family:var(--ui-font),'Microsoft YaHei',sans-serif;font-size:1.5rem;margin:10px 0}
+body.legal-page a{color:var(--ink)}
+body.legal-page .legal-notices-text{max-height:65vh}
+@media(max-width:480px){.about-actions{gap:8px 12px}.about-actions button{margin-left:0}body.legal-page{padding:16px}}

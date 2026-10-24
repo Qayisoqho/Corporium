@@ -1,0 +1,68 @@
+// Sentence copying and previewed replacements share the existing workspace scope.
+$('field').insertAdjacentHTML('beforeend','<option value="notes">备注</option>');
+$('query').placeholder='检索语料或备注';
+makeDialog('copy-sentence-dialog','<h2>复制句子</h2><p id="copy-sentence-source"></p><p>复制已保存的完整句子，包括标注、备注、附加层、形态分析和词典关联。副本可独立编辑。</p><label>插入位置<select id="copy-sentence-where"><option value="after">指定句子之后</option><option value="before">指定句子之前</option><option value="start">文本开头</option><option value="end">文本末尾</option></select></label><label id="copy-sentence-anchor-label">指定句子<select id="copy-sentence-anchor"></select></label><p id="copy-sentence-error" role="alert"></p><button id="copy-sentence-apply" class="primary">复制并插入</button>');
+let copySentenceSource=null,copySentenceOrder=[],copySentenceBusy=false;
+$('copy-sentence-where').onchange=()=>{$('copy-sentence-anchor-label').hidden=['start','end'].includes($('copy-sentence-where').value);};
+document.addEventListener('click',e=>{
+ const button=e.target.closest('[data-copy-sentence]');if(!button)return;
+ safe(async()=>{
+  if(inlineDrafts.size||infoDirty)throw Error('请先保存或取消正在编辑的内容，再复制句子');
+  const entry=items.find(x=>x.id===button.dataset.copySentence);if(!entry)return;
+  const positions=await api('positions?id='+encodeURIComponent(entry.text_id));
+  copySentenceSource=entry;copySentenceOrder=positions.map(x=>x.id);
+  $('copy-sentence-source').textContent=`${entry.title} · 复制第 ${entry.position} 句`;
+  $('copy-sentence-anchor').innerHTML=positions.map(x=>`<option value="${esc(x.id)}">第 ${x.position} 句 · ${esc(x.translation||'（未填写翻译）')}</option>`).join('');
+  $('copy-sentence-anchor').value=entry.id;$('copy-sentence-where').value='after';$('copy-sentence-where').onchange();$('copy-sentence-error').textContent='';$('copy-sentence-dialog').showModal();
+ })();
+});
+$('copy-sentence-apply').onclick=async()=>{
+ if(copySentenceBusy||!copySentenceSource)return;
+ const source=copySentenceSource;let copied=null;copySentenceBusy=true;
+ for(const e of $('copy-sentence-dialog').querySelectorAll('button,select'))e.disabled=true;
+ try{
+  copied=await api('duplicate-entry',{id:source.id,text_id:source.text_id,revision:source.revision,order:copySentenceOrder,where:$('copy-sentence-where').value,anchor_id:$('copy-sentence-anchor').value,_language:source.text_language_id});
+  $('copy-sentence-dialog').close();clearFilters();await loadTexts();await selectText(copied.text_id);page=Math.ceil(copied.position/pageSize());await search();await refreshUndo();
+  corporiumStatus(`已复制并插入第 ${copied.position} 句，可撤销。`);$('entry-'+copied.id)?.scrollIntoView({block:'center',behavior:'smooth'});
+ }catch(e){const message=(copied?'副本已创建，但刷新失败：':'')+e.message;$(copied?'notice':'copy-sentence-error').textContent=message;}
+ finally{copySentenceBusy=false;for(const e of $('copy-sentence-dialog').querySelectorAll('button,select'))e.disabled=false;}
+};
+const replaceButton=document.createElement('button');replaceButton.id='text-replace-open';replaceButton.textContent='查找替换';document.querySelector('#corpus-workspace .actions').append(replaceButton);
+makeDialog('text-replace-dialog','<h2>查找替换</h2><p>按行查找原始文字，不跨词格。语素行和标注行以一个词格为单位；IPA 和翻译以整句为单位。预览后可逐处替换，或替换全部匹配。每次应用可一步撤销。</p><div class="replace-options"><label>范围<select id="replace-scope"></select></label><label>查找行<select id="replace-field"><option value="ipa">IPA</option><option value="form">语素行</option><option value="gloss">标注行</option><option value="translation">翻译行</option></select></label><label>查找<textarea id="replace-find" rows="2"></textarea></label><label>替换为<textarea id="replace-value" rows="2" placeholder="留空表示删除匹配文字"></textarea></label><label>匹配方式<select id="replace-mode"><option value="contains">包含（逐处匹配）</option><option value="exact">整个字段相同</option><option value="prefix">开头</option><option value="suffix">结尾</option></select></label><label><input type="checkbox" id="replace-case" checked>区分大小写</label></div><button id="replace-preview">预览</button><p id="replace-status" role="status"></p><p id="replace-error" role="alert"></p><div id="replace-issues"></div><div id="replace-results"></div><div class="replace-pagination"><button id="replace-prev">上一页</button><span id="replace-page"></span><button id="replace-next">下一页</button></div><button id="replace-all" class="primary" disabled>替换全部匹配</button>');
+let replacePlan=null,replaceRequest=null,replaceLanguage=null,replacePage=0,replaceBusy=false;
+let replaceOwner='corpus',replaceIssuePage=0;
+function resetReplace(){replacePlan=null;replaceRequest=null;replacePage=0;replaceIssuePage=0;$('replace-results').replaceChildren();$('replace-issues').replaceChildren();$('replace-status').textContent='';$('replace-error').textContent='';$('replace-all').disabled=true;$('replace-page').textContent='';$('replace-prev').disabled=$('replace-next').disabled=true;}
+async function openTextReplace(owner='corpus'){if(activeLanguage==='all')throw Error('请先选择一个语言工作区');if(inlineDrafts.size||infoDirty)throw Error('请先保存或取消正在编辑的内容');replaceOwner=owner;replaceLanguage=activeLanguage;resetReplace();$('replace-scope').innerHTML=owner==='independent'?'<option value="independent">当前语言独立例句库（所有页面）</option>':(selected?'<option value="current">当前文本（所有页面）</option>':'')+'<option value="language">当前语言工作区全部文本</option>';$('replace-scope').dataset.textId=owner==='corpus'?selected:'';$('text-replace-dialog').querySelector('h2').textContent=owner==='independent'?'独立例句查找替换':'文本语料查找替换';$('text-replace-dialog').showModal();}
+replaceButton.onclick=safe(()=>openTextReplace());
+const toolbarReplace=document.createElement('button');toolbarReplace.type='button';toolbarReplace.id='toolbar-replace-open';toolbarReplace.textContent='查找替换';$('redo-action').after(toolbarReplace);
+toolbarReplace.onclick=safe(async()=>{if(workspace==='dictionary')$('dictionary-replace-open').click();else if(['corpus','library'].includes(workspace))await openTextReplace(workspace==='library'?'independent':'corpus');});
+function replaceToolbar(){toolbarReplace.hidden=!['corpus','library','dictionary'].includes(workspace);toolbarReplace.title=({corpus:'文本语料',library:'独立例句',dictionary:'词典'}[workspace]||'')+'查找替换';}
+new MutationObserver(replaceToolbar).observe(document.documentElement,{attributes:true,attributeFilter:['data-workbench']});replaceToolbar();
+for(const id of ['replace-scope','replace-field','replace-find','replace-value','replace-mode','replace-case'])$(id).addEventListener('input',resetReplace);
+function replacePayload(){return {_language:replaceLanguage,owner_kind:replaceOwner,text_id:$('replace-scope').value==='current'?$('replace-scope').dataset.textId:'',field:$('replace-field').value,find:$('replace-find').value,replacement:$('replace-value').value,mode:$('replace-mode').value,case:$('replace-case').checked};}
+function restrictReplacePlan(plan,changes=plan.changes){const ids=new Set(changes.map(c=>c.id)),cells=new Set(changes.map(c=>JSON.stringify([c.id,c.word]))),matches=v=>v.word===undefined?ids.has(v.id):cells.has(JSON.stringify([v.id,v.word]));return {...plan,changes,conflicts:plan.conflicts.filter(matches),blocked:plan.blocked.filter(matches)};}
+function drawReplace(){
+ if(!replacePlan)return;const p=replacePlan=restrictReplacePlan(replacePlan),pages=Math.max(1,Math.ceil(p.changes.length/80));replacePage=Math.max(0,Math.min(replacePage,pages-1));
+ $('replace-status').textContent=`检查 ${p.records} 条句子，找到 ${p.changes.length} 处匹配。${p.conflicts.length?'其中 '+p.conflicts.length+' 个词格的切分或已有组合会变化，具体原因见下方。':'可对应的分析和词典关联将保留。'}${p.blocked.length?'另有 '+p.blocked.length+' 句无法安全替换，具体原因见下方。':''}`;
+ const issues=[...p.conflicts.map(v=>({...v,label:'结构变化'})),...p.blocked.map(v=>({...v,label:'无法替换'}))];
+ const issuePages=Math.max(1,Math.ceil(issues.length/40));replaceIssuePage=Math.min(replaceIssuePage,issuePages-1);
+ $('replace-issues').innerHTML=issues.length?'<details class="replace-issues" open><summary>结构变化与无法替换 · '+issues.length+'</summary><ul>'+issues.slice(replaceIssuePage*40,replaceIssuePage*40+40).map(v=>{const c=p.changes.find(c=>c.id===v.id&&(v.word===undefined||v.word===c.word));return '<li><span><b>'+esc(v.label)+'</b> · '+esc(v.title)+' · 第 '+v.position+' 句'+(v.word===undefined?'':'第 '+(v.word+1)+' 格')+'：'+esc(v.reason)+'</span><button type="button" data-replace-locate="'+esc(c.key)+'">定位匹配</button></li>';}).join('')+'</ul>'+(issuePages>1?'<nav><button type="button" data-replace-issues-page="-1" '+(replaceIssuePage?'':'disabled')+'>上一组</button> '+(replaceIssuePage+1)+' / '+issuePages+' <button type="button" data-replace-issues-page="1" '+(replaceIssuePage+1<issuePages?'':'disabled')+'>下一组</button></nav>':'')+'</details>':'';
+ $('replace-results').innerHTML=p.changes.slice(replacePage*80,replacePage*80+80).map(c=>{const warning=p.conflicts.find(v=>v.id===c.id&&v.word===c.word)||p.blocked.find(v=>v.id===c.id);return `<article class="replace-row ${warning?'replace-affected':''}" data-replace-key="${esc(c.key)}"><small>${esc(c.title)} · 第 ${c.position} 句${c.word===null?'':' · 第 '+(c.word+1)+' 格'}</small><div class="replace-comparison"><pre>${esc([...c.before].slice(0,c.start).join(''))}<mark>${esc([...c.before].slice(c.start,c.end).join(''))}</mark>${esc([...c.before].slice(c.end).join(''))}</pre><span>→</span><pre>${esc(c.after)}</pre></div>${warning?'<p class="warning"><b>结构变化或无法替换：</b>'+esc(warning.reason)+'</p>':''}<button data-replace-one="${esc(c.key)}">替换此处</button></article>`;}).join('')||'<p>没有匹配项。</p>';
+ $('replace-page').textContent=(replacePage+1)+' / '+pages;$('replace-prev').disabled=replacePage===0;$('replace-next').disabled=replacePage+1>=pages;$('replace-all').disabled=!p.changes.length||!!p.blocked.length;
+}
+$('replace-issues').onclick=e=>{const pager=e.target.closest('[data-replace-issues-page]');if(pager){replaceIssuePage+=Number(pager.dataset.replaceIssuesPage);drawReplace();return;}const button=e.target.closest('[data-replace-locate]');if(!button||!replacePlan)return;const index=replacePlan.changes.findIndex(c=>c.key===button.dataset.replaceLocate);if(index<0)return;replacePage=Math.floor(index/80);drawReplace();const row=[...$('replace-results').children].find(row=>row.dataset.replaceKey===button.dataset.replaceLocate);if(row){row.classList.add('replace-review-target');row.tabIndex=-1;row.scrollIntoView({block:'center',behavior:'instant'});row.focus({preventScroll:true});}};
+function replaceLock(busy){replaceBusy=busy;for(const e of $('text-replace-dialog').querySelectorAll('button,input,textarea,select'))e.disabled=busy;if(!busy){if(replacePlan)drawReplace();else resetReplace();}}
+async function previewReplace(){replaceRequest=replacePayload();$('replace-status').textContent='正在查找并核对分析与关联…';replacePlan=await api('text-replace-preview',replaceRequest);replacePage=0;drawReplace();}
+$('replace-preview').onclick=async()=>{if(replaceBusy)return;resetReplace();replaceLock(true);try{await previewReplace();}catch(e){$('replace-status').textContent='';$('replace-error').textContent=e.message;}finally{replaceBusy=false;for(const e of $('text-replace-dialog').querySelectorAll('button,input,textarea,select'))e.disabled=false;if(replacePlan)drawReplace();else $('replace-all').disabled=true;}};
+async function applyReplace(keys){
+ if(replaceBusy||!replacePlan)return;const request={...replaceRequest,token:replacePlan.token,keys,pending_keys:replacePlan.changes.map(c=>c.key)};let applied=null;replaceLock(true);$('replace-error').textContent='';$('replace-status').textContent=`正在核对并替换 ${keys.length} 处匹配…`;
+ try{
+  let result=await api('text-replace-apply',request);
+  if(result.needs_confirmation){const details=result.conflicts.slice(0,12).map(c=>`${c.title} · 第 ${c.position} 句第 ${c.word+1} 格：${c.reason}`).join('\n');if(!await corporiumConfirm(details+(result.conflicts.length>12?'\n另有 '+(result.conflicts.length-12)+' 项。':'')+'\n\n本次替换会改变上述切分或已有组合。旧记录会保留，不会自动改挂到其他语素；保存后可在对应句子的形态分析或词典关联中调整。是否继续？')){drawReplace();return;}result=await api('text-replace-apply',{...request,confirm_conflicts:true});}
+  applied=result;await refreshUndo();await refreshExampleViews();if(result.remaining_keys.length){await previewReplace();const remaining=new Set(result.remaining_keys);replacePlan=restrictReplacePlan(replacePlan,replacePlan.changes.filter(c=>remaining.has(c.key)));}else{replacePlan={...replacePlan,changes:[],conflicts:[],blocked:[]};}drawReplace();$('replace-status').textContent=`已替换 ${result.replacements} 处、涉及 ${result.sentences} 句${result.conflicts?'；本次已修改 '+result.conflicts+' 个词格的切分或组合':''}。可一步撤销。剩余 ${replacePlan.changes.length} 处匹配${replacePlan.conflicts.length?'，其中 '+replacePlan.conflicts.length+' 个词格会改变切分或已有组合，见下方':''}。`;
+ }catch(e){replacePlan=null;$('replace-results').replaceChildren();$('replace-issues').replaceChildren();$('replace-status').textContent='';$('replace-error').textContent=(applied?`已成功替换 ${applied.replacements} 处，但刷新失败：`:'')+e.message+'；请重新预览。';}
+ finally{replaceBusy=false;for(const e of $('text-replace-dialog').querySelectorAll('button,input,textarea,select'))e.disabled=false;const message=$('replace-status').textContent;if(replacePlan)drawReplace();else $('replace-prev').disabled=$('replace-next').disabled=true;$('replace-status').textContent=message;$('replace-all').disabled=!replacePlan?.changes.length||!!replacePlan?.blocked.length;}
+}
+$('replace-results').onclick=e=>{const b=e.target.closest('[data-replace-one]');if(b)applyReplace([b.dataset.replaceOne]);};
+$('replace-all').onclick=async()=>{if(replacePlan&&await corporiumConfirm(`替换当前预览中的全部 ${replacePlan.changes.length} 处匹配？`))applyReplace(replacePlan.changes.map(c=>c.key));};
+$('replace-prev').onclick=()=>{replacePage--;drawReplace();};$('replace-next').onclick=()=>{replacePage++;drawReplace();};
