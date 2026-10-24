@@ -1,0 +1,15 @@
+Corporium 第三方组件说明
+
+本发行包使用 Python、pywebview、Python.NET、NumPy、PyAV、Junicode 等第三方组件。各组件的版权及许可原文保存在本目录中；Corporium 的使用许可不替代这些许可。
+
+Microsoft Edge WebView2
+Corporium 的 Windows 桌面界面使用 Microsoft Edge WebView2。缺少运行库时，安装程序会安装随包附带的微软官方 Evergreen 运行库。点击安装页的“同意并安装”，表示接受 Corporium 使用许可及 Microsoft Edge WebView2 Runtime 许可。
+微软许可原文：Microsoft-WebView2-Runtime-LICENSE.txt。
+
+WebView2 包括 Microsoft Defender SmartScreen。该功能会按微软隐私声明及 Edge 隐私白皮书收集并向微软发送最终用户的信息。WebView2 也可能发送运行库所需的诊断信息；可选诊断数据遵循 Windows 的诊断数据设置。此运行库行为不表示 Corporium 将用户的整套语料上传给微软。
+微软隐私声明：https://privacy.microsoft.com/privacystatement
+SmartScreen 说明：https://learn.microsoft.com/microsoft-edge/privacy-whitepaper#smartscreen
+WebView2 数据与隐私：https://learn.microsoft.com/microsoft-edge/webview2/concepts/data-privacy
+官方许可来源：https://developer.microsoft.com/microsoft-edge/webview2/#download
+
+Microsoft-WebView2-Runtime-LICENSE.txt 于 2026-10-20 从微软官方下载页的 Evergreen x64 下载许可框取得，保留全部条文（包括法语部分）。构建新发行版时应核对对应运行库的官方许可。
