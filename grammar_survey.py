@@ -3,6 +3,7 @@ import long_tasks
 import hashlib
 import json
 import uuid
+import example_groups
 
 TABLES = ('survey_nodes', 'survey_evidence')
 TEMPLATE = [
@@ -52,6 +53,16 @@ def clean_body(db,b,lid,evidence=False):
         result['judgment']=str(b.get('judgment',''))[:200]
         result['judges']=list(dict.fromkeys(b.get('judges',[])))
         if len(result['judges'])>200 or any(not db.execute('SELECT 1 FROM timeline_speakers WHERE id=?',(p,)).fetchone() for p in result['judges']):raise ValueError('判断者已不存在')
+        if 'member_notes' in b:
+            notes=b['member_notes']
+            if not isinstance(notes,dict) or len(notes)>400:raise ValueError('组内本处笔记格式无效或过多')
+            result['member_notes']={}
+            for mid,value in notes.items():
+                if not isinstance(mid,str) or len(mid)>100 or not isinstance(value,dict) or 'member_notes' in value:raise ValueError('组内本处笔记格式无效')
+                item=clean_body(db,value,lid,True)
+                item['example_id']=str(value.get('example_id',''))[:100]
+                item['source_label']=str(value.get('source_label',''))[:500]
+                result['member_notes'][mid]=item
     else:
         result['status']=b.get('status','unasked')
         if result['status'] not in ('unasked','followup','evidence','done'):raise ValueError('调查进度无效')
@@ -92,6 +103,9 @@ def descendants(db,lid,nid):
 
 def reference(db,kind,rid,lid):
     import annotations
+    if kind==example_groups.KIND:
+        group=example_groups.detail(db,lid,rid)
+        return dict(body=group,language_id=lid,owner_language=lid)
     d=annotations.get(db,kind,rid)
     if d['language_id']!=lid:raise ValueError('请选择同语言的例句')
     from corpus import analyze
@@ -157,10 +171,14 @@ def mutate(db,lid,action,b):
         db.execute('UPDATE survey_nodes SET body=?,revision=revision+1 WHERE id=?',(dump(body),node['id']))
         return {'id':node['id']}
     if action=='template':
+        import ui_localization
+        # Only newly inserted built-in headings use the selected UI language.
+        # Existing and user-supplied outlines remain editable research content.
+        title_for=lambda value:ui_localization.message(value,b.get('_interface_language','zh-CN'))
         roots=[]
         for name,children in TEMPLATE:
-            parent=insert_node(db,lid,None,'section',name,clean_body(db,{'template':'汉语语法调查粗纲 · 用户提供 · v2'},lid));roots.append(parent)
-            for title in children:insert_node(db,lid,parent,'section',title,clean_body(db,{},lid))
+            parent=insert_node(db,lid,None,'section',title_for(name),clean_body(db,{'template':'汉语语法调查粗纲 · 用户提供 · v2'},lid));roots.append(parent)
+            for title in children:insert_node(db,lid,parent,'section',title_for(title),clean_body(db,{},lid))
         return {'id':roots[0],'ids':roots}
     if action=='save':
         old=require(db,lid,b['id']) if b.get('id') else None
@@ -200,6 +218,18 @@ def mutate(db,lid,action,b):
             ids[at],ids[to]=ids[to],ids[at]
             for i,rid in enumerate(ids):db.execute('UPDATE survey_nodes SET position=?,revision=revision+1 WHERE id=?',(i,rid))
         return {'id':node['id']}
+    if action=='evidence-groups':
+        selected=b.get('groups')
+        if not isinstance(selected,list) or not 1<=len(selected)<=20 or len({g.get('id') for g in selected if isinstance(g,dict)})!=len(selected):raise ValueError('请选择1–20个不同例句组')
+        for group in selected:
+            current=example_groups.detail(db,lid,group.get('id'),False)
+            if group.get('token')!=current['token']:raise ValueError('例句组已变化，请重新预览')
+            if not current['members']:raise ValueError('空组不能引用')
+            if db.execute('SELECT 1 FROM survey_evidence WHERE node_id=? AND kind=? AND record_id=?',(node['id'],example_groups.KIND,current['id'])).fetchone():raise ValueError('本题已经引用其中一个组，请刷新列表')
+        for group in selected:
+            eid=uid();pos=db.execute('SELECT COALESCE(MAX(position),0)+1 FROM survey_evidence WHERE node_id=?',(node['id'],)).fetchone()[0]
+            db.execute('INSERT INTO survey_evidence VALUES(?,?,?,?,?,?,?,1)',(eid,lid,node['id'],example_groups.KIND,group['id'],pos,dump(clean_body(db,{},lid,True))))
+        return saved_node(db,lid,node['id'])
     if action in ('evidence','new-example'):
         eid=b.get('evidence_id');old=db.execute('SELECT * FROM survey_evidence WHERE id=? AND node_id=?',(eid,node['id'])).fetchone() if eid else None
         if eid and not old:raise ValueError('例证引用已不存在')
@@ -213,7 +243,13 @@ def mutate(db,lid,action,b):
         else:
             source=reference(db,kind,rid,lid)
             if source['owner_language']!=lid:raise ValueError('该句所属文本在另一语言下，请在所属语言的调查中引用，以保证语言导出完整')
-        body=clean_body(db,b.get('body',{}),lid,True)
+        incoming=dict(b.get('body',{}))
+        if old and 'member_notes' not in incoming and 'member_notes' in json.loads(old['body']):incoming['member_notes']=json.loads(old['body'])['member_notes']
+        body=clean_body(db,incoming,lid,True)
+        if kind==example_groups.KIND:
+            known={r[0] for r in db.execute('SELECT id FROM example_group_members WHERE group_id=?',(rid,))}
+            prior=set(json.loads(old['body']).get('member_notes',{})) if old else set()
+            if set(body.get('member_notes',{}))-known-prior:raise ValueError('组内笔记对应的成员不存在')
         if old:
             db.execute('UPDATE survey_evidence SET body=?,revision=revision+1 WHERE id=?',(dump(body),eid))
         else:
@@ -237,7 +273,7 @@ def validate(db):
             seen.add(p);p=nodes[p]['parent_id']
     for e in db.execute('SELECT * FROM survey_evidence'):
         if e['node_id'] not in nodes or nodes[e['node_id']]['language_id']!=e['language_id']:raise ValueError('调查例证的所属条目无效')
-        if e['kind'] not in ('corpus','independent'):raise ValueError('调查例证来源无效')
+        if e['kind'] not in ('corpus','independent',example_groups.KIND):raise ValueError('调查例证来源无效')
         clean_body(db,json.loads(e['body']),e['language_id'],True)
     # Deleted sentences remain explicit missing references, recoverable by undo.
 
@@ -251,6 +287,12 @@ def writing_replace(db,old,new):
                     if run.get('type_id')==old:
                         if not new:raise ValueError('书写类型被语法调查引用，请选择替换类型')
                         run['type_id']=new;changed=True
+            for item in b.get('member_notes',{}).values():
+                for key in ('notes','context'):
+                    for run in item.get(key,[]):
+                        if run.get('type_id')==old:
+                            if not new:raise ValueError('书写类型被组内调查笔记引用，请选择替换类型')
+                            run['type_id']=new;changed=True
             if changed:db.execute('UPDATE '+table+' SET body=?,revision=revision+1 WHERE id=?',(dump(b),row['id']))
 
 
@@ -258,7 +300,7 @@ def export_bundle(db,lid):
     return {t:[dict(r) for r in db.execute('SELECT * FROM '+t+' WHERE language_id=?',(lid,))] for t in TABLES}
 
 
-def import_bundle(db,bundle,lid,entries,examples,types,people):
+def import_bundle(db,bundle,lid,entries,examples,types,people,groups=None,members=None):
     nodes={r['id']:uid() for r in bundle.get('survey_nodes',[])}
     for table in long_tasks.steps(TABLES):
         for r in long_tasks.steps(bundle.get(table,[])):
@@ -270,8 +312,19 @@ def import_bundle(db,bundle,lid,entries,examples,types,people):
             if table=='survey_nodes':row['parent_id']=nodes[row['parent_id']] if row.get('parent_id') else None
             else:
                 row['node_id']=nodes[row['node_id']]
-                row['record_id']=(entries if row['kind']=='corpus' else examples).get(row['record_id'],'missing:'+uid())
+                mapping=(groups or {}) if row['kind']==example_groups.KIND else entries if row['kind']=='corpus' else examples
+                row['record_id']=mapping.get(row['record_id'],'missing:'+uid())
                 b['judges']=[people[p] for p in b.get('judges',[])]
+                if 'member_notes' in b:
+                    mapped={}
+                    for mid,item in b['member_notes'].items():
+                        item['example_id']=examples.get(item.get('example_id'),'missing:'+uid())
+                        item['judges']=[people[p] for p in item.get('judges',[])]
+                        for key in ('notes','context'):
+                            for run in item.get(key,[]):
+                                if run.get('type_id'):run['type_id']=types[run['type_id']]
+                        mapped[(members or {}).get(mid,'missing:'+uid())]=item
+                    b['member_notes']=mapped
             row['body']=dump(b)
             db.execute('INSERT INTO '+table+' ('+','.join(row)+') VALUES ('+','.join('?' for _ in row)+')',list(row.values()))
     validate(db)

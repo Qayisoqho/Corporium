@@ -25,6 +25,9 @@ def settings(b):
     opt['find_only']=b.get('find_only',False)
     if type(opt['find_only']) is not bool:raise ValueError('查找设置无效')
     opt['field']=b['field'];opt.pop('text_id')
+    if opt['field']=='writing':
+        opt['writing_type']=b.get('writing_type','')
+        if not isinstance(opt['writing_type'],str):raise ValueError('请选择当前语言的书写类型')
     opt['scope']=b.get('scope','language');opt['lexeme_id']=b.get('morpheme_id','') if opt['kind']=='morpheme' else b.get('lexeme_id','');opt['query']=b.get('query','')
     if opt['scope'] not in ('language','current','search') or any(not isinstance(opt[k],str) for k in ('lexeme_id','query')):raise ValueError('词典替换范围无效')
     opt['search']=b.get('search',{})
@@ -34,7 +37,7 @@ def settings(b):
     if opt['scope']=='current' and not opt['lexeme_id']:raise ValueError('请先选择词条')
     return opt
 
-def cells(row,field,kind='lexeme'):
+def cells(row,field,kind='lexeme',writing_type=''):
     labels=MORPHEME_FIELDS if kind=='morpheme' else FIELDS
     if field=='all':
         for name in labels:
@@ -49,7 +52,7 @@ def cells(row,field,kind='lexeme'):
                        or field=='notes' and key in ('notes','note','homonym_note')
                        or field=='tag_value' and key=='value' and 'tags' in path
                        or field=='variant' and key=='form' and path[:2]==['body','variants']
-                       or field=='writing' and key=='text' and path[:2]==['body','writings' if kind=='morpheme' else 'orthographies']
+                       or field=='writing' and key=='text' and (path[:2]==['body','writings' if kind=='morpheme' else 'orthographies'] or path[:2]==['body','word_structure'] and path[-2]=='writings') and (not writing_type or value.get('type_id')==writing_type)
                        or field=='conditions' and key=='conditions' and path[:2]==['body','variants'])
                 if kind=='morpheme' and key=='merged_records':continue
                 if kind=='morpheme' and key=='usages':
@@ -69,6 +72,7 @@ def cells(row,field,kind='lexeme'):
 def plan(db,b,lid):
     if lid=='all':raise ValueError('请先选择一个语言工作区')
     opt=settings(b)
+    if opt.get('writing_type') and not db.execute('SELECT 1 FROM writing_types WHERE id=? AND language_id=?',(opt['writing_type'],lid)).fetchone():raise ValueError('请选择当前语言的书写类型')
     morph=opt['kind']=='morpheme';table='morphemes' if morph else 'lexemes'
     rows=[{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT * FROM '+table+' WHERE language_id=? ORDER BY rowid',(lid,))]
     if opt['scope']=='current':
@@ -90,7 +94,7 @@ def plan(db,b,lid):
         opt['scope_ids']=sorted(ids)
     regex=text_replace.pattern(opt);changes=[]
     for row in long_tasks.steps(rows):
-        for path,value,label in long_tasks.steps(cells(row,opt['field'],opt['kind'])):
+        for path,value,label in long_tasks.steps(cells(row,opt['field'],opt['kind'],opt.get('writing_type',''))):
             for m in long_tasks.steps(regex.finditer(value)):
                 if not opt['find_only'] and m.group()==opt['replacement']:continue
                 key=json.dumps([row['id'],path,m.start(),m.end()],ensure_ascii=False,separators=(',',':'))

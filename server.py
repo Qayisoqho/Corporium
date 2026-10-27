@@ -43,8 +43,11 @@ import analysis_workspace
 import timeline
 import media_engine
 import object_media
+import recorder
 import collaborators
 import grammar_survey
+import example_groups
+import example_numbering
 import survey_search
 import fieldwork_notes
 import code_switching
@@ -58,6 +61,7 @@ import docx_exchange
 import tempfile
 import shutil
 import legal_notices
+import ui_localization
 
 ROOT = Path(__file__).resolve().parent
 DB = ROOT / 'data' / 'corpus.sqlite3'
@@ -93,6 +97,7 @@ def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False)
                 gloss_inheritance.CHANGES.set(changes)
                 audit_promotion=grammar_audit_cache.prepare_promotion(db)
             yield db
+            if db.total_changes and not example_numbering.needed(db):example_numbering.assign_missing(db)
             if audit and journal.action.get():
                 association_removals=lexicon.association_removals_only(changes)
                 grammaticality.normalize_rows(db,changes)
@@ -112,6 +117,7 @@ def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False)
                 code_switching.sync_changes(db,changes)
                 if any(t in {'object_media','lexemes','morphemes','dictionary_examples','timeline_media','timeline_speakers'} for t,_ in changes):object_media.validate(db)
                 collaborators.validate_changes(db,changes)
+                if any(t in example_groups.TABLES or t=='dictionary_examples' for t,_ in changes):example_groups.validate(db)
                 journal.record(db, changes, journal.action.get())
                 if any(a!=b for a,b in changes.values()):analysis_workspace.invalidate(db)
             if cancellable:long_tasks.committing(db)
@@ -148,11 +154,13 @@ def init():
             missing_notes=not old.execute("SELECT 1 FROM sqlite_master WHERE name='fieldwork_notes'").fetchone()
             missing_code_spans=any(not old.execute('SELECT 1 FROM sqlite_master WHERE name=?',(t,)).fetchone() for t in code_switching.TABLES)
             missing_survey=not old.execute("SELECT 1 FROM sqlite_master WHERE name='survey_nodes'").fetchone()
+            missing_example_groups=not old.execute("SELECT 1 FROM sqlite_master WHERE name='example_groups'").fetchone()
+            missing_example_numbers=example_numbering.needed(old)
             missing_object_media=not old.execute("SELECT 1 FROM sqlite_master WHERE name='object_media'").fetchone()
             missing_organization=not old.execute("SELECT 1 FROM sqlite_master WHERE name='semantic_classes'").fetchone()
             missing_collaborators=not old.execute("SELECT 1 FROM sqlite_master WHERE name='collaborator_assignments'").fetchone()
             missing_inheritance=not old.execute("SELECT 1 FROM sqlite_master WHERE name='gloss_migrations'").fetchone()
-            if grammaticality.corpus_rows_needed(old) or storage_optimization.needed(old) or missing_inheritance or script_tags.needed(old) or manual_status.needed(old) or missing_code_spans or missing_object_media or missing_organization or missing_survey or missing_notes or missing_collaborators or missing_languages or missing_dictionary or missing_sentence_layers or missing_track_tree or missing_track_color or missing_session_order or missing_text_order or old.execute('PRAGMA user_version').fetchone()[0]<4 or not old.execute("SELECT 1 FROM sqlite_master WHERE name='corpus_units'").fetchone():
+            if missing_example_numbers or missing_example_groups or grammaticality.corpus_rows_needed(old) or storage_optimization.needed(old) or missing_inheritance or script_tags.needed(old) or manual_status.needed(old) or missing_code_spans or missing_object_media or missing_organization or missing_survey or missing_notes or missing_collaborators or missing_languages or missing_dictionary or missing_sentence_layers or missing_track_tree or missing_track_color or missing_session_order or missing_text_order or old.execute('PRAGMA user_version').fetchone()[0]<4 or not old.execute("SELECT 1 FROM sqlite_master WHERE name='corpus_units'").fetchone():
                 backup_policy.sqlite_snapshot(DB.parent/'backups',old,'languages' if missing_languages else 'lexicon')
     with connect() as db:
         db.executescript('''CREATE TABLE IF NOT EXISTS texts(id TEXT PRIMARY KEY,title TEXT,source TEXT,original TEXT,digest TEXT UNIQUE,errors TEXT);
@@ -169,6 +177,7 @@ def init():
         object_media.initialize(db)
         collaborators.initialize(db)
         grammar_survey.initialize(db)
+        example_groups.initialize(db)
         fieldwork_notes.initialize(db)
         code_switching.rebuild(db)
         manual_status.migrate(db)
@@ -177,6 +186,8 @@ def init():
         gloss_inheritance.initialize(db)
         gloss_inheritance.migrate(db)
         storage_optimization.migrate(db)
+        import word_analysis_memory
+        word_analysis_memory.initialize(db)
         if grammaticality.migrate_corpus(db):analysis_workspace.invalidate(db)
     backup_policy.prune(DB.parent/'backups')
 
@@ -207,7 +218,15 @@ def import_into(db,title,source,original):
 
 
 class Handler(BaseHTTPRequestHandler):
+    def ui_language(self):
+        return ui_localization.language(getattr(self,'headers',{}))
+
     def send(self, value, code=200, mime='application/json; charset=utf-8'):
+        if mime.startswith('application/json'):
+            value=ui_localization.present(value,urlparse(getattr(self,'path','')).path,self.ui_language())
+        elif mime.startswith('text/html'):
+            source=value.decode('utf-8') if isinstance(value,bytes) else value
+            if isinstance(source,str) and '<body' in source and 'data-ui-ready=' not in source:value=ui_localization.bootstrap_html(source)
         data = json.dumps(value, ensure_ascii=False).encode() if mime.startswith('application/json') else value.encode() if isinstance(value, str) else value
         self.send_response(code)
         self.send_header('Content-Type', mime)
@@ -228,6 +247,20 @@ class Handler(BaseHTTPRequestHandler):
     def get(self):
         url = urlparse(self.path)
         q = {k:v[0] for k,v in parse_qs(url.query).items()}
+        if url.path=='/api/recorder-context':
+            with connect(audit=False) as db:result=recorder.target_context(db,q.get('kind'),q.get('id',''),q.get('language','ordos'))
+            return self.send(result)
+        if url.path=='/api/recorder-devices':return self.send({'devices':recorder.audio_capture.devices()})
+        if url.path=='/api/recorder-pending':return self.send({'items':recorder.SERVICE.pending(DB,q.get('language','ordos'))})
+        if url.path=='/api/recorder-status':return self.send(recorder.SERVICE.status(DB,q.get('token')))
+        if url.path=='/api/recorder-file':
+            source,name=recorder.SERVICE.playback(DB,q.get('token'))
+            if isinstance(source,bytes):return media_engine.stream_bytes(self,source,name)
+            return media_engine.stream_file(self,source)
+        if url.path in ui_localization.ASSET_PATHS:
+            if url.path=='/i18n-catalog.js':
+                return self.send('globalThis.CorporiumMessages='+json.dumps(ui_localization.catalog(),ensure_ascii=True)+';',mime='text/javascript; charset=utf-8')
+            return self.send((ROOT/'web'/url.path[1:]).read_bytes(),mime=('text/css' if url.path.endswith('.css') else 'text/javascript')+'; charset=utf-8')
         if url.path=='/licenses/catalog':return self.send(legal_notices.catalog())
         if url.path=='/licenses/document':return self.send(legal_notices.document(q.get('id','')))
         if url.path=='/licenses/developer-font':
@@ -353,6 +386,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(dictionary_layout.tree(db,lid,json.loads(q.get('path','[]')),q.get('page',1)))
             if url.path=='/api/survey':return self.send(grammar_survey.listing(db,lid))
             if url.path=='/api/survey-detail':return self.send(grammar_survey.detail(db,lid,q.get('id'),q.get('page',1)))
+            if url.path=='/api/example-groups-library':return self.send(example_groups.library(db,lid,q))
+            if url.path=='/api/example-group':return self.send(example_groups.detail(db,lid,q.get('id')))
             if url.path=='/api/survey-search':return self.send(survey_search.search(db,lid,q))
             if url.path=='/api/survey-locate':return self.send(survey_search.locate(db,lid,q))
             if url.path=='/api/survey-templates':return self.send(survey_templates.listing(DB.parent/'templates'/'grammar'))
@@ -438,6 +473,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(path.read_bytes(), mime='font/ttf')
         files = {'/classes.js':'classes.js','/display-tools.js':'display-tools.js','/ui-tools.js':'ui-tools.js','/grammar.js':'grammar.js','/inline-editor.js':'inline-editor.js','/example-library.js':'example-library.js','/':'index.html','/fonts.js':'fonts.js','/home.js':'home.js','/dictionary-manager.js':'dictionary-manager.js','/app.js':'app.js','/organize.js':'organize.js','/metadata.js':'metadata.js','/undo.js':'undo.js','/languages.js':'languages.js','/lexicon.js':'lexicon.js','/lexicon-extra.js':'lexicon-extra.js','/style.css':'style.css'}
         files.update({'/reduplication.js':'reduplication.js','/text-tools.js':'text-tools.js','/word-structure.js':'word-structure.js','/punctuation.js':'punctuation.js','/workspace-layout.js':'workspace-layout.js','/typography.js':'typography.js','/morphology.js':'morphology.js','/segmentation.js':'segmentation.js','/multipart-forms.js':'multipart-forms.js','/multipart-forms.css':'multipart-forms.css','/favicon.ico':'favicon.ico'})
+        files['/layer-order.js']='layer-order.js'
         files['/analysis-workspace.js']='analysis-workspace.js'
         files['/gloss-sources.js']='gloss-sources.js'
         files['/grammar-candidates.js']='grammar-candidates.js'
@@ -478,7 +514,12 @@ class Handler(BaseHTTPRequestHandler):
         files['/code-switching.css']='code-switching.css'
         files['/sentence-inspector.js']='sentence-inspector.js'
         files['/object-media.js']='object-media.js'
+        files['/recorder.js']='recorder.js'
+        files['/recorder.css']='recorder.css'
         files.update({'/licenses':'licenses.html','/license-notices.js':'license-notices.js','/license-notices.css':'license-notices.css'})
+        files['/example-groups.js']='example-groups.js'
+        files['/example-groups.css']='example-groups.css'
+        files.update({'/formatted-copy-format.js':'formatted-copy-format.js','/formatted-copy.js':'formatted-copy.js','/formatted-copy.css':'formatted-copy.css'})
         files['/analysis-workspace.css']='analysis-workspace.css'
         files.update({'/ordering.js':'ordering.js','/workbench.js':'workbench.js','/workbench.css':'workbench.css','/survey-search.js':'survey-search.js','/grammar-survey.js':'grammar-survey.js','/grammar-survey.css':'grammar-survey.css','/sentence-pairs.js':'sentence-pairs.js'})
         files.update({'/collaborators.js':'collaborators.js','/participants.js':'participants.js','/timeline-tree.js':'timeline-tree.js','/timeline.js':'timeline.js','/waveform.js':'waveform.js','/timeline.css':'timeline.css','/timeline-geometry.js':'timeline-geometry.js','/sentence-audio.js':'sentence-audio.js','/range-playback.js':'range-playback.js'})
@@ -498,7 +539,7 @@ class Handler(BaseHTTPRequestHandler):
             journal.scope.reset(scope_token)
 
     def post(self):
-        if not self.path.startswith('/api/task-') and long_tasks.active(DB):return self.send({'error':'当前项目正在处理后台任务，请等待完成或取消任务后再修改。'},409)
+        if not self.path.startswith(('/api/task-','/api/recorder-')) and long_tasks.active(DB):return self.send({'error':'当前项目正在处理后台任务，请等待完成或取消任务后再修改。'},409)
         if self.path.startswith('/api/object-media-upload?'):
             if self.headers.get('Origin') not in (None,'http://'+self.headers.get('Host','')) or self.headers.get('Content-Type')!='application/octet-stream':return self.send({'error':'拒绝跨站上传'},403)
             path=None
@@ -547,6 +588,28 @@ class Handler(BaseHTTPRequestHandler):
             if size > 20_000_000:
                 raise ValueError('文件超过 20 MB')
             body = json.loads(self.rfile.read(size))
+            if self.path.startswith('/api/recorder-'):
+                lid=body.get('_language','ordos');journal.scope.set(lid)
+                if self.path=='/api/recorder-start':
+                    if long_tasks.active(DB):raise ValueError('请等待当前后台任务完成，再开始录音')
+                    with connect(audit=False) as db:context=recorder.describe(db,lid,body)
+                    return self.send(recorder.SERVICE.start(DB,context,body))
+                if self.path=='/api/recorder-stop':return self.send(recorder.SERVICE.stop(DB,body.get('token')))
+                if self.path=='/api/recorder-release':return self.send(recorder.SERVICE.release(DB,body.get('token')))
+                with recorder.SERVICE.lock:
+                    take=recorder.SERVICE._find(DB,body.get('token'))
+                    if take['context']['language_id']!=lid:raise ValueError('请选择材料所属语言')
+                    if self.path=='/api/recorder-keep':
+                        if long_tasks.active(DB):raise ValueError('请等待当前后台任务完成，再关联录音')
+                        with connect() as db:result=recorder.SERVICE.attach(db,DB,lid,body)
+                        take.update(state='linked',session_id=result.get('session_id',result.get('id','')))
+                        recorder.SERVICE._persist(take)
+                        return self.send(result)
+                    if self.path=='/api/recorder-discard':
+                        if take['state']!='ready' or body.get('confirmed') is not True:raise ValueError('请先停止录音并确认放弃关联')
+                        take['state']='discarded';recorder.SERVICE._persist(take)
+                        return self.send({'ok':True})
+                raise ValueError('未知录音操作')
             if self.path=='/api/task-start':
                 request=body.get('request',{})
                 if not isinstance(request,dict):raise ValueError('任务参数无效')
@@ -644,6 +707,9 @@ class Handler(BaseHTTPRequestHandler):
             if self.path.startswith('/api/dict-org-'):
                 with connect() as db:result=dictionary_organization.mutate(db,lid,self.path.removeprefix('/api/dict-org-'),body)
                 return self.send(result)
+            if self.path in ('/api/example-group-save','/api/example-group-delete'):
+                with connect() as db:result=example_groups.mutate(db,lid,self.path.removeprefix('/api/example-group-'),body)
+                return self.send(result)
             if self.path in ('/api/dictionary-batch-preview','/api/dictionary-batch-apply'):
                 with connect(audit=self.path.endswith('-apply')) as db:result=(dictionary_batch.apply if self.path.endswith('-apply') else dictionary_batch.preview)(db,lid,body)
                 return self.send(result)
@@ -662,6 +728,7 @@ class Handler(BaseHTTPRequestHandler):
                 with connect() as db:result=survey_templates.mutate(db,lid,DB.parent/'templates'/'grammar',body)
                 return self.send(result)
             if self.path.startswith('/api/survey-'):
+                if self.path=='/api/survey-template':body={**body,'_interface_language':self.ui_language()}
                 with connect() as db:result=grammar_survey.mutate(db,lid,self.path.removeprefix('/api/survey-'),body)
                 return self.send(result)
             if self.path=='/api/collaborator-save':
@@ -713,7 +780,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path=='/api/sentence-create':
                 with connect() as db:result=annotations.create_sentence(db,body,lid)
                 return self.send(result)
-            if self.path in ('/api/layer-save','/api/layer-delete','/api/annotation-save'):
+            if self.path in ('/api/layer-save','/api/layer-delete','/api/layer-order','/api/annotation-save'):
                 with connect() as db:result=annotations.mutate(db,self.path.removeprefix('/api/'),body,lid)
                 return self.send(result)
             if self.path in ('/api/writing-save','/api/writing-delete','/api/example-save','/api/example-delete'):

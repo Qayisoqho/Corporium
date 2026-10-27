@@ -63,7 +63,7 @@ html[data-home=false] #workbench-module-nav #survey-tree button{width:auto;displ
 html[data-home=false] #workbench-module-nav #survey-tree .survey-fold{flex:0 0 20px;padding:3px}
 html[data-home=false] #workbench-module-nav #survey-tree [data-node]{flex:1}
 html[data-home=false] #workbench-module-nav #survey-tree [aria-current=true]{background:color-mix(in srgb,var(--green) 13%,var(--paper))}
-.workbench-document-info{margin:6px 0 12px;font-size:.8rem}.workbench-document-info>summary{cursor:pointer;color:var(--muted)}.workbench-document-info .metadata-panel{margin:6px 0}.workbench-result-tools{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}.workbench-result-tools .result-bar{flex:1;gap:12px;margin:4px 0}.workbench-result-tools .pagination{margin:4px 0;padding:0;border:0;gap:5px}html[data-home=false] #corpus-workspace .search{padding:10px 12px;margin:8px 0}html[data-home=false] #corpus-workspace .search input,html[data-home=false] #corpus-workspace .search select{padding:7px 9px}
+.workbench-document-info{margin:6px 0 12px;font-size:.8rem}.workbench-document-info>summary{cursor:pointer;color:var(--muted)}.workbench-document-info .metadata-panel{margin:6px 0}.workbench-result-tools{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}.workbench-result-tools .result-bar{flex:1;flex-wrap:wrap;gap:12px;margin:4px 0}.workbench-result-tools .pagination{margin:4px 0;padding:0;border:0;gap:5px}html[data-home=false] #corpus-workspace .search{padding:10px 12px;margin:8px 0}html[data-home=false] #corpus-workspace .search input,html[data-home=false] #corpus-workspace .search select{padding:7px 9px}
 html[data-home=false].workbench-inspecting #word-link-dialog{top:calc(var(--toolbar-height,100px) + 18px);height:calc(100dvh - var(--toolbar-height,100px) - 18px);max-height:calc(100dvh - var(--toolbar-height,100px) - 18px)}
 html.workbench-inspecting body:has(#desktop-toolbar) #word-link-dialog{top:calc(var(--toolbar-height,100px) + var(--project-bar-height,42px) + 18px)!important;height:calc(100dvh - var(--toolbar-height,100px) - var(--project-bar-height,42px) - 18px)!important}
 /* In-page dictionary editing keeps the existing complete form and its validation. */
@@ -198,7 +198,7 @@ html[data-home=false] #example-library .workbench-heading .actions{display:flex;
 #semantic-tree button{display:block;width:100%;text-align:left;border:0;background:transparent;margin:1px 0;overflow-wrap:anywhere}
 #semantic-tree button[aria-pressed=true]{background:var(--light);font-weight:700;border-left:3px solid var(--green)}
 .dictionary-organization label{display:flex;align-items:center;gap:5px;margin:5px 0}
-#dictionary-order{min-width:0;flex:1;width:100%;padding:5px}
+#dictionary-order,#morpheme-order{min-width:0;flex:1;width:100%;padding:5px}
 .semantic-select-row{display:flex;align-items:center;gap:5px}
 .semantic-select-row .lexeme-list-item{flex:1;min-width:0}
 .semantic-choices{max-height:250px;overflow:auto;display:grid;gap:5px}
@@ -216,8 +216,6 @@ html[data-home=false] #timeline-workspace .editable-example .sentence-reading-he
 html[data-home=false] #timeline-workspace .sentence-reading-head .sentence-actions>:is(.sentence-audio,.collaborator-badge){margin:0;max-width:100%;min-width:0;flex-wrap:wrap;gap:4px}
 html[data-home=false] #timeline-workspace .sentence-reading-head .sentence-actions :is(.sentence-audio,.collaborator-badge) :is(button,select){height:auto;min-height:28px;max-width:100%;white-space:normal;overflow-wrap:anywhere;margin:0}
 html[data-home=false] #example-library .entry-head>div{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-html[data-home=false] #example-library .entry-head label:has([data-punctuation-select]){display:inline-flex;align-items:center;gap:5px;margin:0;line-height:1.4;white-space:nowrap}
-html[data-home=false] #example-library .entry-head [data-punctuation-select]{appearance:auto;flex:0 0 14px;width:14px;height:14px;min-height:0;margin:0;padding:0;align-self:center}
 /* Excel mappings keep all controls readable within a compact scrolling dialog. */
 #excel-dialog {width:min(1000px,94vw);max-width:94vw}
 .excel-toolbar {display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0}
@@ -444,7 +442,7 @@ html[data-home=false] .filters{flex-wrap:wrap;gap:8px 20px;align-items:center}
 html[data-home=false] .filters>label{display:inline-flex;align-items:center;gap:8px;min-width:0;max-width:100%;margin:0;line-height:1.5}
 html[data-home=false] .filters>label:has(>select){white-space:nowrap}
 html[data-home=false] .filters>label>select{min-width:0;max-width:100%;margin:0;flex:0 1 auto}
-html[data-home=false] #workspace-toolbar .brief-control{display:inline-flex;align-items:center;gap:6px;margin:0 8px;white-space:nowrap}
+html[data-home=false] #workspace-toolbar .brief-control{display:inline-flex;align-items:center;gap:6px;margin:0 8px;min-height:26px;padding:3px 0;border-block:1px solid transparent;line-height:1.65;white-space:nowrap}
 #link-unit-picker{position:relative;margin:5px 0 12px}
 #link-unit-picker summary{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:5px;padding:8px 10px;cursor:pointer;list-style:none}
 #link-unit-picker summary::after{content:'▾';margin-left:auto;flex:none}
@@ -499,7 +497,7 @@ html[data-home=false] #dictionary-detail .lex-example-footer>button{margin:0}
 
 /* Shared compact sentence media row and dictionary tabs, for every theme. */
 html[data-home=false] .example-media-head{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;margin:8px 0 12px;clear:both;min-width:0}
-html[data-home=false] :is(#example-library,#dictionary-workspace) .editable-example .example-media-head>.ipa{flex:1 1 100px;min-width:0;overflow-wrap:anywhere;margin:0}
+html[data-home=false] :is(#example-library,#dictionary-workspace,#survey-workspace) .editable-example .example-media-head>.ipa{flex:1 1 100px;min-width:0;overflow-wrap:anywhere;margin:0}
 html[data-home=false] .example-media-head>:is(.object-media-controls,.sentence-audio,.collaborator-badge){float:none;flex:0 1 auto;max-width:100%;margin:0;justify-content:flex-end}
 html[data-home=false] .example-media-head>.object-media-controls{margin-left:auto}
 html[data-home=false] .example-media-head select{max-width:min(260px,100%)}
@@ -646,7 +644,7 @@ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .editable-example
 #lexeme-editor #lexeme-form .tag-rows{width:100%;min-width:0}
 #lexeme-editor #lexeme-form .tag-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 #lexeme-editor #lexeme-form .tag-row :is(input,select){flex:1 1 150px;width:auto;min-width:0;margin:0}
-#lexeme-editor #lexeme-form .tag-row input[aria-label="标签说明"]{flex-grow:1.4}
+#lexeme-editor #lexeme-form .tag-row input:is([aria-label="标签说明"],[aria-label="Label description"]){flex-grow:1.4}
 #lexeme-editor #lexeme-form .tag-row button{flex:none;margin:0}
 #synonym-dialog .search-row{display:grid;grid-template-columns:6em minmax(0,1fr) auto;align-items:center;gap:8px}
 #synonym-dialog .search-row :is(input,select){width:100%;min-width:0;margin:0}
@@ -778,7 +776,7 @@ html[data-theme="dawoid"] .tl-block:hover{box-shadow:inset 0 0 0 1px var(--tl-tr
 html[data-theme="dawoid"] .tl-block.selected{outline-color:color-mix(in srgb,var(--tl-track-color) 50%,#fff);background:color-mix(in srgb,var(--tl-track-color) 35%,var(--surface));box-shadow:inset 0 0 0 1px #ffffff35}
 html[data-theme="dawoid"] .tl-block.outside{background:repeating-linear-gradient(135deg,transparent 0 5px,#0003 5px 10px),color-mix(in srgb,var(--tl-track-color) 35%,var(--surface))}
 html[data-theme="dawoid"] .tl-playhead{background:#efcf83}
-html[data-theme="dawoid"] #tl-play[aria-label="暂停"]{color:#9ed3ad;background:#2c4033;border-color:#7ca98a}
+html[data-theme="dawoid"] #tl-play:is([aria-label="暂停"],[aria-label="Pause"]){color:#9ed3ad;background:#2c4033;border-color:#7ca98a}
 html[data-theme="dawoid"] :is(#tl-loop,#tl-mute)[aria-pressed="true"]{background:#57472d;color:#f3d6a1;border-color:#b79a64}
 @media(forced-colors:active){html[data-theme="dawoid"] .tl-block.selected{outline-color:Highlight}}
 
@@ -1019,8 +1017,20 @@ html.brief-mode .editable-example:has(.collaborator-badge:not([hidden]) .sentenc
 html.brief-mode .editable-example:has(.sentence-audio:not([hidden])) .object-media-controls>[data-media-play]{display:none!important}
 html.brief-mode .editable-example:has(.sentence-audio:not([hidden])) .object-media-controls:not(:has(.object-media-speakers:not(:empty))),
 html.brief-mode .editable-example:has(.sentence-audio:not([hidden])):has(.collaborator-badge:not([hidden]) .sentence-brief-names:not(:empty)) .object-media-controls{display:none!important}
-#auto-candidate-actions{display:inline-flex;align-items:center;gap:7px 10px;flex-wrap:wrap;margin-right:auto;min-width:0}
-#auto-link-dialog>.dialog-bottom{align-items:center}
+#auto-candidate-actions{display:contents}
+#auto-link-dialog>.dialog-bottom{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:7px 10px}
+#auto-candidate-actions>label{grid-column:1;grid-row:1}
+#auto-candidate-apply{grid-column:2;grid-row:1;justify-self:start}
+#auto-link-apply{grid-column:3;grid-row:1;justify-self:end}
+#auto-candidate-apply,#auto-link-apply{align-self:stretch;max-width:100%;margin:0}
+#auto-candidate-selection{grid-column:1/-1;grid-row:2;min-width:0;overflow-wrap:anywhere}
+@media(max-width:720px){
+ #auto-link-dialog>.dialog-bottom{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #auto-candidate-actions>label{grid-column:1/-1}
+ #auto-candidate-apply{grid-column:1;grid-row:2;justify-self:stretch}
+ #auto-link-apply{grid-column:2;grid-row:2;justify-self:stretch}
+ #auto-candidate-selection{grid-row:3}
+}
 
 html[data-home=false] dialog.gloss-source-dialog{width:min(640px,94vw);background:var(--surface,var(--paper))}
 .gloss-source-dialog select{display:block;width:100%;margin-top:5px}

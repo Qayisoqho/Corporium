@@ -9,6 +9,12 @@
 .sentence-gloss-row label,.sentence-gloss-row small,.sentence-gloss-row strong {font-family:var(--ui-font,inherit);font-style:normal}
 .sentence-gloss-row select {font-family:var(--gloss-font,inherit);font-style:normal;font-variant-caps:normal}
 .sentence-gloss-row .form {overflow-wrap:anywhere}
+.sentence-gloss-boundaries {display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:8px 0;font-family:var(--ui-font,inherit)}
+.sentence-gloss-boundaries label {display:inline-flex;align-items:center;gap:4px;margin:0}
+.sentence-dictionary-dialog .sentence-gloss-boundaries input {width:auto;margin:0}
+.sentence-analysis-detail {display:block!important;margin-top:6px;overflow-wrap:anywhere}
+.sentence-analysis-detail>div {display:flex;flex-wrap:wrap;gap:12px;align-items:baseline}
+.sentence-analysis-detail small {display:block}
 #intake-source {overflow-wrap:anywhere}
 #intake-wordform {font-family:var(--annotation-font,Junicode);font-style:var(--form-style,italic);font-weight:var(--form-weight,400)}
 #intake-gloss {font-family:var(--gloss-font,Junicode);font-style:normal;font-variant-caps:normal}

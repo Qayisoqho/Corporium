@@ -43,6 +43,8 @@ def prepare(db,dbpath,include_media=False,update=lambda *a:None):
             # This derived read interface is rebuilt from trusted application code,
             # so snapshots retain the existing rejection of supplied SQL views.
             target.execute('DROP VIEW IF EXISTS dictionary_targets');target.commit()
+            import word_analysis_memory
+            word_analysis_memory.drop_triggers(target);target.commit()
         with closing(sqlite3.connect(snapshot)) as source:
             source.row_factory=sqlite3.Row
             all_assets=assets(source);required=set(object_media.backup_assets(source))

@@ -1,4 +1,5 @@
 const inlineDrafts=new Map();
+const inlineOpening=new Map();
 // A hidden draft belongs to the workspace where the user last edited it.
 for(const event of ['pointerdown','focusin'])document.addEventListener(event,e=>{const card=e.target.closest('.editable-example'),d=inlineDrafts.get(card?.dataset.exampleKey);if(d)d.workspace=workspace;},true);
 let inlineDrag=null;
@@ -47,29 +48,49 @@ document.addEventListener('drop',e=>{
  inlineDrag=null;for(const n of document.querySelectorAll('[data-slot-drop]'))delete n.dataset.slotDrop;
 });
 document.addEventListener('dragend',()=>{inlineDrag=null;for(const n of document.querySelectorAll('[data-slot-drop]'))delete n.dataset.slotDrop;});
-function fitInlineTextarea(field){if(!field.getClientRects().length)return;field.style.height='auto';field.style.height=(field.scrollHeight+2)+'px';}
+function fitInlineTextareas(fields){
+ const visible=[...fields].filter(field=>field.isConnected&&field.getClientRects().length);
+ for(const field of visible)field.style.height='auto';
+ const heights=visible.map(field=>field.scrollHeight+2);
+ visible.forEach((field,i)=>{field.style.height=heights[i]+'px';});
+}
+function fitInlineTextarea(field){fitInlineTextareas([field]);}
 document.addEventListener('input',e=>{if(e.target.matches('.editable-example textarea'))fitInlineTextarea(e.target);});
-document.addEventListener('toggle',e=>{if(e.target.matches('.example-notes')&&e.target.open)e.target.querySelectorAll('textarea').forEach(fitInlineTextarea);},true);
-new MutationObserver(records=>{const fields=new Set();for(const record of records)for(const node of record.addedNodes){if(node.nodeType===1){if(node.matches('.editable-example textarea'))fields.add(node);node.querySelectorAll('.editable-example textarea').forEach(el=>fields.add(el));if(node.closest('.editable-example'))node.querySelectorAll('textarea').forEach(el=>fields.add(el));}}fields.forEach(fitInlineTextarea);}).observe(document.body,{subtree:true,childList:true});
+document.addEventListener('toggle',e=>{if(e.target.matches('.example-notes')&&e.target.open)fitInlineTextareas(e.target.querySelectorAll('textarea'));},true);
+new MutationObserver(records=>{const fields=new Set();for(const record of records)for(const node of record.addedNodes){if(node.nodeType===1){if(node.matches('.editable-example textarea'))fields.add(node);node.querySelectorAll('.editable-example textarea').forEach(el=>fields.add(el));if(node.closest('.editable-example'))node.querySelectorAll('textarea').forEach(el=>fields.add(el));}}fitInlineTextareas(fields);}).observe(document.body,{subtree:true,childList:true});
 const inlineKey=(kind,id)=>kind+':'+id;
 const inlineWidth=(value,compact=false)=>Math.max(compact?1:3,Math.min(40,[...value].reduce((n,c)=>n+(c.codePointAt(0)>255?2:1),compact?0:1)));
 const compactWord=w=>phonologicalBoundary(w.form)||!!(w.punctuation&&w.punctuation_form===w.form);
 function inlineWordParts(w,key){return compactWord(w)?[w[key]]:glossEditParts(w[key],key==='gloss');}
 function renderEditableExample(e,kind,id){
-  if(briefMode&&!inlineDrafts.has(inlineKey(kind,id)))return `<section class="editable-example" data-example-kind="${esc(kind)}" data-example-id="${esc(id)}">${briefBody(e,kind)}<div class="inline-tools">${window.CorporiumCodes?.tools(e)||''}</div></section>`;
+  const libraryNumber=kind==='independent'&&Number.isSafeInteger(e.library_number)?` data-library-number="${e.library_number}"`:'';
+  if(briefMode&&!inlineDrafts.has(inlineKey(kind,id)))return `<section class="editable-example"${libraryNumber} data-example-kind="${esc(kind)}" data-example-id="${esc(id)}">${briefBody(e,kind)}<div class="inline-tools">${window.CorporiumCodes?.tools(e)||''}</div></section>`;
   const key=inlineKey(kind,id),d=inlineDrafts.get(key);
-  return `<section class="editable-example" data-example-key="${esc(key)}" data-example-kind="${esc(kind)}" data-example-id="${esc(id)}">${d?inlineStyledFields(d):`${renderBody(e,kind)}<div class="inline-tools"><button type="button" data-inline-start>编辑标注</button><button type="button" data-punctuation-single>应用自动识别标点</button>${window.CorporiumCodes?.tools(e)||''}</div><details class="example-notes"><summary>备注${e.notes?' · 已填写':''}</summary><div class="preserve-lines">${esc(e.notes||'暂无备注')}</div><button type="button" data-inline-start="notes">编辑备注</button></details>`}</section>`;
+  return `<section class="editable-example"${libraryNumber} data-example-key="${esc(key)}" data-example-kind="${esc(kind)}" data-example-id="${esc(id)}">${d?inlineStyledFields(d):(globalThis.CorporiumI18n?.f("3407024b6efc16",()=>[renderBody(e,kind),window.CorporiumCodes?.tools(e)||'',e.notes?(globalThis.CorporiumI18n?.f("e63dee05bdeb2f",()=>[])??' · 已填写'):'',esc(e.notes||(globalThis.CorporiumI18n?.f("087910b2197bcc",()=>[])??'暂无备注'))])??`${renderBody(e,kind)}<div class="inline-tools"><button type="button" data-inline-start>编辑标注</button><button type="button" data-punctuation-single>应用自动识别标点</button>${window.CorporiumCodes?.tools(e)||''}</div><details class="example-notes"><summary>备注${e.notes?' · 已填写':''}</summary><div class="preserve-lines">${esc(e.notes||'暂无备注')}</div><button type="button" data-inline-start="notes">编辑备注</button></details>`)}</section>`;
 }
 function inlineFields(d){
  const b=d.body,values=new Map(d.cells.map(c=>[c.unit_id+'|'+c.layer_id,c.value]));
- function parts(w,i,key){return inlineWordParts(w,key).map((v,j)=>j%2?`<span>${esc(v)}</span>`:`<input class="inline-piece ${key}" data-word="${i}" data-field="${key}" data-part="${j}" value="${esc(v)}" aria-label="第 ${i+1} 词 ${key==='form'?'语素':'标注'} ${Math.floor(j/2)+1}" size="${inlineWidth(v,compactWord(w))}">`).join('');}
- return `<div class="inline-tools"><strong>编辑标注</strong>${window.CorporiumGrammaticality?.editor(d)||''}<button type="button" data-inline-save ${d.saving?'disabled':''}>保存</button><button type="button" data-inline-cancel ${d.saving?'disabled':''}>取消</button><small>已关联标注的手动修改仅用于本句，可在“标注来源”恢复跟随。末尾按 Tab 新增词格；无标注、无分析或关联的明确标点在保存时自动识别，疑似项可保存后预览确认。</small></div><label>IPA<textarea rows="1" class="ipa" data-inline-field="ipa">${esc(b.ipa)}</textarea></label>${inlineSentenceLayers(d,"ipa")}${inlineSlotTools(d)}<div class="words inline-words">${b.words.map((w,i)=>`<div class="word ${compactWord(w)?'compact-symbol':''}" style="--inline-columns:${Math.max(inlineWordParts(w,'form').length,inlineWordParts(w,'gloss').length)};--symbol-columns:${Math.max(inlineWidth(w.form,true),inlineWidth(w.gloss,true))}" data-inline-slot="${esc(d.words[i].id)}"><div class="inline-parts">${parts(w,i,'form')}</div><div class="inline-parts">${parts(w,i,'gloss')}</div>${d.layers.filter(l=>(l.anchor||'word')==='word').map(l=>`<label class="extra-layer" style="font-family:'${esc(validFont(l.font)?l.font:'Junicode')}';font-size:${(l.size||100)/100}em;font-weight:${['bold','bolditalic'].includes(l.style)?700:400};font-style:${['italic','bolditalic'].includes(l.style)?'italic':'normal'};font-variant-caps:${l.style==='small-caps'?'small-caps':'normal'}"><small>${esc(l.name)}${l.visible?'':'（隐藏层）'}</small><input data-inline-layer="${esc(l.id)}" data-inline-unit="${esc(d.words[i].id)}" aria-label="第 ${i+1} 词 ${esc(l.name)}" value="${esc(values.get(d.words[i].id+'|'+l.id)||'')}"></label>`).join('')}</div>`).join('')}</div><label>翻译<textarea rows="1" data-inline-field="translation">${esc(b.translation)}</textarea></label>${inlineSentenceLayers(d,"translation")}<details class="example-notes" ${d.notesOpen?'open':''}><summary>备注</summary><textarea rows="1" data-inline-field="notes" aria-label="例句备注" placeholder="填写研究备注、疑问或待核对事项">${esc(b.notes||'')}</textarea></details>${d.orphaned.length?'<p class="warning">另有旧标注待核对，请保存后打开“附加标注”处理。</p>':''}<p class="inline-error" role="alert">${esc(d.error===d.errorShown?'':d.error||'')}</p>`;
+ function parts(w,i,key){return inlineWordParts(w,key).map((v,j)=>j%2?`<span>${esc(v)}</span>`:(globalThis.CorporiumI18n?.f("5f467cabdd4021",()=>[key,i,key,j,esc(v),i+1,key==='form'?(globalThis.CorporiumI18n?.f("c12f3d5ac78da5",()=>[])??'语素'):(globalThis.CorporiumI18n?.f("a22e2bf278f503",()=>[])??'标注'),Math.floor(j/2)+1,inlineWidth(v,compactWord(w))])??`<input class="inline-piece ${key}" data-word="${i}" data-field="${key}" data-part="${j}" value="${esc(v)}" aria-label="第 ${i+1} 词 ${key==='form'?'语素':'标注'} ${Math.floor(j/2)+1}" size="${inlineWidth(v,compactWord(w))}">`)).join('');}
+ return (globalThis.CorporiumI18n?.f("4044150baed104",()=>[window.CorporiumGrammaticality?.editor(d)||'',d.saving?'disabled':'',d.saving?'disabled':'',esc(b.ipa),inlineSentenceLayers(d,"ipa"),inlineSlotTools(d),b.words.map((w,i)=>`<div class="word ${compactWord(w)?'compact-symbol':''}" style="--inline-columns:${Math.max(inlineWordParts(w,'form').length,inlineWordParts(w,'gloss').length)};--symbol-columns:${Math.max(inlineWidth(w.form,true),inlineWidth(w.gloss,true))}" data-inline-slot="${esc(d.words[i].id)}"><div class="inline-parts">${parts(w,i,'form')}</div><div class="inline-parts">${parts(w,i,'gloss')}</div>${d.layers.filter(l=>(l.anchor||'word')==='word').map(l=>(globalThis.CorporiumI18n?.f("e349012e00379c",()=>[esc(validFont(l.font)?l.font:'Junicode'),(l.size||100)/100,['bold','bolditalic'].includes(l.style)?700:400,['italic','bolditalic'].includes(l.style)?'italic':'normal',l.style==='small-caps'?'small-caps':'normal',esc(l.name),l.visible?'':(globalThis.CorporiumI18n?.f("485c7a885c224f",()=>[])??'（隐藏层）'),esc(l.id),esc(d.words[i].id),i+1,esc(l.name),esc(values.get(d.words[i].id+'|'+l.id)||'')])??`<label class="extra-layer" style="font-family:'${esc(validFont(l.font)?l.font:'Junicode')}';--layer-scale:${(l.size||100)/100};font-size:calc(.9375rem * var(--layer-scale));font-weight:${['bold','bolditalic'].includes(l.style)?700:400};font-style:${['italic','bolditalic'].includes(l.style)?'italic':'normal'};font-variant-caps:${l.style==='small-caps'?'small-caps':'normal'}"><small>${esc(l.name)}${l.visible?'':'（隐藏层）'}</small><input data-inline-layer="${esc(l.id)}" data-inline-unit="${esc(d.words[i].id)}" aria-label="第 ${i+1} 词 ${esc(l.name)}" value="${esc(values.get(d.words[i].id+'|'+l.id)||'')}"></label>`)).join('')}</div>`).join(''),esc(b.translation),inlineSentenceLayers(d,"translation"),d.notesOpen?'open':'',esc(b.notes||''),d.orphaned.length?(globalThis.CorporiumI18n?.f("bbff40d9d02cac",()=>[])??'<p class="warning">另有旧标注待核对，请保存后打开“附加标注”处理。</p>'):'',esc(d.error===d.errorShown?'':d.error||'')])??`<div class="inline-tools"><strong>编辑标注</strong>${window.CorporiumGrammaticality?.editor(d)||''}<button type="button" data-inline-save ${d.saving?'disabled':''}>保存</button><button type="button" data-inline-cancel ${d.saving?'disabled':''}>取消</button><small>已关联标注的手动修改仅用于本句，可在“标注来源”恢复跟随。末尾按 Tab 新增词格；无标注、无分析或关联的明确标点在保存时自动识别，疑似项可保存后预览确认。</small></div><label>IPA<textarea rows="1" class="ipa" data-inline-field="ipa">${esc(b.ipa)}</textarea></label>${inlineSentenceLayers(d,"ipa")}${inlineSlotTools(d)}<div class="words inline-words">${b.words.map((w,i)=>`<div class="word ${compactWord(w)?'compact-symbol':''}" style="--inline-columns:${Math.max(inlineWordParts(w,'form').length,inlineWordParts(w,'gloss').length)};--symbol-columns:${Math.max(inlineWidth(w.form,true),inlineWidth(w.gloss,true))}" data-inline-slot="${esc(d.words[i].id)}"><div class="inline-parts">${parts(w,i,'form')}</div><div class="inline-parts">${parts(w,i,'gloss')}</div>${d.layers.filter(l=>(l.anchor||'word')==='word').map(l=>`<label class="extra-layer" style="font-family:'${esc(validFont(l.font)?l.font:'Junicode')}';--layer-scale:${(l.size||100)/100};font-size:calc(.9375rem * var(--layer-scale));font-weight:${['bold','bolditalic'].includes(l.style)?700:400};font-style:${['italic','bolditalic'].includes(l.style)?'italic':'normal'};font-variant-caps:${l.style==='small-caps'?'small-caps':'normal'}"><small>${esc(l.name)}${l.visible?'':'（隐藏层）'}</small><input data-inline-layer="${esc(l.id)}" data-inline-unit="${esc(d.words[i].id)}" aria-label="第 ${i+1} 词 ${esc(l.name)}" value="${esc(values.get(d.words[i].id+'|'+l.id)||'')}"></label>`).join('')}</div>`).join('')}</div><label>翻译<textarea rows="1" data-inline-field="translation">${esc(b.translation)}</textarea></label>${inlineSentenceLayers(d,"translation")}<details class="example-notes" ${d.notesOpen?'open':''}><summary>备注</summary><textarea rows="1" data-inline-field="notes" aria-label="例句备注" placeholder="填写研究备注、疑问或待核对事项">${esc(b.notes||'')}</textarea></details>${d.orphaned.length?'<p class="warning">另有旧标注待核对，请保存后打开“附加标注”处理。</p>':''}<p class="inline-error" role="alert">${esc(d.error===d.errorShown?'':d.error||'')}</p>`);
 }
-function repaintInline(key,except=null,visibleOnly=false){const d=inlineDrafts.get(key);if(!d)return;let painted=false;for(const card of document.querySelectorAll('.editable-example'))if(card!==except&&card.dataset.exampleKey===key&&(!visibleOnly||card.getClientRects().length)){card.innerHTML=inlineStyledFields(d);inlineSelection(card,d);painted=true;}if(painted)d.errorShown=d.error;}
-// Cached panels can contain an older rendering of the same shared draft.
-window.corporiumSyncInlineDrafts=()=>{for(const key of inlineDrafts.keys())repaintInline(key,null,true);};
-async function refreshExampleViews(){
+function repaintInline(key,except=null,visibleOnly=false){const d=inlineDrafts.get(key);if(!d)return;let painted=false;for(const card of document.querySelectorAll('.editable-example'))if(card!==except&&card.dataset.exampleKey===key&&(!visibleOnly||card.getClientRects().length)){delete card.dataset.inlineRefresh;card.innerHTML=inlineStyledFields(d);inlineSelection(card,d);painted=true;}if(painted)d.errorShown=d.error;}
+function clearInlineEditView(card){
+ if(!card.querySelector('[data-inline-save]'))return false;
+ card.dataset.inlineRefresh='true';
+ card.innerHTML=(globalThis.CorporiumI18n?.f("3e27a10e05d3bd",()=>[])??'<p class="muted" role="status">正在更新例句显示…</p>');
+ return true;
+}
+function finishInlineDraft(key){
+ inlineOpening.delete(key);inlineDrafts.delete(key);
+ // Hidden pages retain DOM as well as data. Retire every old editor before an
+ // asynchronous history/read request gives navigation a chance to reveal it.
+ for(const card of document.querySelectorAll('.editable-example'))if(card.dataset.exampleKey===key)clearInlineEditView(card);
  window.corporiumInvalidateViews?.();
+}
+// Cached panels can contain an older rendering of the same shared draft.
+window.corporiumSyncInlineDrafts=()=>{let stale=false;for(const card of document.querySelectorAll('.editable-example'))if(card.getClientRects().length&&!inlineDrafts.has(card.dataset.exampleKey))stale=clearInlineEditView(card)||stale;if(stale)window.corporiumInvalidateViews?.();for(const key of inlineDrafts.keys())repaintInline(key,null,true);};
+async function refreshExampleViews(options={}){
+ if(options.invalidate!==false)window.corporiumInvalidateViews?.();
  if(workspace==='corpus'){await loadTexts();await search();}
  if(workspace==='grammar')await loadGrammar();
  if(workspace==='library')await loadLibrary();
@@ -93,24 +114,28 @@ document.addEventListener('click',async e=>{
   if(button.hasAttribute('data-inline-start')){
    if(await window.corporiumLeaveCodes?.()===false)return;
    if(inlineDrafts.has(key)){repaintInline(key);return;}
-   const owner=activeLanguage;
-   button.disabled=true;const data=await api('annotations?'+new URLSearchParams({kind:card.dataset.exampleKind,id:card.dataset.exampleId}));
-   if(owner!==activeLanguage||!card.isConnected){button.disabled=false;return;}
-   if(inlineDrafts.has(key)){repaintInline(key);return;}
-   const d={...data,workspace,body:structuredClone(data.body),before:structuredClone(data.cells),cells:structuredClone(data.cells),dirty:false,notesOpen:button.dataset.inlineStart==='notes'};inlineDrafts.set(key,d);repaintInline(key);return;
+   const owner=activeLanguage,origin=workspace,opening={};inlineOpening.set(key,opening);button.disabled=true;
+   try{
+    const data=await api('annotations?'+new URLSearchParams({kind:card.dataset.exampleKind,id:card.dataset.exampleId}));
+    if(inlineOpening.get(key)!==opening||owner!==activeLanguage||workspace!==origin||!card.isConnected)return;
+    if(inlineDrafts.has(key)){repaintInline(key);return;}
+    const d={...data,workspace,body:structuredClone(data.body),before:structuredClone(data.cells),cells:structuredClone(data.cells),dirty:false,notesOpen:button.dataset.inlineStart==='notes'};inlineDrafts.set(key,d);repaintInline(key);
+   }catch(error){if(inlineOpening.get(key)===opening&&owner===activeLanguage&&workspace===origin&&card.isConnected)throw error;}
+   finally{if(inlineOpening.get(key)===opening)inlineOpening.delete(key);button.disabled=false;}
+   return;
   }
   const d=inlineDrafts.get(key);if(!d||d.saving)return;
-  if(button.hasAttribute('data-inline-cancel')){if(d.dirty&&!(d.isNew&&sentenceDraftEmpty(d))&&!await corporiumConfirm('放弃这条例句尚未保存的修改？'))return;inlineDrafts.delete(key);d.host?.remove();await d.onCancel?.();await refreshExampleViews();return;}
+  if(button.hasAttribute('data-inline-cancel')){if(d.dirty&&!(d.isNew&&sentenceDraftEmpty(d))&&!await corporiumConfirm((globalThis.CorporiumI18n?.f("ec0a7463fb2ec1",()=>[])??'放弃这条例句尚未保存的修改？')))return;finishInlineDraft(key);d.host?.remove();await d.onCancel?.();await refreshExampleViews({invalidate:false});return;}
   if(d.splitSpaces)inlineSplitSpaces(d);
   // Send cleared existing slots as well: the server removes empty pairs atomically,
   // preserving their old identities and references for undo.
   d.saving=true;d.error='';repaintInline(key);
   let saved;
-  try{saved=await originalApi(d.isNew?'sentence-create':'inline-save',{kind:d.kind,id:d.id,text_id:d.text_id,targets:d.targets,survey_node:d.survey_node,survey_version:d.survey_version,revision:d.revision,before:d.before,layers:d.layers,body:d.body,slot_ids:d.words.map(w=>w.id),delete_confirmed:!!d.deleteConfirmed,cells:d.cells.filter(c=>(c.unit_id==='@sentence'||d.words.some(w=>w.id===c.unit_id))&&d.layers.some(l=>l.id===c.layer_id)),_language:d.owner_language});}
+  try{saved=await originalApi(d.isNew?'sentence-create':'inline-save',{kind:d.kind,id:d.id,text_id:d.text_id,targets:d.targets,survey_node:d.survey_node,survey_version:d.survey_version,example_group:d.example_group,example_group_token:d.example_group_token,revision:d.revision,before:d.before,layers:d.layers,body:d.body,slot_ids:d.words.map(w=>w.id),delete_confirmed:!!d.deleteConfirmed,cells:d.cells.filter(c=>(c.unit_id==='@sentence'||d.words.some(w=>w.id===c.unit_id))&&d.layers.some(l=>l.id===c.layer_id)),_language:d.owner_language});}
   catch(error){d.error=error.message;d.saving=false;repaintInline(key);return;}
-  inlineDrafts.delete(key);d.host?.remove();
-  try{await d.onSaved?.(saved);await window.corporiumRefreshUndoState();await refreshExampleViews();}
-  catch(error){window.corporiumInvalidateViews?.();$('notice').textContent='例句已保存，但界面刷新失败：'+error.message+'。请刷新页面查看已保存内容。';}
+  finishInlineDraft(key);d.host?.remove();
+  try{await d.onSaved?.(saved);await window.corporiumRefreshUndoState();await refreshExampleViews({invalidate:false});}
+  catch(error){window.corporiumInvalidateViews?.();$('notice').textContent=(globalThis.CorporiumI18n?.f("a5f2790f965cdc",()=>[error.message])??'例句已保存，但界面刷新失败：'+error.message+'。请刷新页面查看已保存内容。');}
  }catch(error){button.disabled=false;const msg=document.createElement('p');msg.className='inline-error';msg.textContent=error.message;card.append(msg);}
 });
 window.addEventListener('beforeunload',e=>{if([...inlineDrafts.values()].some(d=>d.saving||(d.dirty&&!(d.isNew&&sentenceDraftEmpty(d))))){e.preventDefault();e.returnValue='';}});
@@ -118,10 +143,10 @@ window.addEventListener('beforeunload',e=>{if([...inlineDrafts.values()].some(d=
 
 function inlineStyledFields(d){const m=JSON.parse(languageList.find(l=>l.id===d.language_id)?.metadata||'{}');const ipa=validFont(m.ipa_font)?m.ipa_font:'IPAPANNEW',annotation=validFont(m.annotation_font)?m.annotation_font:'Junicode';return `<div class="language-body" ${d.saving?'inert':''} style="${languageTypography(m)}">${inlineFields(d)}</div>`;}
 
-function inlineSentenceLayers(d,anchor){return d.layers.filter(l=>l.anchor===anchor).map(l=>`<label>${esc(l.name)}${l.visible?'':'（隐藏层）'}<textarea rows="1" data-inline-layer="${esc(l.id)}" data-inline-unit="@sentence" style="${layerStyle(l)}">${esc(d.cells.find(c=>c.unit_id==='@sentence'&&c.layer_id===l.id)?.value||'')}</textarea></label>`).join('');}
+function inlineSentenceLayers(d,anchor){return d.layers.filter(l=>l.anchor===anchor).map(l=>`<label>${esc(l.name)}${l.visible?'':(globalThis.CorporiumI18n?.f("a324d7c89aa886",()=>[])??'（隐藏层）')}<textarea rows="1" data-inline-layer="${esc(l.id)}" data-inline-unit="@sentence" style="${layerStyle(l)}">${esc(d.cells.find(c=>c.unit_id==='@sentence'&&c.layer_id===l.id)?.value||'')}</textarea></label>`).join('');}
 
-function inlineSlotTools(d){const i=d.words.findIndex(w=>w.id===d.selectedSlot);return `<div class="slot-tools" role="group" aria-label="本句词格操作"><label class="slot-drag-toggle"><input type="checkbox" data-slot-drag ${d.dragEnabled?'checked':''}> 拖动排序</label><label class="slot-drag-toggle"><input type="checkbox" data-slot-split ${d.splitSpaces?'checked':''}> 保存时按语素行空格分词（仅本次编辑）</label><span data-slot-selection>${i<0?'请选择词格':`已选第 ${i+1} 个词格`}</span><button type="button" data-slot-transfer ${d.isNew||i<0?'disabled':''}>跨句转移</button><button type="button" data-slot-add>末尾添加</button><button type="button" data-slot-action="insert" ${i<0?'disabled':''}>后方插入</button><button type="button" data-slot-action="merge" title="与后一个词格直接拼接词形和标注；附加层用空格连接，保存后可撤销" ${i<0||i===d.words.length-1?'disabled':''}>向后合并词格</button><button type="button" data-slot-action="delete" ${i<0?'disabled':''}>删除词格</button></div>`;}
-function inlineSelection(card,d){const i=d.words.findIndex(w=>w.id===d.selectedSlot);for(const el of card.querySelectorAll('[data-inline-slot]')){el.classList.toggle('slot-selected',d.dragEnabled?d.selectedSlots?.has(el.dataset.inlineSlot):el.dataset.inlineSlot===d.selectedSlot);el.draggable=!!d.dragEnabled;for(const input of el.querySelectorAll('input'))input.readOnly=!!d.dragEnabled;};const transfer=card.querySelector('[data-slot-transfer]');if(transfer)transfer.disabled=d.isNew|| (d.dragEnabled?!d.selectedSlots?.size:i<0);const label=card.querySelector('[data-slot-selection]');if(label)label.textContent=d.dragEnabled&&d.selectedSlots?.size>1?`已选 ${d.selectedSlots.size} 个词格`:i<0?'请选择词格':`已选第 ${i+1} 个词格`;for(const button of card.querySelectorAll('[data-slot-action]'))button.disabled=(d.dragEnabled&&d.selectedSlots?.size>1)||i<0||(button.dataset.slotAction==='merge'&&i===d.words.length-1);}
+function inlineSlotTools(d){const i=d.words.findIndex(w=>w.id===d.selectedSlot);return (globalThis.CorporiumI18n?.f("dea3c16ceda7cc",()=>[d.dragEnabled?'checked':'',d.splitSpaces?'checked':'',i<0?(globalThis.CorporiumI18n?.f("6e0bf08ede7ffe",()=>[])??'请选择词格'):(globalThis.CorporiumI18n?.f("14e68406dd6c09",()=>[i+1])??`已选第 ${i+1} 个词格`),d.isNew||i<0?'disabled':'',i<0?'disabled':'',i<0||i===d.words.length-1?'disabled':'',i<0?'disabled':''])??`<div class="slot-tools" role="group" aria-label="本句词格操作"><label class="slot-drag-toggle"><input type="checkbox" data-slot-drag ${d.dragEnabled?'checked':''}> 拖动排序</label><label class="slot-drag-toggle"><input type="checkbox" data-slot-split ${d.splitSpaces?'checked':''}> 保存时按语素行空格分词（仅本次编辑）</label><span data-slot-selection>${i<0?'请选择词格':`已选第 ${i+1} 个词格`}</span><button type="button" data-slot-transfer ${d.isNew||i<0?'disabled':''}>跨句转移</button><button type="button" data-slot-add>末尾添加</button><button type="button" data-slot-action="insert" ${i<0?'disabled':''}>后方插入</button><button type="button" data-slot-action="merge" title="与后一个词格直接拼接词形和标注；附加层用空格连接，保存后可撤销" ${i<0||i===d.words.length-1?'disabled':''}>向后合并词格</button><button type="button" data-slot-action="delete" ${i<0?'disabled':''}>删除词格</button></div>`);}
+function inlineSelection(card,d){const i=d.words.findIndex(w=>w.id===d.selectedSlot);for(const el of card.querySelectorAll('[data-inline-slot]')){el.classList.toggle('slot-selected',d.dragEnabled?d.selectedSlots?.has(el.dataset.inlineSlot):el.dataset.inlineSlot===d.selectedSlot);el.draggable=!!d.dragEnabled;for(const input of el.querySelectorAll('input'))input.readOnly=!!d.dragEnabled;};const transfer=card.querySelector('[data-slot-transfer]');if(transfer)transfer.disabled=d.isNew|| (d.dragEnabled?!d.selectedSlots?.size:i<0);const label=card.querySelector('[data-slot-selection]');if(label)label.textContent=d.dragEnabled&&d.selectedSlots?.size>1?(globalThis.CorporiumI18n?.f("cb18c1555e2435",()=>[d.selectedSlots.size])??`已选 ${d.selectedSlots.size} 个词格`):i<0?(globalThis.CorporiumI18n?.f("ad0e68e9164b01",()=>[])??'请选择词格'):(globalThis.CorporiumI18n?.f("a6def35721262a",()=>[i+1])??`已选第 ${i+1} 个词格`);for(const button of card.querySelectorAll('[data-slot-action]'))button.disabled=(d.dragEnabled&&d.selectedSlots?.size>1)||i<0||(button.dataset.slotAction==='merge'&&i===d.words.length-1);}
 for(const event of ['focusin','click'])document.addEventListener(event,e=>{const slot=e.target.closest('[data-inline-slot]'),card=slot?.closest('.editable-example'),d=inlineDrafts.get(card?.dataset.exampleKey);if(!d||d.saving||d.dragEnabled)return;d.selectedSlot=slot.dataset.inlineSlot;inlineSelection(card,d);});
 function inlineSlotEmpty(d,i){const w=d.body.words[i],id=d.words[i]?.id;return !!w&&!w.form.trim()&&!w.gloss.trim()&&!d.words[i].protected&&!w.redup_id&&!w.morph_groups?.length&&!w.infix_confirmation&&!d.cells.some(c=>c.unit_id===id&&c.value.trim());}
 function inlineFocus(card,i){const el=card.querySelectorAll('[data-inline-slot]')[i]?.querySelector('.inline-piece.form');el?.focus();}
@@ -146,7 +171,7 @@ document.addEventListener('click',async e=>{
  const id=d.selectedSlot,i=d.words.findIndex(w=>w.id===id),action=button.dataset.slotAction;if(i<0)return;
  if(action==='insert')return inlineInsert(card,d,i+1);
  if(action==='merge'){if(inlineMerge(d,i)){repaintInline(card.dataset.exampleKey);inlineFocus(card,i);}return;}
- if(action==='delete'){if(!inlineSlotEmpty(d,i)){if(!await corporiumConfirm('删除这个词格及其附加标注？已有引用将保留为待核对记录，保存后可撤销。'))return;d.deleteConfirmed=true;}inlineRemove(d,i);repaintInline(card.dataset.exampleKey);return;}
+ if(action==='delete'){if(!inlineSlotEmpty(d,i)){if(!await corporiumConfirm((globalThis.CorporiumI18n?.f("6e4c6609d433c7",()=>[])??'删除这个词格及其附加标注？已有引用将保留为待核对记录，保存后可撤销。')))return;d.deleteConfirmed=true;}inlineRemove(d,i);repaintInline(card.dataset.exampleKey);return;}
 
 });
 document.addEventListener('keydown',e=>{
@@ -176,9 +201,9 @@ function inlineSplitSpaces(d){
  const plans=[];
  for(let i=0;i<d.words.length;i++){
   const w=d.body.words[i],parts=w.form.trim().split(/\s+/u);if(parts.length<2)continue;
-  if(d.words[i].protected||w.redup_id||w.morph_groups?.length||w.infix_confirmation||d.cells.some(c=>c.unit_id===d.words[i].id&&c.value.trim()))throw Error('第 '+(i+1)+' 个词格含关联、分析或附加标注，请先处理这些内容再按空格拆分。');
+  if(d.words[i].protected||w.redup_id||w.morph_groups?.length||w.infix_confirmation||d.cells.some(c=>c.unit_id===d.words[i].id&&c.value.trim()))throw Error((globalThis.CorporiumI18n?.f("d39f265727bd31",()=>[i+1])??'第 '+(i+1)+' 个词格含关联、分析或附加标注，请先处理这些内容再按空格拆分。'));
   const gloss=w.gloss.trim()?w.gloss.trim().split(/\s+/u):[];
-  if(gloss.length>1&&gloss.length!==parts.length)throw Error('第 '+(i+1)+' 个词格的语素与标注分词数量不一致，请调整标注中的空格后再保存。');
+  if(gloss.length>1&&gloss.length!==parts.length)throw Error((globalThis.CorporiumI18n?.f("d765818eaf89ae",()=>[i+1])??'第 '+(i+1)+' 个词格的语素与标注分词数量不一致，请调整标注中的空格后再保存。'));
   plans.push({i,words:parts.map((form,n)=>({form,gloss:gloss[n]||''}))});
  }
  for(const p of plans.reverse()){d.body.words.splice(p.i,1,...p.words);d.words.splice(p.i+1,0,...p.words.slice(1).map(()=>({id:'new:'+crypto.randomUUID(),protected:false})));d.dirty=true;}

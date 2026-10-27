@@ -98,6 +98,22 @@ class DictionaryReplaceTests(unittest.TestCase):
         self.assertEqual(after['usages'][0]['pos'],before['usages'][0]['pos'])
         self.assertEqual(after['usages'][0]['senses'][0]['definition'],'new')
 
+    def test_writing_type_covers_word_components_and_morphemes_without_changing_other_types(self):
+        a=self.call('/api/writing-save',dict(name='Script A',font='Junicode'))[1]['id']
+        b=self.call('/api/writing-save',dict(name='Script B',font='Junicode'))[1]['id']
+        payload=dict(orthographies=[dict(label='Script A',text='old',font='Junicode',type_id=a),dict(label='Script B',text='old',font='Junicode',type_id=b)],
+                     word_structure=dict(analyses=[dict(components=[dict(form='part',writings=[dict(type_id=a,text='old'),dict(type_id=b,text='old')])])]))
+        code,x=self.call('/api/lexeme-save',dict(headword='word',body=payload));self.assertEqual(code,200,x)
+        args,p=self.preview(field='writing',writing_type=a);self.assertEqual(len(p['changes']),2);self.assertFalse(p['blocked']);self.assertEqual(self.apply(args,p)[0],200)
+        after=self.call('/api/lexeme?id='+x['id'])[1]['body'];self.assertEqual([o['text'] for o in after['orthographies']],['new','old'])
+        self.assertEqual([o['text'] for o in after['word_structure']['analyses'][0]['components'][0]['writings']],['new','old'])
+        self.assertEqual(self.undo()[0],200);self.assertEqual(self.call('/api/lexeme?id='+x['id'])[1]['body'],x['body'])
+        m=self.morph(writings=[dict(type_id=a,text='old'),dict(type_id=b,text='old')])
+        args,p=self.preview(kind='morpheme',field='writing',writing_type=b);self.assertEqual(len(p['changes']),1);self.assertEqual(self.apply(args,p)[0],200)
+        self.assertEqual([w['text'] for w in self.call('/api/morpheme?id='+m['id'])[1]['body']['writings']],['old','new'])
+        foreign=self.call('/api/save-language',dict(name='Other',metadata={}))[1]['id']
+        self.assertEqual(self.call('/api/dictionary-replace-preview',{**args,'_language':foreign})[0],400)
+
     def test_search_scope_remains_fixed_during_individual_replacement(self):
         x=self.simple(notes='old old')
         args,p=self.preview(scope='search',query='old old')

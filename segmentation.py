@@ -4,6 +4,9 @@ import re
 import uuid
 
 TYPES=('circumfix','root','stem','unspecified')
+# All separators recognized in a form, including reduplication and infix scope.
+FORM_BOUNDARIES='-=+~'
+FORM_MARKERS=FORM_BOUNDARIES+'<>'
 
 
 def split_parts(text,tilde=True):
@@ -14,7 +17,7 @@ def split_parts(text,tilde=True):
         elif not square:
             if c=='<':angle+=1
             elif c=='>':angle=max(0,angle-1)
-            elif c in ('-=+~' if tilde else '-=+') and not angle:
+            elif c in (FORM_BOUNDARIES if tilde else FORM_BOUNDARIES.replace('~','')) and not angle:
                 parts.append((text[start:i],start,text[i]));start=i+1
     parts.append((text[start:],start,''))
     return parts

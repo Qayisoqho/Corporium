@@ -40,6 +40,7 @@ class Session:
         self.db=db;self.changed=db.total_changes;self.owners=OrderedDict();self.bytes=0
         self.rendered=OrderedDict();self.render_bytes=0
         self.export_cache=OrderedDict();self.export_bytes=0
+        self.export_analysis=None
         self.labels=OrderedDict();self.label_bytes=0
         self.fingerprints=OrderedDict();self.fingerprint_bytes=0
         self.stamps={}
@@ -307,11 +308,14 @@ def export_body(db,kind,row):
 def export_word_map(db,eid):
     import corpus
     s=session(db);saved=s.export_cache.get(eid)
-    if saved:s.export_cache.move_to_end(eid);return json.loads(saved)
+    # Export consumers only read this private map. Decoding the complete map
+    # again for every unit/segment multiplied work by the words per sentence.
+    if saved is not None:s.export_cache.move_to_end(eid);return saved[0]
     row=db.execute('SELECT body FROM entries WHERE id=?',(eid,)).fetchone()
     result={}
     if row:
-        body=corpus.analyze(load(db,'corpus',eid,row['body'],metadata=False))
+        if s.export_analysis is None:s.export_analysis=corpus.WordAnalysisCache()
+        body=corpus.analyze(load(db,'corpus',eid,row['body'],metadata=False),cache=s.export_analysis)
         units=[dict(r) for r in db.execute('SELECT * FROM corpus_units WHERE entry_id=? AND active=1',(eid,))]
         positions={u['id']:u['position'] for u in units if u['kind']=='word'}
         for u in units:
@@ -319,11 +323,12 @@ def export_word_map(db,eid):
             if not 0<=i<len(body['words']):continue
             w=body['words'][i];m=w if u['kind']=='word' else w['morphemes'][u['position']] if 0<=u['position']<len(w['morphemes']) else None
             if m:result[u['id']]=dict(gloss=m['gloss'],segment={**m,'snapshot':{k:w[k] for k in ('form','gloss')}} if u['kind']!='word' else None)
-    saved=encoded(result);size=len(saved.encode())
+    # Include Python object overhead, rather than counting serialized bytes only.
+    size=1024+8*len(encoded(result).encode())
     if size<=4*1024**2:
         while s.export_cache and (len(s.export_cache)>=64 or s.export_bytes+size>4*1024**2):
-            _,old=s.export_cache.popitem(last=False);s.export_bytes-=len(old.encode())
-        s.export_cache[eid]=saved;s.export_bytes+=size
+            _,(_,old_size)=s.export_cache.popitem(last=False);s.export_bytes-=old_size
+        s.export_cache[eid]=(result,size);s.export_bytes+=size
     return result
 
 

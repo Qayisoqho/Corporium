@@ -54,6 +54,8 @@ def restore(source, destination):
             server.lexicon.validate_links(db)
             server.timeline.hierarchy.validate(db)
             server.grammar_survey.validate(db)
+            server.example_groups.validate(db)
+            server.example_numbering.reconcile(db)
             server.fieldwork_notes.validate(db)
             server.code_switching.validate(db)
             server.code_switching.rebuild(db)

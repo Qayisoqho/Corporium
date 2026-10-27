@@ -78,3 +78,16 @@ class HomophoneTests(unittest.TestCase):
         result=self.call('/api/homophones?language=ordos&q=r04')[1]
         self.assertEqual((result['total'],result['review_total']),(1,0))
 
+    def test_review_count_keeps_record_missing_selected_writing_without_inventing_text(self):
+        han=self.call('/api/writing-save',dict(name='汉字',font='Junicode'))[1]
+        roman=self.call('/api/writing-save',dict(name='转写',font='Junicode'))[1]
+        m=self.call('/api/morpheme-save',dict(form='ma',body=dict(gloss='麻',writings=[dict(type_id=roman['id'],text='ma')])))[1]
+        before=self.call('/api/morpheme?id='+m['id'])[1]
+        result=self.call('/api/homophones?language=ordos&writing='+han['id'])[1]
+        self.assertEqual((result['review_total'],len(result['review'])),(1,1))
+        row=result['review'][0]
+        self.assertEqual(row['identity'],m['id'])
+        self.assertEqual(row['writings'],[])
+        self.assertIn('缺少读音',row['reason'])
+        self.assertEqual(self.call('/api/morpheme?id='+m['id'])[1],before)
+

@@ -77,3 +77,37 @@ class AnnotationTests(unittest.TestCase):
         self.assertEqual(code,200,r);self.assertEqual(self.call('/api/annotations?kind=corpus&id='+e['id'])[1]['cells'],[])
         self.assertEqual(self.undo()[0],200)
         self.assertEqual(len(self.call('/api/annotations?kind=corpus&id='+e['id'])[1]['orphaned']),1)
+
+    def test_layer_order_keeps_cells_identity_exchange_and_undo(self):
+        e=self.seed();first=self.layer();self.annotate('corpus',e,first)
+        for name,anchor in [('IPA附行','ipa'),('翻译附行','translation')]:
+            self.assertEqual(self.call('/api/layer-save',dict(name=name,anchor=anchor,font='Junicode',position=0))[0],200)
+        rows=self.call('/api/layers?language=ordos')[1];original=[r['id'] for r in rows]
+        cells=self.call('/api/annotations?kind=corpus&id='+e['id'])[1]['cells']
+        order=list(reversed(original));body=dict(order=order,snapshot=[dict(id=r['id'],revision=r['revision']) for r in rows])
+        code,result=self.call('/api/layer-order',body);self.assertEqual(code,200,result)
+        self.assertEqual([r['id'] for r in result['layers']],order)
+        self.assertEqual([r['position'] for r in result['layers']],list(range(3)))
+        self.assertEqual(self.call('/api/annotations?kind=corpus&id='+e['id'])[1]['cells'],cells)
+        self.assertEqual(self.call('/api/layer-order',body)[0],400)
+        exported=self.call('/api/export-language?language=ordos')[1]
+        self.assertTrue(all(l['id'] in order for l in exported['annotation_layers']))
+        self.assertEqual(self.undo()[0],200)
+        self.assertEqual([r['id'] for r in self.call('/api/layers?language=ordos')[1]],original)
+        state=self.call('/api/undo-state')[1]
+        self.assertEqual(self.call('/api/redo',dict(generation=state['generation']))[0],200)
+        self.assertEqual([r['id'] for r in self.call('/api/layers?language=ordos')[1]],order)
+
+    def test_layer_order_scope_snapshot_and_invalid_permutations(self):
+        one=self.layer();self.assertEqual(self.call('/api/layer-save',dict(name='第二层',font='Junicode'))[0],200)
+        other=self.call('/api/save-language',dict(name='Other',metadata={}))[1]['id']
+        foreign=self.call('/api/layer-save',dict(name='Other layer',font='Junicode',_language=other))[1]['id']
+        rows=self.call('/api/layers?language=ordos')[1];snapshot=[dict(id=r['id'],revision=r['revision']) for r in rows];order=[r['id'] for r in rows]
+        for invalid in ([],order[:1],[order[0]]*2,order+[foreign],[foreign,order[0]],None,[{},order[0]]):
+            code,result=self.call('/api/layer-order',dict(order=invalid,snapshot=snapshot));self.assertEqual(code,400,result)
+        for action in ('layer-save','layer-delete'):
+            self.assertEqual(self.call('/api/'+action,{**one,'_language':other,'confirmed':True})[0],400)
+        self.assertEqual(self.call('/api/layer-order',dict(order=order[::-1],snapshot=snapshot,_language=other))[0],400)
+        self.assertEqual(self.call('/api/layer-save',{**rows[0],'name':'Changed'})[0],200)
+        self.assertEqual(self.call('/api/layer-order',dict(order=order[::-1],snapshot=snapshot))[0],400)
+        self.assertEqual([r['id'] for r in self.call('/api/layers?language=ordos')[1]],order)

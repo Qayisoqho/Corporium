@@ -39,8 +39,11 @@ def resolve(dbpath,asset):
     if asset['storage']=='missing' or not asset['path']:raise ValueError('媒体尚未定位，请使用换源选择媒体文件')
     path=Path(asset['path'])
     if asset['storage']=='copy':
-        root=(Path(dbpath).parent/'media').resolve();path=(Path(dbpath).parent/path).resolve()
-        if not path.is_relative_to(root):raise ValueError('项目媒体路径无效')
+        base=Path(dbpath).resolve().parent
+        roots=[(base/'media').resolve()]
+        if base.name=='data':roots.append((base.parent/'media'/'recordings').resolve())
+        path=(base/path).resolve()
+        if not any(path.is_relative_to(root) for root in roots):raise ValueError('项目媒体路径无效')
     if not path.is_file():raise ValueError('媒体文件已移动或不存在，请使用换源重新定位')
     meta=asset['metadata'] if isinstance(asset['metadata'],dict) else json.loads(asset['metadata'])
     if fingerprint(path)!=meta['fingerprint']:raise ValueError('媒体文件已被外部修改，请使用换源重新确认对齐')
@@ -192,9 +195,13 @@ def playable(dbpath,asset,use_proxy=False):
         if not path.is_file():raise ValueError('兼容副本尚未生成')
     return path
 
-def stream_file(handler,path):
+def stream_bytes(handler,data,name='trial.wav'):
+    return stream_file(handler,Path(name),data=data)
+
+def stream_file(handler,path,*,data=None):
     import re
-    size=path.stat().st_size;start=0;end=size-1;requested=handler.headers.get('Range')
+    import io
+    size=len(data) if data is not None else path.stat().st_size;start=0;end=size-1;requested=handler.headers.get('Range')
     if requested:
         m=re.fullmatch(r'bytes=(\d*)-(\d*)',requested)
         if not m or not any(m.groups()):handler.send_error(416);return
@@ -206,7 +213,7 @@ def stream_file(handler,path):
     if requested:handler.send_header('Content-Range',f'bytes {start}-{end}/{size}')
     handler.end_headers()
     try:
-        with path.open('rb') as f:
+        with (io.BytesIO(data) if data is not None else path.open('rb')) as f:
             f.seek(start);remaining=end-start+1
             while remaining:
                 chunk=f.read(min(262144,remaining))

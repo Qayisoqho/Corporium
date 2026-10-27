@@ -32,6 +32,7 @@ SESSIONS = 'SELECT id FROM timeline_sessions WHERE language_id=:lid'
 INTERVALS = f'SELECT id FROM timeline_intervals WHERE session_id IN ({SESSIONS})'
 OWNER = f"(owner_kind='corpus' AND record_id IN ({ENTRIES})) OR (owner_kind='independent' AND record_id IN ({EXAMPLES}))"
 SCOPED = ('folders','writing_types','annotation_layers','grammar_tags','category_classes',
+          'example_group_members','example_groups',
           'semantic_classes','dictionary_orders','fieldwork_notes','survey_evidence','survey_nodes',
           'object_media','synonym_links','analysis_runs','analysis_saved','analysis_groups',
           'timeline_media','timeline_sessions','lexemes','morphemes','dictionary_examples','texts')
@@ -132,6 +133,8 @@ def remove(db,path,body):
     backup_policy.write(path.parent/'backups',name,copy,defer_prune=True)
     for table in PREDICATES:
         db.execute(f'DELETE FROM {table} WHERE rowid IN (SELECT rid FROM language_delete_rows WHERE table_name=?)',(table,))
+    db.execute('DELETE FROM example_numbers WHERE language_id=?',(current['id'],))
+    db.execute('DELETE FROM example_number_counters WHERE id=?',(current['id'],))
     # Other scopes can contain historical references to this language. Remove
     # only dependent steps, so undo cannot resurrect dangling references later.
     touched=set()

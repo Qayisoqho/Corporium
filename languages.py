@@ -92,6 +92,9 @@ def request_scope(db, path, body):
         row=row or db.execute('SELECT id FROM languages ORDER BY name,id LIMIT 1').fetchone()
         return row[0] if row else 'all'
     ids=[]
+    if path.startswith('example-group-') and body.get('id'):
+        row=db.execute('SELECT language_id FROM example_groups WHERE id=?',(body['id'],)).fetchone()
+        if row:ids.append(row[0])
     if path.startswith('fieldwork-note-') and body.get('id'):
         row=db.execute('SELECT language_id FROM fieldwork_notes WHERE id=?',(body['id'],)).fetchone()
         if row:ids.append(row[0])
@@ -255,7 +258,9 @@ def import_bundle(db, bundle, lid, media_files=None,fresh_references=False):
     collaborators.import_links(db,bundle,{'text':text_map,'corpus':entry_map,'independent':imported['examples']},people)
     collaborators.initialize(db)
     import grammar_survey
-    grammar_survey.import_bundle(db,bundle,lid,entry_map,imported['examples'],imported['writing_types'],people)
+    import example_groups
+    groups,members=example_groups.import_bundle(db,bundle,lid,imported['examples'])
+    grammar_survey.import_bundle(db,bundle,lid,entry_map,imported['examples'],imported['writing_types'],people,groups,members)
     import fieldwork_notes
     fieldwork_notes.import_bundle(db,bundle,lid,imported['writing_types'])
     import code_switching

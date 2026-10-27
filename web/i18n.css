@@ -1,0 +1,17 @@
+html[data-ui-language="en"][data-ui-ready="false"] body{visibility:hidden}
+html[data-ui-restoring="true"] body>main,html[data-ui-restoring="true"] body>aside{visibility:hidden}
+.interface-language-setting select{min-width:12em;max-width:100%}
+html[lang="en"] .global-settings-body label{overflow-wrap:anywhere}
+html[lang="en"] .workspace-tabs{flex-wrap:wrap}
+html[lang="en"] .entry-head>div{flex-shrink:0}
+html[lang="en"] :is(#global-interface-settings,#global-font-settings)>label{display:grid;grid-template-columns:10em minmax(0,1fr);align-items:center;gap:.5em}
+html[lang="en"] :is(#global-interface-settings,#global-font-settings)>label>select{width:100%;min-width:0}
+@media(max-width:480px){html[lang="en"] :is(#global-interface-settings,#global-font-settings)>label{grid-template-columns:1fr}}
+.startup-interface-language{display:flex;align-items:center;gap:.6em;margin-top:1.5em;font-size:.875em}
+.startup-interface-language select{font:inherit;color:inherit;background:var(--paper,#fffdf7);border:1px solid var(--line,#d5d1c6);border-radius:4px;padding:4px 8px}
+html[lang="en"][data-home="false"] .slot-drag-toggle::after{content:' (Ctrl: multiple · Shift: range)'}
+html[lang="en"] #tl-video-panel:has(video[hidden])::before{content:'No video frame'}
+@media(max-width:650px){
+ html[lang="en"] #timeline-workspace :is(.tl-wave-row,.tl-track){grid-template-columns:110px minmax(0,1fr)}
+ html[lang="en"] #timeline-workspace .tl-ruler{margin-left:110px}
+}

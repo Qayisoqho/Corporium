@@ -48,6 +48,17 @@ class EvidenceReadTests(unittest.TestCase):
     def search(self,q):
         return self.api('lexemes?'+urlencode(dict(language='ordos',q=q,summary=1,page_size='all')))
 
+    def test_raw_field_scan_still_materializes_current_inherited_gloss(self):
+        e,ex,x=self.fixture('手写');self.change(x,'新住所')
+        for field,query in [('form','home'),('translation',''),('notes','')]:
+            result=self.api('entries?'+urlencode(dict(language='ordos',field=field,q=query,include_independent='true')))
+            self.assertEqual(result['total'],2)
+            self.assertEqual({r['id'] for r in result['items']},{e['id'],ex['id']})
+            self.assertTrue(all(r['words'][0]['gloss']=='新住所' for r in result['items']))
+        self.mode('corpus',e,'override','本句')
+        result=self.api('entries?'+urlencode(dict(language='ordos',field='form',q='home',include_independent='true')))
+        self.assertEqual({r['id']:r['words'][0]['gloss'] for r in result['items']},{e['id']:'本句',ex['id']:'新住所'})
+
     def shared_fixture(self):
         e,ex,x=self.fixture();other=self.word('free',['FREE'])
         for kind,row in [('corpus',e),('independent',ex)]:self.link(row,other,'@word',word=1,kind=kind)

@@ -8,9 +8,9 @@ function surveyTextRanges(text,query,limit=Infinity){
 function surveySnippet(text,query){let out='',at=0;for(const [a,b] of surveyTextRanges(text,query)){out+=esc(text.slice(at,a))+'<mark>'+esc(text.slice(a,b))+'</mark>';at=b;}return out+esc(text.slice(at));}
 function createSurveySearch(adapter){
  const navigation=$('survey-navigation'),outline=$('survey-tree');let language=activeLanguage,session=null,original=null,generation=0,busy=false;
- const form=document.createElement('form');form.id='survey-search';form.setAttribute('role','search');form.setAttribute('aria-label','检索语法调查');
- form.innerHTML='<div class="survey-search-input"><input id="survey-search-query" aria-label="检索调查内容" placeholder="检索调查内容…" maxlength="200"><button type="submit" aria-label="检索语法调查" title="检索（Enter）"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="m12 12 5 5"/></svg></button><button type="button" id="survey-search-clear" aria-label="清空调查检索" title="清空并恢复提纲">×</button></div><select id="survey-search-scope" aria-label="调查检索范围"><option value="all">全部内容</option><option value="survey">调查文字</option><option value="examples">引用例句</option></select>';
- const results=document.createElement('section');results.id='survey-search-results';results.hidden=true;results.setAttribute('aria-label','调查检索结果');
+ const form=document.createElement('form');form.id='survey-search';form.setAttribute('role','search');form.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("2d895cbb4f2e8b",()=>[])??'检索语法调查'));
+ form.innerHTML=(globalThis.CorporiumI18n?.f("f96bff3490ade1",()=>[])??'<div class="survey-search-input"><input id="survey-search-query" aria-label="检索调查内容" placeholder="检索调查内容…" maxlength="200"><button type="submit" aria-label="检索语法调查" title="检索（Enter）"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><path d="m12 12 5 5"/></svg></button><button type="button" id="survey-search-clear" aria-label="清空调查检索" title="清空并恢复提纲">×</button></div><select id="survey-search-scope" aria-label="调查检索范围"><option value="all">全部内容</option><option value="survey">调查文字</option><option value="examples">引用例句</option></select>');
+ const results=document.createElement('section');results.id='survey-search-results';results.hidden=true;results.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("cf69d0c6dd73f9",()=>[])??'调查检索结果'));
  const status=document.createElement('p');status.id='survey-search-status';status.setAttribute('role','status');status.hidden=true;
  navigation.prepend(form,status,results);
  new ResizeObserver(()=>navigation.style.setProperty('--survey-search-height',form.getBoundingClientRect().height+'px')).observe(form);
@@ -29,13 +29,13 @@ function createSurveySearch(adapter){
  }
  function render(){
   refresh();if(!session)return;
-  const d=session.data;message(`${d.nodes} 个条目 · ${d.total} 组匹配内容`);
+  const d=session.data;message((globalThis.CorporiumI18n?.f("f6b8de8f85aaed",()=>[d.nodes,d.total])??`${d.nodes} 个条目 · ${d.total} 组匹配内容`));
   let previous=null;
   results.innerHTML=d.items.map((item,index)=>{const path=previous!==item.node_id?`<div class="survey-search-path">${item.path.map(esc).join(' › ')}</div>`:'';previous=item.node_id;
    const row=f=>`<button type="button" data-survey-hit="${index}" data-hit-field="${esc(f.field)}"><strong>${esc(f.label)}</strong><span>${surveySnippet(f.snippet,session.query)}</span></button>`;
-   return `<div class="survey-search-result">${path}${item.evidence_id?`<small>${item.kind==='corpus'?'文本引用':'独立例句'} · 本处例证</small>`:''}${item.fields.slice(0,2).map(row).join('')}${item.fields.length>2?`<details><summary>另有 ${item.fields.length-2} 个命中字段</summary>${item.fields.slice(2).map(row).join('')}</details>`:''}</div>`;
-  }).join('')||'<p class="survey-search-empty">没有匹配内容。</p>';
-  if(d.pages>1)results.insertAdjacentHTML('beforeend',`<nav class="survey-search-pages" aria-label="调查检索分页"><button type="button" data-survey-search-page="${d.page-1}" ${d.page===1?'disabled':''} aria-label="上一页检索结果">‹</button><span>${d.page} / ${d.pages}</span><button type="button" data-survey-search-page="${d.page+1}" ${d.page===d.pages?'disabled':''} aria-label="下一页检索结果">›</button></nav>`);
+   return `<div class="survey-search-result">${path}${item.evidence_id?(globalThis.CorporiumI18n?.f("847c0c70195303",()=>[item.kind==='corpus'?(globalThis.CorporiumI18n?.f("584861ec292884",()=>[])??'文本引用'):(globalThis.CorporiumI18n?.f("9cd364455a07a9",()=>[])??'独立例句')])??`<small>${item.kind==='corpus'?'文本引用':'独立例句'} · 本处例证</small>`):''}${item.fields.slice(0,2).map(row).join('')}${item.fields.length>2?(globalThis.CorporiumI18n?.f("d9a233039c9902",()=>[item.fields.length-2,item.fields.slice(2).map(row).join('')])??`<details><summary>另有 ${item.fields.length-2} 个命中字段</summary>${item.fields.slice(2).map(row).join('')}</details>`):''}</div>`;
+  }).join('')||(globalThis.CorporiumI18n?.f("7da3790ac36339",()=>[])??'<p class="survey-search-empty">没有匹配内容。</p>');
+  if(d.pages>1)results.insertAdjacentHTML('beforeend',(globalThis.CorporiumI18n?.f("c4284f8d61520c",()=>[d.page-1,d.page===1?'disabled':'',d.page,d.pages,d.page+1,d.page===d.pages?'disabled':''])??`<nav class="survey-search-pages" aria-label="调查检索分页"><button type="button" data-survey-search-page="${d.page-1}" ${d.page===1?'disabled':''} aria-label="上一页检索结果">‹</button><span>${d.page} / ${d.pages}</span><button type="button" data-survey-search-page="${d.page+1}" ${d.page===d.pages?'disabled':''} aria-label="下一页检索结果">›</button></nav>`));
  }
  async function run(page=1){
   if(busy)return;refresh();const query=$('survey-search-query').value.trim(),scope=$('survey-search-scope').value;if(!query)return clear();
@@ -69,11 +69,11 @@ function createSurveySearch(adapter){
    await adapter.prepare();if(!current())return;
    const target=await api('survey-locate?'+new URLSearchParams({node_id:item.node_id,evidence_id:item.evidence_id||'',field,q:query,scope:session.scope,language:lid}));if(!current())return;
    clearHighlight();const roots=await adapter.navigate(target,current);if(!current())return;
-   if(!roots?.length)throw Error('该位置已改变，请重新检索。');
+   if(!roots?.length)throw Error((globalThis.CorporiumI18n?.f("dd90272ae71ad4",()=>[])??'该位置已改变，请重新检索。'));
    for(const root of roots)for(let d=root.closest('details');d;d=d.parentElement?.closest('details'))d.open=true;
    const found=target.matched?highlight(roots,query):{count:0},count=found.count;
    const first=found.first||roots.find(r=>r.getClientRects().length)||roots[0];(roots.find(r=>r.contains(first))||first).classList.add('survey-search-focus');first.scrollIntoView({block:'center'});
-   message(count?`${session.data.nodes} 个条目 · ${session.data.total} 组匹配内容${found.partial?' · 仅高亮前 '+found.limit+' 处':''}`:'内容已变化，已定位到原位置；可重新检索。',!count);
+   message(count?(globalThis.CorporiumI18n?.f("aeac54013f13f9",()=>[session.data.nodes,session.data.total,found.partial?(globalThis.CorporiumI18n?.f("b12e0a01cffae1",()=>[found.limit])??' · 仅高亮前 '+found.limit+' 处'):''])??`${session.data.nodes} 个条目 · ${session.data.total} 组匹配内容${found.partial?' · 仅高亮前 '+found.limit+' 处':''}`):(globalThis.CorporiumI18n?.f("da37a8cfd82bd6",()=>[])??'内容已变化，已定位到原位置；可重新检索。'),!count);
   }catch(e){if(current())message(e.message,true);}finally{lock(false);}
  }
  async function clear(){

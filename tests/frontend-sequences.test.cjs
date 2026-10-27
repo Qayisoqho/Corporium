@@ -4,9 +4,9 @@ const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {
 
 function inlineHarness(){
  const source=read('inline-editor'),listeners={},drafts=new Map(),calls=[],nodes={notice:{textContent:''}},cards=[];
- const c={window:{},workspace:'dictionary',activeLanguage:'one',structuredClone,URLSearchParams,inlineDrafts:drafts,
+ const c={window:{},workspace:'dictionary',activeLanguage:'one',structuredClone,URLSearchParams,inlineDrafts:drafts,inlineOpening:new Map(),
   document:{addEventListener:(name,fn)=>listeners[name]=fn,querySelectorAll:()=>cards,createElement:()=>({})},$:id=>nodes[id],
-  inlineStyledFields:d=>JSON.stringify(d.body),inlineSelection:()=>{},api:async()=>{calls.push('read');return {body:{translation:'server'},cells:[]};},
+  inlineStyledFields:d=>'<button data-inline-save>保存</button>'+JSON.stringify(d.body),inlineSelection:()=>{},api:async()=>{calls.push('read');return {body:{translation:'server'},cells:[]};},
   originalApi:async()=>{calls.push('write');return {id:'saved'};},refreshUndo:async()=>calls.push('heavy-history'),
   loadTexts:async()=>calls.push('texts'),refreshExampleViews:async()=>calls.push('views')};
  c.window.corporiumRefreshUndoState=async()=>calls.push('history');
@@ -14,7 +14,7 @@ function inlineHarness(){
  vm.runInContext(source.slice(source.indexOf('function repaintInline('),source.indexOf('async function refreshExampleViews(')),c);
  const start=source.indexOf("document.addEventListener('click',async e=>{");
  vm.runInContext(source.slice(start,source.indexOf("window.addEventListener('beforeunload'",start)),c);
- function card(key='independent:x'){const r={dataset:{exampleKey:key,exampleKind:'independent',exampleId:key.split(':')[1]},isConnected:true,innerHTML:'old',getClientRects:()=>[{}],append(){throw Error('outer error');}};cards.push(r);return r;}
+ function card(key='independent:x'){const r={dataset:{exampleKey:key,exampleKind:'independent',exampleId:key.split(':')[1]},isConnected:true,innerHTML:'old',getClientRects:()=>[{}],querySelector:s=>s==='[data-inline-save]'&&r.innerHTML.includes('data-inline-save')?{}:null,append(){throw Error('outer error');}};cards.push(r);return r;}
  function click(r,action){const b={dataset:{},closest:()=>r,hasAttribute:name=>name==='data-inline-'+action};return listeners.click({preventDefault(){},target:{closest:()=>b}});}
  function draft(key='independent:x'){const d={kind:'independent',id:key.split(':')[1],owner_language:'one',body:{translation:'local',words:[]},words:[],layers:[],cells:[],dirty:true};drafts.set(key,d);return d;}
  return {c,calls,cards,card,click,draft,drafts,nodes};
@@ -98,4 +98,50 @@ test('a handled conflict is not replayed when a draft is rendered in another wor
  d.orphaned=[];d.error='版本冲突';h.c.repaintInline(r.dataset.exampleKey);assert.equal(d.errorShown,d.error);assert.doesNotMatch(h.c.inlineFields(d),/版本冲突/);
  // Starting another save clears the delivered error before a new failure.
  d.error='';h.c.repaintInline(r.dataset.exampleKey);d.error='版本冲突';assert.match(h.c.inlineFields(d),/版本冲突/);
+});
+
+test('save retires every cached editor and invalidates views before the first history await',async()=>{
+ const h=inlineHarness(),visible=h.card(),hidden=h.card(),other=h.card('corpus:y'),history=deferred();hidden.getClientRects=()=>[];h.draft();const live=h.draft('corpus:y');live.words=[{id:'stable'}];
+ h.c.repaintInline('independent:x');h.c.repaintInline('corpus:y');let invalidations=0;h.c.window.corporiumInvalidateViews=()=>invalidations++;
+ h.c.window.corporiumRefreshUndoState=async()=>{h.calls.push('history');await history.promise;};
+ const saving=h.click(visible,'save');await new Promise(setImmediate);
+ assert.equal(h.drafts.has('independent:x'),false);assert.equal(invalidations,1);for(const card of [visible,hidden]){assert.doesNotMatch(card.innerHTML,/data-inline-save/);assert.equal(card.dataset.inlineRefresh,'true');}
+ assert.equal(h.drafts.get('corpus:y'),live);assert.equal(live.words[0].id,'stable');assert.match(other.innerHTML,/data-inline-save/);
+ hidden.getClientRects=()=>[{}];h.c.window.corporiumSyncInlineDrafts();assert.doesNotMatch(hidden.innerHTML,/data-inline-save/);history.resolve();await saving;
+});
+
+test('cancel retires hidden editors before its callback without losing another open draft',async()=>{
+ const h=inlineHarness(),visible=h.card(),hidden=h.card(),gate=deferred();hidden.getClientRects=()=>[];const d=h.draft(),other=h.draft('corpus:y');d.dirty=false;d.onCancel=()=>gate.promise;h.c.repaintInline('independent:x');
+ const cancel=h.click(visible,'cancel');await new Promise(setImmediate);assert.equal(h.drafts.has('independent:x'),false);assert.equal(h.drafts.get('corpus:y'),other);assert.doesNotMatch(hidden.innerHTML,/data-inline-save/);assert.deepEqual(h.calls,[]);gate.resolve();await cancel;assert.deepEqual(h.calls,['views']);
+});
+
+test('activation removes an orphaned cached editor before loading any other sentence',()=>{
+ const h=inlineHarness(),orphan=h.card('independent:old'),live=h.card('corpus:new');orphan.innerHTML='<button data-inline-save>old editor</button>';h.draft('corpus:new');let invalidations=0;h.c.window.corporiumInvalidateViews=()=>invalidations++;
+ h.c.window.corporiumSyncInlineDrafts();assert.doesNotMatch(orphan.innerHTML,/old editor/);assert.equal(orphan.dataset.inlineRefresh,'true');assert.match(live.innerHTML,/data-inline-save/);assert.equal(invalidations,1);
+});
+
+test('an older opening response cannot resurrect an editor after the newer draft has saved or cancelled',async()=>{
+ for(const action of ['save','cancel']){
+  const h=inlineHarness(),first=h.card(),second=h.card(),gate=deferred();let reads=0;
+  h.c.api=async()=>{if(++reads===1)await gate.promise;return {kind:'independent',id:'x',body:{translation:'server',words:[]},words:[],layers:[],cells:[]};};
+  const late=h.click(first,'start');await h.click(second,'start');assert.equal(h.drafts.size,1);await h.click(second,action);assert.equal(h.drafts.size,0);gate.resolve();await late;assert.equal(h.drafts.size,0);assert.doesNotMatch(first.innerHTML,/data-inline-save/);assert.doesNotMatch(second.innerHTML,/data-inline-save/);
+ }
+});
+
+test('a pending open in the previous workspace stays closed even if its cached card remains mounted',async()=>{
+ const h=inlineHarness(),card=h.card(),gate=deferred();h.c.api=async()=>{await gate.promise;return {body:{},cells:[]};};const opening=h.click(card,'start');await new Promise(setImmediate);h.c.workspace='library';gate.resolve();await opening;assert.equal(h.drafts.size,0);assert.equal(card.innerHTML,'old');
+});
+
+test('a completed word transfer retires hidden source editors before its history read while preserving other drafts',async()=>{
+ const h=inlineHarness(),source=h.card(),hidden=h.card(),history=deferred();hidden.getClientRects=()=>[];h.draft().dirty=false;const other=h.draft('corpus:y');h.c.repaintInline(source.dataset.exampleKey);
+ Object.assign(h.nodes,{'transfer-apply':{},'transfer-position':{value:'0'},'transfer-mode':{value:'copy'},'word-transfer-dialog':{close(){}}});
+ Object.assign(h.c,{state:{key:source.dataset.exampleKey,source:{kind:'independent',id:'x',owner_language:'one',transfer_token:'source'},target:{kind:'independent',id:'target',transfer_token:'target'},ids:['stable']},inlineKey:(kind,id)=>kind+':'+id,api:async()=>{},refreshUndo:()=>history.promise,Event:class{},corporiumStatus(){},fail:error=>assert.fail(error.message)});h.c.document.dispatchEvent=()=>{};
+ vm.runInContext(read('word-transfer').split('\n').find(line=>line.startsWith("$('transfer-apply').onclick=")),h.c);
+ const transfer=h.nodes['transfer-apply'].onclick();await new Promise(setImmediate);assert.equal(h.drafts.has(source.dataset.exampleKey),false);assert.equal(h.drafts.get('corpus:y'),other);assert.doesNotMatch(hidden.innerHTML,/data-inline-save/);history.resolve();await transfer;
+});
+
+test('copying cannot select a stale sentence placeholder while its canonical saved content is loading',()=>{
+ const source=read('formatted-copy'),pending={dataset:{formattedSource:'pending',inlineRefresh:'true'},closest:()=>null},ready={dataset:{formattedSource:'ready'},closest:()=>null};
+ const c={scope:()=>null,document:{querySelectorAll:()=>[pending,ready]},records:new Map([['pending',{}],['ready',{}]]),visible:()=>true};vm.createContext(c);
+ vm.runInContext(source.slice(source.indexOf(' function cards('),source.indexOf(' function idForGroup(')),c);assert.deepEqual(Array.from(c.cards(),card=>card.dataset.formattedSource),['ready']);
 });

@@ -42,13 +42,27 @@ def search(db, q, lid):
     if not corpus.normalize(q.get('q', ''), q.get('case') == 'true') and q.get('warnings') != 'true' and q.get('field')!='reduplication':
         total = db.execute('SELECT COUNT(*) FROM (' + select + source + ')', args).fetchone()[0]
         page = min(page, max(1, (total + size - 1) // size))
-        rows = db.execute(select + source + order + ' LIMIT ? OFFSET ?', args + [size, (page-1)*size])
+        # Paginate identities first. Sorting wide sentence JSON up to a deep
+        # page otherwise copies the whole corpus into SQLite's temporary sort.
+        union=select=='SELECT *'
+        keys=db.execute(('SELECT id,kind,ordering,source_order,position' if union else "SELECT e.id,'corpus' kind,t.rowid ordering,0 source_order,e.position")+source+order+' LIMIT ? OFFSET ?',args+[size,(page-1)*size]).fetchall()
+        if keys:
+            ids=list(dict.fromkeys(r['id'] for r in keys))
+            where=(' WHERE id' if union else ' AND e.id')+' IN ('+','.join('?' for _ in ids)+')'
+            found={(r['kind'],r['id']):r for r in db.execute(select+source+where,args+ids)}
+            rows=[found[(r['kind'],r['id'])] for r in keys]
+        else:rows=[]
         visible = [(r, gloss_inheritance.load(db,r['kind'],r['id'],r['body']), []) for r in gloss_inheritance.iter_rows(db,rows)]
     else:
         matches = []
         matcher=corpus.QueryMatcher(q.get('q',''),q.get('field','all'),q.get('exact')=='true',q.get('case')=='true',q.get('mode'))
-        for row in gloss_inheritance.iter_rows(db,db.execute(select + source + order, args),lightweight=q.get('warnings')!='true'):
-            entry = gloss_inheritance.load(db,row['kind'],row['id'],row['body'],metadata=False,lightweight=q.get('warnings')!='true')
+        # These fields cannot depend on an inherited dictionary gloss. Resolve
+        # meanings only for the visible results, rather than for the whole scan.
+        raw_only=q.get('field') in ('form','ipa','translation','notes') and q.get('warnings')!='true'
+        rows=db.execute(select + source + order,args)
+        if not raw_only:rows=gloss_inheritance.iter_rows(db,rows,lightweight=q.get('warnings')!='true')
+        for row in rows:
+            entry = json.loads(row['body']) if raw_only else gloss_inheritance.load(db,row['kind'],row['id'],row['body'],metadata=False,lightweight=q.get('warnings')!='true')
             entry['text_notes'] = json.loads(row['text_metadata']).get('notes', '')
             hits, ok = matcher(entry)
             if not ok:
@@ -62,6 +76,10 @@ def search(db, q, lid):
         total = len(matches)
         page = min(page, max(1, (total + size - 1) // size))
         visible = matches[(page-1)*size:page*size]
+        if raw_only:
+            for kind in ('corpus','independent'):
+                ids=[r['id'] for r,_,_ in visible if r['kind']==kind]
+                if ids:gloss_inheritance.prefetch(db,kind,ids)
     items = []
     for row, entry, hits in visible:
         if entry is None:entry=gloss_inheritance.load(db,row['kind'],row['id'],row['body'])

@@ -67,6 +67,7 @@ def batch(db,kind,ids):
     return result
 
 def referenced(db,pid):
+    if db.execute("SELECT 1 FROM survey_evidence e,json_each(e.body,'$.member_notes') n,json_each(n.value,'$.judges') p WHERE p.value=? LIMIT 1",(pid,)).fetchone():return True
     if db.execute("SELECT 1 FROM object_media m,json_each(m.body,'$.speakers') p WHERE p.value=? LIMIT 1",(pid,)).fetchone():return True
     if db.execute("SELECT 1 FROM survey_evidence e,json_each(e.body,'$.judges') p WHERE p.value=? LIMIT 1",(pid,)).fetchone():return True
     return db.execute("SELECT 1 FROM collaborator_assignments a,json_each(a.people) p WHERE json_extract(p.value,'$.person_id')=? LIMIT 1",(pid,)).fetchone() is not None
@@ -93,6 +94,7 @@ def export_bundle(db,lid):
       (kind='independent' AND record_id IN (SELECT id FROM dictionary_examples WHERE language_id=?))''',(lid,lid,lid))]
     pids={p['person_id'] for a in links for p in json.loads(a['people'])}
     pids.update(p for r in db.execute('SELECT body FROM survey_evidence WHERE language_id=?',(lid,)) for p in json.loads(r[0]).get('judges',[]))
+    pids.update(p for r in db.execute('SELECT body FROM survey_evidence WHERE language_id=?',(lid,)) for n in json.loads(r[0]).get('member_notes',{}).values() for p in n.get('judges',[]))
     pids.update(r[0] for r in db.execute('SELECT t.speaker_id FROM timeline_tracks t JOIN timeline_sessions s ON s.id=t.session_id WHERE s.language_id=? AND t.speaker_id IS NOT NULL',(lid,)))
     pids.update(p for r in db.execute('SELECT body FROM object_media WHERE language_id=?',(lid,)) for p in json.loads(r[0]).get('speakers',[]))
     people=[dict(r) for r in db.execute('SELECT * FROM timeline_speakers') if r['id'] in pids]

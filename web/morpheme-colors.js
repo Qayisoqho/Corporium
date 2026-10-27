@@ -1,7 +1,7 @@
 /* Paired colors add no characters and preserve the existing rich/script markup. */
 (()=>{
  const allowed=new Set(['base','affix','clitic','infix','circumfix','connector','multipart','reduplication']);
- const labels={affix:'已关联词典 · 词缀',clitic:'已关联词典 · 附着成分',infix:'已关联词典 · 中缀',circumfix:'已关联词典 · 环缀',connector:'已关联词典 · 连接成分',multipart:'已关联词典 · 多部分语素',reduplication:'重叠部分 · 已关联基底'};
+ const labels={affix:(globalThis.CorporiumI18n?.f("dfef7bd41684ed",()=>[])??'已关联词典 · 词缀'),clitic:(globalThis.CorporiumI18n?.f("aaa817743f3721",()=>[])??'已关联词典 · 附着成分'),infix:(globalThis.CorporiumI18n?.f("77fa656591e6b5",()=>[])??'已关联词典 · 中缀'),circumfix:(globalThis.CorporiumI18n?.f("87646f806e870f",()=>[])??'已关联词典 · 环缀'),connector:(globalThis.CorporiumI18n?.f("c1112d137d8063",()=>[])??'已关联词典 · 连接成分'),multipart:(globalThis.CorporiumI18n?.f("be92bfecdd060a",()=>[])??'已关联词典 · 多部分语素'),reduplication:(globalThis.CorporiumI18n?.f("c5e71cb864f20c",()=>[])??'重叠部分 · 已关联基底')};
  const components=w=>[...(w.morph_colors||[]),...(w.redup_colors||[])];
  const entities={amp:'&',lt:'<',gt:'>',quot:'"','#39':"'"};
  function decode(s){if(s[0]!=='&')return s;const name=s.slice(1,-1);if(name in entities)return entities[name];if(/^#x[0-9a-f]+$/i.test(name))return String.fromCodePoint(parseInt(name.slice(2),16));if(/^#\d+$/.test(name))return String.fromCodePoint(Number(name.slice(1)));return s;}

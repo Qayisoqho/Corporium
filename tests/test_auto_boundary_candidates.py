@@ -30,6 +30,25 @@ class AutoBoundaryTests(unittest.TestCase):
         if selected is not None:b.update(mode='candidates', selected=selected)
         return self.api('lexeme-auto-link', {**b, **options})
 
+    def test_each_apply_mode_leaves_the_other_matches_available_with_fresh_token(self):
+        for kind in ('corpus','independent'):
+            for first in ('strict','candidates'):
+                with self.subTest(kind=kind,first=first):
+                    prefix=kind+first
+                    self.entry(prefix+'exact','G');self.entry(prefix+'relaxed-','G');self.entry(prefix+'later-','G')
+                    src=self.source(kind,[(prefix+'exact','G'),(prefix+'relaxed','G'),(prefix+'later','G')])
+                    p=self.plan(src);self.assertEqual(len(p['matches']),1);self.assertEqual(len(p['suggestions']),2)
+                    selected=[p['suggestions'][0]['candidate_id']]
+                    self.assertEqual(self.apply(p,selected if first=='candidates' else None)['count'],1)
+                    fresh=self.plan(src);self.assertNotEqual(fresh['token'],p['token'])
+                    self.assertEqual(len(fresh['matches']),0 if first=='strict' else 1)
+                    self.assertEqual(len(fresh['suggestions']),2 if first=='strict' else 1)
+                    if first=='strict':self.assertEqual({c['candidate_id'] for c in p['suggestions']},{c['candidate_id'] for c in fresh['suggestions']})
+                    self.assertEqual(self.apply(fresh,[fresh['suggestions'][0]['candidate_id']] if first=='strict' else None)['count'],1)
+                    final=self.plan(src);self.assertEqual(len(final['matches']),0);self.assertEqual(len(final['suggestions']),1)
+                    self.undo();restored=self.plan(src);self.assertEqual(len(restored['matches']),len(fresh['matches']));self.assertEqual(len(restored['suggestions']),len(fresh['suggestions']))
+                    self.undo(True);left=self.plan(src);self.apply(left,[c['candidate_id'] for c in left['suggestions']])
+
     def test_exact_and_edge_targets_are_all_selectable_both_sources_and_kinds(self):
         for source in ('corpus', 'independent'):
             for kind in ('lexeme', 'morpheme'):

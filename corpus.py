@@ -358,7 +358,7 @@ def match(entry, query, field, exact=False, case=False, mode=None, *, _gloss_cac
         return [], True
     indices = []
     for i, w in enumerate(entry['words'] if field in ('form','morpheme','gloss','all') else []):
-        if field=='gloss' and _gloss_cache is not None:
+        if field in ('gloss','form','all') and _gloss_cache is not None:
             if _gloss_cache.word_hit(w,hit):indices.append(i)
             continue
         if boundary_count(w['form']) and field in ('form', 'morpheme', 'gloss'):
@@ -374,7 +374,7 @@ def match(entry, query, field, exact=False, case=False, mode=None, *, _gloss_cac
 
 
 class QueryMatcher:
-    """One query's bounded gloss matches; positions and counts stay per sentence."""
+    """One query's bounded word matches; positions and counts stay per sentence."""
     def __init__(self,query,field,exact=False,case=False,mode=None,*,max_entries=4096,max_bytes=4*1024**2):
         self.options=(query,field,exact,case,mode)
         self.max_entries=max_entries;self.max_bytes=max_bytes
@@ -386,7 +386,11 @@ class QueryMatcher:
         key=(word['form'],word['gloss']);saved=self.hits.get(key)
         if saved is not None:
             self.hits.move_to_end(key);return saved[0]
-        result=not boundary_count(word['form']) and any(hit(v) for v in split_gloss_morphemes(clean(word['gloss']))[0]+re.findall(r'#sub\[([^]]*)\]',word['gloss']))
+        field=self.options[1]
+        if field=='all':result=any(hit(plain(word[k])) for k in ('form','gloss'))
+        elif boundary_count(word['form']):result=False
+        elif field=='form':result=hit(clean(word['form']))
+        else:result=any(hit(v) for v in split_gloss_morphemes(clean(word['gloss']))[0]+re.findall(r'#sub\[([^]]*)\]',word['gloss']))
         size=256+4*sum(map(len,key))
         if self.max_entries>0 and size<=self.max_bytes:
             while self.hits and (len(self.hits)>=self.max_entries or self.bytes+size>self.max_bytes):

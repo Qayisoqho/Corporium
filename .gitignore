@@ -1,5 +1,6 @@
 # Local projects, research materials and generated files
 /data/
+/media/
 /test_lang/
 /test_media/
 /import typ/
@@ -23,6 +24,7 @@ __pycache__/
 *.db-shm
 *.db-journal
 *.corporium
+*.corporium-backup
 !/packaging/examples/Telira.corporium
 *.log
 .desktop-venv/
@@ -47,3 +49,7 @@ Thumbs.db
 !/font/Junicode/Junicode-Bold.ttf
 !/font/Junicode/Junicode-BoldItalic.ttf
 !/font/Junicode/OFL.txt
+
+# Development handoff/history and private reports are maintained outside this export.
+/DEVELOPMENT_HANDOFF.md
+/DEVELOPMENT_HISTORY.md

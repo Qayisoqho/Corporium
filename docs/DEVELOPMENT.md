@@ -33,4 +33,15 @@ python -B tools/test_materials.py generate --profile dense --sentences 10000 --o
 
 新增数据关系时同时核对删除、复制、跨语言交换、撤销重做、检索、分析与导出。更改前端交互时补充能检测实际行为的回归用例。
 
-版本号需同步核对 `app_info.py`、`packaging/Corporium.iss` 和 `packaging/version.txt`。构建前验证内置示例，使用独立依赖环境，保留第三方许可。不要提交 `data/`、`build/`、`release/`、本地环境或个人媒体。
+版本号只有作者明确决定时才更新；同步核对 `app_info.py`、`packaging/Corporium.iss` 和 `packaging/version.txt`，其余修正覆盖同名产物并重做校验。构建前验证内置示例，使用独立依赖环境，保留第三方许可。不要提交 `data/`、`build/`、`release/`、本地环境或个人媒体。
+
+## 当前共享入口
+
+- 整词补全：`sentence_dictionary.py`、`word_analysis_memory.py`及`web/sentence-dictionary.js`；边界取自`segmentation.FORM_MARKERS`，业务预览可维护派生索引，但不能修改研究资料。采用分析须核对稳定词格、局部结构身份、具体关联及撤销。
+- 独立句：`example_groups.py`与`example_numbering.py`；固定编号不是引用身份，组成员和调查本处资料分别保存。复制编号只作用于输出。
+- 录音：`recorder.py`、`audio_capture.py`、`web/recorder.js`；试音只在内存，正式录音才自动归档。模拟PCM和设备枚举不能代替实际音质验收。
+- 界面语言：`ui_localization.py`、`web/i18n.js`与`web/i18n-messages.json`；只翻译作者界面文案，用户材料、类名和备注保持原文。新文案可用现有的双语消息接口，不运行历史一次性全源转换。
+- 管理层排序／字号：`annotations.py`、`web/layer-order.js`及共享`layerStyle`；正文比例基于全局rem，不能重新按父容器缩小或写回层设置。
+- 词典入典后刷新：证据区`refreshCurrentExamples`保留页码及其他详情DOM，目录和计数独立刷新；更换词条／工作区后不能恢复旧滚动位置。
+
+[整词分析](WORD_ANALYSIS_REUSE.md)、[录音](RECORDING.md)和[界面语言](INTERFACE_LOCALIZATION.md)说明当前能力及限制。

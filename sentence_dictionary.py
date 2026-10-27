@@ -15,6 +15,7 @@ import morphology
 import paradigms
 import morpheme_registry
 import segmentation
+import word_analysis_memory
 
 
 def digest(value):
@@ -127,6 +128,11 @@ def intake_apply(db, b, lid):
     mode = b.get('mode', 'new')
     form = lexicon.text(b.get('form', '')).strip()
     gloss = lexicon.text(b.get('gloss', '')).strip()
+    pos = lexicon.text(b.get('pos', '')).strip()
+    # Reuse the language's catalogue spelling when typing an existing class;
+    # normal lexeme saving creates a genuinely new class in this transaction.
+    pos = next((r['name'] for r in db.execute("SELECT name FROM category_classes WHERE language_id=? AND kind='pos' AND parent_id IS NULL",(d['language_id'],))
+                if canon(r['name']).casefold()==canon(pos).casefold()),pos)
     x = p['target']
     uid, sid, fid = b.get('usage_id') or None, b.get('sense_id') or None, b.get('form_id') or None
     if mode == 'new':
@@ -140,7 +146,7 @@ def intake_apply(db, b, lid):
             x = lexicon.mutate(db, 'lexeme-save', dict(headword=form,
                 homonym_confirmation=homonyms.plan(db, d['language_id'], form)['token'],
                 body=dict(entry_type=b.get('entry_type', 'unspecified'), usages=[dict(id=uid,
-                    pos=lexicon.text(b.get('pos', '')), senses=[dict(id=sid, short_gloss=gloss)])])), d['language_id'])
+                    pos=pos, senses=[dict(id=sid, short_gloss=gloss)])])), d['language_id'])
         elif kind == 'morpheme':
             m = morpheme_registry.mutate(db, 'morpheme-save', dict(form=form,
                 body=dict(gloss=gloss, entry_type=b.get('entry_type', 'unspecified'))), d['language_id'])
@@ -168,7 +174,7 @@ def intake_apply(db, b, lid):
                 if uid:
                     u, _ = lexicon.selection(body, uid, None)
                 else:
-                    uid = str(uuid.uuid4()); u = dict(id=uid, pos=lexicon.text(b.get('pos', '')), senses=[])
+                    uid = str(uuid.uuid4()); u = dict(id=uid, pos=pos, senses=[])
                     body['usages'].append(u)
                 u['senses'].append(dict(id=sid, short_gloss=gloss))
             x = save_target(db, x, body)
@@ -315,8 +321,29 @@ def completion_preview(db, b, lid):
                 if c['relaxed'] and c['citation_match']:c['reason']='语素形式匹配（忽略首尾引用标记），确认后填入'
             rows.append(dict(word=i, key=m['key'], form=m['form'], candidates=cs,
                 automatic=len(cs) == 1, linked=bool(old)))
+    boundaries = b.get('boundaries', word_analysis_memory.MARKERS)
+    if not isinstance(boundaries, str) or len(set(boundaries)) != len(boundaries) or any(c not in word_analysis_memory.MARKERS for c in boundaries) or ('<' in boundaries)!=('>' in boundaries):
+        raise ValueError('请选择有效的语素边界标记')
+    notices={}
+    history = word_analysis_memory.candidates(db, d, boundaries,notices)
+    analyses = []
+    for i, w in enumerate(d['body']['words']):
+        if w.get('unit_type') != 'word' or not word_analysis_memory.eligible(db, d, i, w):
+            continue
+        cs = [c for c in history.get(word_analysis_memory.form_key(w['form']), [])
+              if word_analysis_memory.form_key(c['form'], boundaries) == word_analysis_memory.form_key(w['form'], boundaries)
+              # Explicit, different segmentation is never overwritten by completion.
+              and (word_analysis_memory.form_key(w['form'])==word_analysis_memory.form_key(w['form'],'')
+                   or word_analysis_memory.form_key(c['form'],'')==word_analysis_memory.form_key(w['form'],''))]
+        if cs:
+            cs.sort(key=lambda c: (canon(c['form']) != canon(w['form']), -c['count'], c['form'], c['gloss'], c['id']))
+            analyses.append(dict(word=i, key='@analysis', form=w['form'], candidates=cs, automatic=False, linked=False))
+        elif word_analysis_memory.form_key(w['form']) in notices:
+            skipped.append(dict(word=i,form=w['form'],reason=notices[word_analysis_memory.form_key(w['form'])]))
     p = dict(kind=d['kind'], id=d['id'], revision=d['revision'], owner_language=lid,
-             language_id=d['language_id'], rows=rows, skipped=skipped)
+             language_id=d['language_id'], rows=rows, analyses=analyses, boundaries=boundaries,
+             boundary_options=[*segmentation.FORM_BOUNDARIES,'<>'],
+             skipped=[r for r in skipped if not any(a['word']==r['word'] for a in analyses)])
     p['token'] = digest([p, links, d['words'], annotations.owner(db, d['kind'], d['id'])[0]])
     return p
 
@@ -327,7 +354,7 @@ def completion_apply(db, b, lid):
         raise ValueError('例句、词典或关联已变化，请重新预览')
     choices = b.get('choices')
     if not isinstance(choices, list) or not choices:raise ValueError('请选择要填入的标注')
-    available = {(r['word'], r['key']): r for r in p['rows']}
+    available = {(r['word'], r['key']): r for r in [*p['rows'], *p['analyses']]}
     selected, seen = [], set()
     for choice in choices:
         if not isinstance(choice, dict) or type(choice.get('word')) is not int or not isinstance(choice.get('key'), str):
@@ -337,25 +364,41 @@ def completion_apply(db, b, lid):
         c = next((c for c in row['candidates'] if c['id'] == choice.get('candidate_id')), None) if row else None
         if not c or key in seen:raise ValueError('同一处只能选择一个有效候选')
         seen.add(key); selected.append((key, c))
+    whole = {i for (i, key), _ in selected if key == '@analysis'}
+    if any(i in whole and key != '@analysis' for (i, key), _ in selected):
+        raise ValueError('同一词格请选择整词分析或逐语素补全，不能同时采用')
     d = context(db, b, lid)
     original = copy.deepcopy(d['body']); body = copy.deepcopy(original)
-    rules = {}
-    for (index, key), c in selected:rules.setdefault(index, {})[key] = ('', c['gloss'])
+    rules,analysis_links = {},{}
+    for (index, key), c in selected:
+        if key == '@analysis':
+            body['words'][index],analysis_links[index] = word_analysis_memory.replacement(body['words'][index], c,body)
+        else:
+            rules.setdefault(index, {})[key] = ('', c['gloss'])
     for i, edits in rules.items():
         body['words'][i] = fill_word(prepared_word(body['words'][i]), edits)
     check_roundtrip(body)
     corpus.analyze(body)
     if d['kind'] == 'independent':
         from text_replace import preserve_independent_refs
-        preserve_independent_refs(original, body, list(rules), set())
+        preserve_independent_refs(original, body, list(set(rules) | whole), set())
     else:body['edited'] = True
     table = 'entries' if d['kind'] == 'corpus' else 'dictionary_examples'
     db.execute('UPDATE '+table+' SET body=?,revision=revision+1 WHERE id=?', (json.dumps(body, ensure_ascii=False), d['id']))
     if d['kind'] == 'corpus':
         words = list(db.execute("SELECT id FROM corpus_units WHERE entry_id=? AND kind='word' AND active=1 ORDER BY position", (d['id'],)))
         mids = {w['id']: [m['id'] for m in db.execute("SELECT id FROM corpus_units WHERE parent_id=? AND active=1 ORDER BY position", (w['id'],))] for w in words}
+        # A reused analysis changes the morpheme inventory, but keeps the word
+        # identity to which layers, survey references and media are attached.
+        mids = {wid: ids for wid, ids in mids.items() if wid not in {words[i]['id'] for i in whole}}
         lexicon.sync_entry(db, d['id'], [w['id'] for w in words], mids, preserve_complex=True)
     for (i, key), c in selected:
-        fresh = segmentation.get(db, d['kind'], d['id'])
-        bind(db, fresh, i, key, c, lid)
+        if key == '@analysis':
+            for target in analysis_links[i]:
+                fresh = segmentation.get(db, d['kind'], d['id'])
+                segmentation.link(db, dict(kind=d['kind'], id=d['id'], revision=fresh['revision'],
+                    word=i, **target, link_revision=0, notes=''), lid)
+        else:
+            fresh = segmentation.get(db, d['kind'], d['id'])
+            bind(db, fresh, i, key, c, lid)
     return dict(ok=True, count=len(selected))

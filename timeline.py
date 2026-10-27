@@ -22,6 +22,7 @@ def initialize(db):
     CREATE INDEX IF NOT EXISTS timeline_track_time ON timeline_intervals(track_id,start_ms);
     CREATE INDEX IF NOT EXISTS timeline_interval_entry ON timeline_intervals(session_id,entry_id);
     CREATE INDEX IF NOT EXISTS timeline_entry_audio ON timeline_intervals(entry_id);
+    CREATE INDEX IF NOT EXISTS timeline_window ON timeline_intervals(session_id,start_ms,end_ms,entry_id);
     ''')
     hierarchy.initialize(db)
     initialize_order(db)
@@ -92,18 +93,33 @@ def detail(db,lid,b):
     complete=str(b.get('complete',''))=='1'
     start=number(b.get('start',0));end=number(b.get('end',60000))
     if end<=start:raise ValueError('时间窗口无效')
-    rows=db.execute('''SELECT i.*,
+    candidates='SELECT i.id,i.start_ms,i.entry_id,i.rowid ordering FROM timeline_intervals i WHERE i.session_id=?'
+    params=[s['id']]
+    if not complete:
+        candidates+=' AND i.end_ms>=? AND i.start_ms<=?';params.extend([start,end])
+    if b.get('selected_interval'):
+        candidates+=' UNION SELECT i.id,i.start_ms,i.entry_id,i.rowid ordering FROM timeline_intervals i WHERE i.session_id=? AND i.id=?'
+        params.extend([s['id'],b['selected_interval']])
+    # Bound the interval set before joining large sentence bodies. A far-away
+    # viewport used to fetch/parse text JSON for every interval in the session.
+    rows=db.execute('WITH candidates AS ('+candidates+'''), visible AS MATERIALIZED (
+      SELECT id FROM candidates
+      ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END,start_ms,entry_id,ordering LIMIT ?)
+      SELECT i.*,
       json_extract(COALESCE(e.body,d.body),'$.ipa') sentence_ipa,
       json_extract(COALESCE(e.body,d.body),'$.translation') sentence_translation,
       json_extract(COALESCE(e.body,d.body),'$.language_id') sentence_language,
       COALESCE(e.revision,d.revision) entry_revision,CASE WHEN d.id IS NOT NULL THEN '@independent' ELSE e.text_id END text_id,e.position,t.title,
       (SELECT COUNT(*) FROM timeline_intervals child WHERE child.parent_id=i.id) child_count,
       (SELECT p.end_ms FROM timeline_intervals p WHERE p.track_id=i.track_id AND p.start_ms<i.start_ms ORDER BY p.start_ms DESC LIMIT 1) previous_ms,
-      (SELECT n.start_ms FROM timeline_intervals n WHERE n.track_id=i.track_id AND n.start_ms>i.start_ms ORDER BY n.start_ms LIMIT 1) next_ms FROM timeline_intervals i
+      (SELECT n.start_ms FROM timeline_intervals n WHERE n.track_id=i.track_id AND n.start_ms>i.start_ms ORDER BY n.start_ms LIMIT 1) next_ms FROM visible v JOIN timeline_intervals i ON i.id=v.id
       LEFT JOIN entries e ON e.id=i.entry_id LEFT JOIN dictionary_examples d ON d.id=CASE WHEN substr(i.entry_id,1,12)='independent:' THEN substr(i.entry_id,13) END LEFT JOIN texts t ON t.id=e.text_id
-      WHERE i.session_id=? AND (? OR (i.end_ms>=? AND i.start_ms<=?) OR i.id=?) ORDER BY CASE WHEN i.id=? THEN 0 ELSE 1 END,i.start_ms LIMIT ?''',(s['id'],complete,start,end,b.get('selected_interval',''),b.get('selected_interval',''),-1 if complete else 2002)).fetchall()
+      ORDER BY CASE WHEN i.id=? THEN 0 ELSE 1 END,i.start_ms,i.entry_id,i.rowid''',params+[b.get('selected_interval',''),-1 if complete else 2002,b.get('selected_interval','')]).fetchall()
     items=[];catalogs=hierarchy.catalog(db)
-    code_links={r['interval_id']:r['span_id'] for r in db.execute('SELECT l.* FROM code_time_links l JOIN timeline_intervals i ON i.id=l.interval_id WHERE i.session_id=?',(s['id'],))}
+    code_links={}
+    for offset in range(0,len(rows),400):
+        ids=[r['id'] for r in rows[offset:offset+400]]
+        code_links.update((r['interval_id'],r['span_id']) for r in db.execute('SELECT * FROM code_time_links WHERE interval_id IN ('+','.join('?' for _ in ids)+')',ids))
     for row in rows:
         item=dict(row);ipa=item.pop('sentence_ipa');translation=item.pop('sentence_translation');language=item.pop('sentence_language');item['code_span_id']=code_links.get(item['id'])
         item['text']=next((c['name'] for c in catalogs['codes'] if c['id']==item['code_id']),None) if item['code_id'] else None

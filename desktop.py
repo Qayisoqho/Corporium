@@ -36,6 +36,15 @@ class Projects:
         recent=self.settings.get('recent',[])
         self.settings['recent']=[p for p in recent if isinstance(p,str) and p.strip()][:10] if isinstance(recent,list) else []
         if not isinstance(self.settings.get('last_project'),str):self.settings.pop('last_project',None)
+        if not isinstance(self.settings.get('ui_language'),str) or self.settings['ui_language'] not in server.ui_localization.SUPPORTED:self.settings.pop('ui_language',None)
+
+    def set_ui_language(self,value):
+        if server.recorder.SERVICE.busy():raise ValueError('请先停止录音，再切换界面语言')
+        if not isinstance(value,str) or value not in server.ui_localization.SUPPORTED:raise ValueError('界面语言无效')
+        updated={**self.settings,'ui_language':value}
+        pending=self.file.with_suffix('.tmp');pending.write_text(json.dumps(updated,ensure_ascii=False),encoding='utf-8');pending.replace(self.file)
+        self.settings=updated
+        return {'ok':True,'ui_language':value}
 
     def remember(self,path):
         updated={**self.settings,'last_project':str(path),'recent':[str(path)]+[p for p in self.settings['recent'] if p!=str(path)][:9]}
@@ -55,6 +64,7 @@ class Projects:
             return False
 
     def create(self,path,backup=None):
+        if server.recorder.SERVICE.busy():raise ValueError('请先停止录音，再切换项目')
         path=Path(path).resolve()
         if path.exists() and any(path.iterdir()):raise ValueError('请选择一个空文件夹，新建项目不会覆盖现有文件。')
         path.mkdir(parents=True,exist_ok=True);(path/'data').mkdir(exist_ok=True)
@@ -64,6 +74,7 @@ class Projects:
         return self.open(path,new=True)
 
     def open(self,path,new=False):
+        if server.recorder.SERVICE.busy():raise ValueError('请先停止录音，再切换项目')
         path=Path(path).resolve();dbpath=path/'data'/'corpus.sqlite3'
         if not new:
             if not dbpath.is_file():raise ValueError('该文件夹不是 Corporium 项目：未找到 data/corpus.sqlite3。请选择项目最外层文件夹。')
@@ -88,11 +99,13 @@ class Projects:
         return self.status()
 
     def status(self):
-        return {'version':VERSION,'project':str(self.current) if self.current else None,'recent':self.settings['recent'],'startup_error':self.startup_error}
+        locale=self.settings.get('ui_language','zh-CN')
+        return {'version':VERSION,'project':str(self.current) if self.current else None,'recent':self.settings['recent'],'startup_error':server.ui_localization.message(self.startup_error,locale),'ui_language':locale}
 
 def make_handler(projects,token):
     class DesktopHandler(server.Handler):
         def log_message(self,fmt,*args):logging.info(fmt,*args)
+        def ui_language(self):return projects.settings.get('ui_language') or super().ui_language()
         def authenticated(self):
             cookie=SimpleCookie()
             try:cookie.load(self.headers.get('Cookie',''))
@@ -101,14 +114,18 @@ def make_handler(projects,token):
         def do_GET(self):
             # Do not hold the project lock while the player reads a large media file.
             parsed=urlparse(self.path)
-            if parsed.path=='/api/timeline-file':
+            if parsed.path in ('/api/timeline-file','/api/recorder-file'):
                 with LOCK:
                     q={k:v[0] for k,v in parse_qs(parsed.query).items()}
                     if not self.authenticated() or q.get('project')!=projects.generation:return self.send({'error':'项目已切换，请刷新'},409)
                     try:
-                        with server.connect(audit=False) as db:asset=server.timeline.media_view(db,q.get('asset'))
-                        path=server.media_engine.playable(server.DB,asset,q.get('proxy')=='true')
+                        if parsed.path=='/api/recorder-file':
+                            path,name=server.recorder.SERVICE.playback(server.DB,q.get('token'))
+                        else:
+                            with server.connect(audit=False) as db:asset=server.timeline.media_view(db,q.get('asset'))
+                            path=server.media_engine.playable(server.DB,asset,q.get('proxy')=='true')
                     except (ValueError,OSError) as error:return self.send({'error':str(error)},400)
+                if isinstance(path,bytes):return server.media_engine.stream_bytes(self,path,name)
                 return server.media_engine.stream_file(self,path)
             with LOCK:
                 parsed=urlparse(self.path)
@@ -118,10 +135,11 @@ def make_handler(projects,token):
                 if parsed.path=='/desktop.js':return self.send((ASSETS/'web'/'desktop.js').read_bytes(),mime='text/javascript; charset=utf-8')
                 if parsed.path=='/desktop-status':return self.send(projects.status())
                 # Legal notices are available before choosing a project, still within the desktop session.
-                if parsed.path in server.legal_notices.ASSET_PATHS:return super().do_GET()
+                if parsed.path in server.legal_notices.ASSET_PATHS|server.ui_localization.ASSET_PATHS:return super().do_GET()
                 if parsed.path=='/':
                     file='index.html' if projects.current else 'desktop-start.html'
                     html=(ASSETS/'web'/file).read_text(encoding='utf-8').replace('</body>','<script src="/desktop.js"></script></body>')
+                    html=server.ui_localization.bootstrap_html(html,self.ui_language())
                     if projects.current:
                         project_key=hashlib.sha256(str(projects.current).casefold().encode('utf-8')).hexdigest()
                         script='<script>const desktopProjectKey='+json.dumps(project_key)+';const desktopProjectStamp='+json.dumps(projects.generation)+';const desktopFetch=window.fetch.bind(window);window.fetch=(input,init={})=>{if(typeof input==="string"&&input.startsWith("/api/")){init={...init,headers:new Headers(init.headers)};init.headers.set("X-Corporium-Project",desktopProjectStamp);}return desktopFetch(input,init);};</script>'
@@ -141,6 +159,22 @@ def make_handler(projects,token):
 
 class Bridge:
     def __init__(self,projects):self._projects=projects;self._window=None;self._sidebar_collapsed=False
+
+    def set_ui_language(self,value):
+        try:
+            if not self._window.get_current_url().startswith(self._origin+'/'):raise ValueError('无效窗口来源')
+            with LOCK:return self._projects.set_ui_language(value)
+        except Exception as error:
+            return {'error':server.ui_localization.message(str(error),self._ui_language())}
+
+    def _ui_language(self):
+        return getattr(self._projects,'settings',{}).get('ui_language','zh-CN')
+
+    def _file_types(self,values):
+        return tuple(server.ui_localization.message(value,self._ui_language()) for value in values)
+
+    def _result(self,value):
+        return server.ui_localization.present(value,'',self._ui_language())
 
     def _apply_window_minimum(self):
         from System import Action
@@ -165,9 +199,9 @@ class Bridge:
             self._sidebar_collapsed=collapsed
             return self._apply_window_minimum()
         except Exception as error:
-            logging.exception('Window minimum update failed');return {'error':str(error)}
+            logging.exception('Window minimum update failed');return self._result({'error':str(error)})
     def save_task_export(self,token,name,kind):
-        if kind not in ('project-backup','language-json','analysis-json','export'):return {'error':'文件类型无效'}
+        if kind not in ('project-backup','language-json','analysis-json','export'):return self._result({'error':'文件类型无效'})
         # pywebview's filter parser rejects hyphenated extensions; keep the
         # suggested .corporium-backup filename and validate package contents.
         types=('Corporium 备份 (*.*)',) if kind=='project-backup' else ('JSON 数据 (*.json)',) if kind in ('language-json','analysis-json') else ('Corporium 语言数据包 (*.corporium)',)
@@ -185,13 +219,35 @@ class Bridge:
     def save_docx_export(self,token,name):
         return self._save_staged_file(token,name,'docx-export',('Word 文档 (*.docx)',))
 
+    def save_recording(self,token):
+        import tempfile
+        import webview
+        pending=None
+        try:
+            if not self._window.get_current_url().startswith(self._origin+'/'):raise ValueError('无效窗口来源')
+            with LOCK:source,name=server.recorder.SERVICE.playback(server.DB,token)
+            paths=self._window.create_file_dialog(webview.FileDialog.SAVE,save_filename=name,file_types=self._file_types(('WAV 录音 (*.wav)',)))
+            if not paths:return {'cancelled':True}
+            destination=Path(paths if isinstance(paths,str) else paths[0])
+            if not isinstance(source,bytes) and destination.resolve()==source.resolve():raise ValueError('请选择另一个位置下载，录音原件保持不变')
+            with tempfile.NamedTemporaryFile(dir=destination.parent,delete=False) as stream:
+                pending=Path(stream.name)
+                if isinstance(source,bytes):stream.write(source)
+                else:
+                    with source.open('rb') as original:shutil.copyfileobj(original,stream,1024*1024)
+            pending.replace(destination)
+            return {'ok':True,'path':str(destination)}
+        except Exception as error:return self._result({'error':str(error)})
+        finally:
+            if pending:pending.unlink(missing_ok=True)
+
     def _save_staged_file(self,token,name,kind,file_types):
         import webview
         import language_exchange
         try:
             if not self._window.get_current_url().startswith(self._origin+'/'):raise ValueError('无效窗口来源')
             with LOCK:source=language_exchange.staged(server.DB,token,kind)
-            paths=self._window.create_file_dialog(webview.FileDialog.SAVE,save_filename=Path(name).name,file_types=file_types)
+            paths=self._window.create_file_dialog(webview.FileDialog.SAVE,save_filename=Path(name).name,file_types=self._file_types(file_types))
             if not paths:return {'cancelled':True}
             dest=Path(paths if isinstance(paths,str) else paths[0])
             # Write beside the selected target, then atomically replace after the native overwrite prompt.
@@ -205,24 +261,25 @@ class Bridge:
             finally:
                 if pending:pending.unlink(missing_ok=True)
             return {'ok':True,'path':str(dest)}
-        except Exception as e:return {'error':str(e)}
+        except Exception as e:return self._result({'error':str(e)})
 
     def choose_media(self):
         import webview
-        if not self._window.get_current_url().startswith(self._origin+'/'):return {'error':'无效窗口来源'}
-        files=self._window.create_file_dialog(webview.FileDialog.OPEN,allow_multiple=False,file_types=('音视频 (*.wav;*.mp3;*.flac;*.m4a;*.mp4;*.mov;*.mkv;*.avi;*.ogg;*.opus;*.webm;*.aac;*.wma;*.wmv;*.aif;*.aiff;*.m4v;*.3gp)',))
+        if not self._window.get_current_url().startswith(self._origin+'/'):return self._result({'error':'无效窗口来源'})
+        files=self._window.create_file_dialog(webview.FileDialog.OPEN,allow_multiple=False,file_types=self._file_types(('音视频 (*.wav;*.mp3;*.flac;*.m4a;*.mp4;*.mov;*.mkv;*.avi;*.ogg;*.opus;*.webm;*.aac;*.wma;*.wmv;*.aif;*.aiff;*.m4v;*.3gp)',)))
         return {'path':files[0] if files else ''}
     def project_action(self,action,path=None):
         import webview
         try:
             if not self._window.get_current_url().startswith(self._origin+'/'):raise ValueError('无效窗口来源')
             if server.long_tasks.active(server.DB):raise ValueError('请先等待当前任务完成或取消任务，再切换项目')
+            if action!='folder' and server.recorder.SERVICE.busy():raise ValueError('请先停止录音，再切换项目')
             if action=='folder':
                 if self._projects.current:os.startfile(self._projects.current)
                 return {'ok':True}
             backup=None
             if action=='restore':
-                files=self._window.create_file_dialog(webview.FileDialog.OPEN,file_types=('Corporium 备份 (*.*)','旧版 JSON 备份 (*.json)','ZIP 备份包 (*.zip)'))
+                files=self._window.create_file_dialog(webview.FileDialog.OPEN,file_types=self._file_types(('Corporium 备份 (*.*)','旧版 JSON 备份 (*.json)','ZIP 备份包 (*.zip)')))
                 if not files:return {'cancelled':True}
                 backup=files[0]
             if action in ('open','new','restore'):
@@ -237,7 +294,7 @@ class Bridge:
                 else:raise ValueError('未知操作')
             return {'ok':True}
         except Exception as exc:
-            logging.exception('Project action failed');return {'error':str(exc)}
+            logging.exception('Project action failed');return self._result({'error':str(exc)})
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--project');parser.add_argument('--self-test');parser.add_argument('--smoke-test');parser.add_argument('--dev',action='store_true');args=parser.parse_args()
@@ -277,6 +334,7 @@ def main():
     import webview
     webview.settings['ALLOW_DOWNLOADS']=True
     bridge=Bridge(projects);bridge._origin='http://127.0.0.1:'+str(http.server_port)
+    window_title=server.ui_localization.message(window_title,bridge._ui_language())
     window=webview.create_window(window_title,bridge._origin+'/desktop-bootstrap?token='+token,js_api=bridge,width=1280,height=860,min_size=MIN_WINDOW_SIZE,background_color='#f7f4e9',hidden=bool(args.smoke_test),text_select=True)
     bridge._window=window
     def refresh_window_minimum(*args):
@@ -287,6 +345,9 @@ def main():
     close_state={'allowed':False,'pending':False}
     def check_close():
         try:
+            if server.recorder.SERVICE.busy():
+                window.evaluate_js('corporiumAlert('+json.dumps(server.ui_localization.message('请先停止录音，再关闭程序',bridge._ui_language()),ensure_ascii=False)+')')
+                return
             busy=server.long_tasks.active(server.DB)
             dirty=busy or window.evaluate_js("Boolean((typeof inlineDrafts!=='undefined'&&[...inlineDrafts.values()].some(d=>d.dirty||d.saving))||window.corporiumCodesDirty?.()||window.corporiumTimelineDirty?.()||window.corporiumNotesDirty?.()||window.corporiumSurveyDirty?.()||document.querySelector('dialog[open]'))")
             if dirty:
@@ -294,6 +355,7 @@ def main():
                 def receive(value):
                     answer.append(value);answered.set()
                 message='当前任务仍在处理，确认取消任务并关闭？' if busy else '可能有未保存的编辑，确认关闭并放弃这些修改？'
+                message=server.ui_localization.message(message,bridge._ui_language())
                 window.evaluate_js('corporiumConfirm('+json.dumps(message,ensure_ascii=False)+')',receive)
                 answered.wait()
                 if not answer or answer[0] is not True:return
@@ -310,7 +372,7 @@ def main():
     if args.smoke_test:
         def smoke():
             try:
-                value=json.loads(window.evaluate_js("JSON.stringify({title:document.title,home:!!document.getElementById('home-enter'),homeVisible:document.documentElement.dataset.home==='true'&&!document.getElementById('homepage').hidden,desktop:!!document.getElementById('desktop-toolbar'),licenses:!!document.getElementById('legal-notices-open'),textSelection:getComputedStyle(document.body).userSelect,buttonSelection:getComputedStyle(document.getElementById('home-enter')).userSelect})"))
+                value=json.loads(window.evaluate_js("JSON.stringify({title:document.title,uiLanguage:document.documentElement.lang,interfaceLanguage:document.getElementById('interface-language')?.value,home:!!document.getElementById('home-enter'),homeVisible:document.documentElement.dataset.home==='true'&&!document.getElementById('homepage').hidden,desktop:!!document.getElementById('desktop-toolbar'),licenses:!!document.getElementById('legal-notices-open'),textSelection:getComputedStyle(document.body).userSelect,buttonSelection:getComputedStyle(document.getElementById('home-enter')).userSelect})"))
                 value.update(version=VERSION,project=str(projects.current),resumed=smoke_resumed)
                 (home/'ui-test.json').write_text(json.dumps(value,ensure_ascii=False),encoding='utf-8')
             except Exception:logging.exception('UI smoke test failed')
@@ -326,4 +388,11 @@ if __name__=='__main__':
     try:main()
     except Exception as exc:
         logging.exception('Desktop startup failed')
-        ctypes.windll.user32.MessageBoxW(None,'Corporium 启动失败：\n'+str(exc)+'\n\n请查看 %LOCALAPPDATA%\\Corporium\\desktop.log。若缺少 WebView2，请重新运行安装程序。','Corporium',0x10)
+        locale='zh-CN'
+        try:
+            app_name='Corporium-dev' if '--dev' in sys.argv else 'Corporium'
+            settings=json.loads((Path(os.environ.get('LOCALAPPDATA',str(Path.home())))/app_name/'desktop.json').read_text(encoding='utf-8'))
+            locale=settings.get('ui_language','zh-CN')
+        except (OSError,ValueError,AttributeError):pass
+        message='Corporium 启动失败：\n'+str(exc)+'\n\n请查看 %LOCALAPPDATA%\\Corporium\\desktop.log。若缺少 WebView2，请重新运行安装程序。'
+        ctypes.windll.user32.MessageBoxW(None,server.ui_localization.message(message,locale),'Corporium',0x10)

@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),vm=require(
 function setup(){const c={window:{},activeLanguage:'one',languageList:[{id:'one',metadata:JSON.stringify({glossary:{PST:'past',CL:'clitic',NEG:'negative','neg#sub[POT]':'potential negative'}})}],esc:s=>String(s??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])),document:{documentElement:{classList:{toggle(){}}}},localStorage:{getItem:()=>null}};
  vm.createContext(c);vm.runInContext(fs.readFileSync('web/display-tools.js','utf8'),c);c.rich=s=>c.esc(s).replace(/#sub\[([^\[\]]*)\]/g,'<sub>$1</sub>').replace(/\\([~?\[\]#])/g,'$1');vm.runInContext(fs.readFileSync('web/morpheme-colors.js','utf8'),c);return c;}
 const stripTone=s=>s.replace(/<span class="morph-tone[^>]*>([^<]*)<\/span>/g,'$1');
-test('dictionary reading columns align morphological boundaries without splitting tags or script markup',()=>{
+test('explicit morphological-column helper preserves boundaries, tags and script markup',()=>{
  const c=setup(),api=c.window.CorporiumMorphColors,w={form:'root#sub[2]-na=ke',gloss:'家-GEN.SG=CL',morph_colors:[{tone:'base',form:[[0,10]],gloss:[[0,1]]},{tone:'affix',form:[[11,13]],gloss:[[2,8]]},{tone:'clitic',form:[[14,16]],gloss:[[9,11]]}]};
  const p=api.aligned(w,'one');assert.equal(p.columns,5);assert.equal((p.form.match(/class="interlinear-part"/g)||[]).length,5);assert.equal((p.gloss.match(/class="interlinear-part"/g)||[]).length,5);
  assert.match(p.form,/<sub>/);assert.match(p.gloss,/GEN.SG/);assert.match(p.form,/morph-tone-affix/);assert.match(p.gloss,/morph-tone-clitic/);
@@ -10,6 +10,20 @@ test('dictionary reading columns align morphological boundaries without splittin
  const infix=api.aligned({form:'ta<ŋ>ri-n',gloss:'打<neg#sub[POT]>过-GEN',morphemes:[{kind:'infix'}]},'one');assert.equal(infix.columns,7);assert.match(infix.gloss,/<sub>POT<\/sub>/);
  const unknown=api.aligned({form:'ta<ŋ>ri-n',gloss:'打<unlisted#sub[2]>过-GEN',morphemes:[{kind:'infix'}]},'one');assert.match(unknown.gloss,/unlisted<sub>2/);assert.doesNotMatch(unknown.gloss,/grammar-label[^>]*>unlisted/);assert.doesNotMatch(unknown.gloss,/gloss-relation/);
  for(const pair of [{form:'a-b',gloss:'A=B'},{form:'a',gloss:'A.SG'},{form:'a-b',gloss:'A-B-C'}])assert.equal(api.aligned(pair,'one').columns,undefined);
+});
+
+test('dictionary corpus and independent examples use the shared word-level renderer while retaining evidence, links, colors and scripts',()=>{
+ const c=setup(),app=fs.readFileSync('web/app.js','utf8');vm.runInContext(app.slice(app.indexOf('function renderWord('),app.indexOf('function renderBody(')),c);c.renderExtraLayers=()=>'';
+ c.renderEditableExample=body=>body.words.map(w=>c.renderWord(w,'one')).join('');
+ const word={form:'root#sub[2]-na=ke',gloss:'家-GEN.SG=CL',unit_id:'unit',dictionary_linked:true,morph_colors:[{tone:'base',form:[[0,10]],gloss:[[0,1]]},{tone:'affix',form:[[11,13]],gloss:[[2,8]]},{tone:'clitic',form:[[14,16]],gloss:[[9,11]]}]};
+ const body={words:[word,{form:'other',gloss:'另一词'}]},before=JSON.stringify(body),pair=c.window.CorporiumMorphColors.pair(word,'one');
+ for(const kind of ['corpus','independent']){
+  const links=kind==='corpus'?[{active:1,word_position:0}]:[{segmentation_ref:{word:0,key:'0:host'}}];
+  const html=c.renderDictionaryExample(body,kind,'example',links);
+  assert.doesNotMatch(html,/interlinear-word|interlinear-part|--morph-columns/);assert.equal((html.match(/<div class="word /g)||[]).length,2);
+  assert.ok(html.includes(pair.form));assert.ok(html.includes(pair.gloss));assert.match(html,/data-dictionary-evidence="1"/);assert.match(html,/form is-linked word-dictionary/);assert.match(html,/<sub>/);assert.match(html,/morph-tone-affix/);assert.match(html,/morph-tone-clitic/);
+ }
+ assert.doesNotMatch(c.renderWord({...word,dictionary_example:true},'one'),/interlinear-word|interlinear-part/);assert.equal(JSON.stringify(body),before);
 });
 test('confirmed reduplicant overlays override dictionary tones without changing the base or tilde',()=>{
  const c=setup(),api=c.window.CorporiumMorphColors,w={form:'je~jepasu',gloss:'RED~go',morph_colors:[{tone:'affix',form:[[0,2]],gloss:[[0,3]]},{tone:'clitic',form:[[3,9]],gloss:[[4,6]]}],redup_colors:[{tone:'reduplication',form:[[0,2]],gloss:[[0,3]]}]};

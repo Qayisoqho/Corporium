@@ -72,7 +72,9 @@ def view(project,jid):
     with LOCK:
         j=JOBS.get(jid)
         if not j or j['project']!=str(Path(project).resolve()):raise ValueError('任务已过期或不属于当前项目')
-        return {k:v for k,v in j.items() if k not in ('project','cancel','request','future','resource_error','staged','created','backup_folders')}
+        result={k:v for k,v in j.items() if k not in ('project','cancel','request','future','resource_error','staged','created','backup_folders')}
+        if j['kind']=='operation':result['operation']=j['request'].get('operation')
+        return result
 
 def cancel(project,jid):
     view(project,jid)

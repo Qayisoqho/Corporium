@@ -8,7 +8,7 @@ function setup(storage=new Map()){
  const c={URLSearchParams,activeLanguage:'one',languageList:[{id:'one',metadata:'{}'}],window:{},page:1,reviewPage:1,sequence:0,generated:false,filterSignature:null,pageSize:null,pageSizeView:null,panel:node('panel'),$:node,languageTypographyCSS:()=>'',esc:s=>s,projectStorageKey:k=>'project-one:'+k,localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},document:{createElement:()=>{const e=node('created'+created++);Object.defineProperty(e,'id',{set:id=>nodes.set(id,e)});return e;}}};
  c.phonologyUI={query:()=>({view,empty:false,pending_page:pending}),firstPage:()=>{pending=1;},render:()=>view==='phonology'};
  c.topPagination=(container,page,total,onPage)=>{container.children=[];pages.set(container.id,{page,total,onPage});};
- c.api=async path=>{const p=new URLSearchParams(path.split('?')[1]);calls.push(Object.fromEntries(p));if(c.fail)throw Error('offline');const count=c.singlePage?1:p.get('view')==='phonology'?(p.get('page_size')==='all'?1:Math.ceil(12/+p.get('page_size'))):2;return {page:Math.min(+p.get('page'),count),pages:count,review_page:+p.get('review_page'),review_pages:2,total:12,review_total:0,groups:[],review:[],writing_types:[]};};
+ c.api=async path=>{const p=new URLSearchParams(path.split('?')[1]);calls.push(Object.fromEntries(p));if(c.fail)throw Error('offline');const count=c.singlePage?1:p.get('view')==='phonology'?(p.get('page_size')==='all'?1:Math.ceil(12/+p.get('page_size'))):2;return {page:Math.min(+p.get('page'),count),pages:count,review_page:+p.get('review_page'),review_pages:2,total:12,review_total:(c.reviewRows||[]).length,groups:[],review:c.reviewRows||[],writing_types:c.writingTypes||[]};};
  vm.createContext(c);const start=source.indexOf(' function readPageSize('),end=source.indexOf(' panel.onclick=',start);vm.runInContext(source.slice(start,end),c);
  return {c,node,calls,pages,setPending:p=>pending=p,getPending:()=>pending,setView:v=>view=v,submit:async()=>{node('homophone-form').onsubmit({preventDefault(){}});await new Promise(setImmediate);}};
 }
@@ -52,4 +52,11 @@ test('reading sizes persist independently and both selectors follow view switche
  setView('phonology');await c.run();assert.equal(calls.at(-1).page_size,'20');
  setView('reading');await c.run();assert.equal(calls.at(-1).page_size,'50');
  const reloaded=setup(storage);reloaded.setView('reading');await reloaded.c.run();assert.equal(reloaded.calls.at(-1).page_size,'50');
+});
+
+test('one review record missing the selected writing produces one visible card rather than the empty-state message',async()=>{
+ const {c,node,setView}=setup(),summary={textContent:''};node('homophone-review').querySelector=()=>summary;
+ c.richGloss=s=>s;c.orthographyStyle=s=>s;vm.runInContext(source.slice(source.indexOf(' function entry('),source.indexOf(' function readPageSize(')),c);
+ c.reviewRows=[{identity:'m',form:'hidden-form',gloss:'释义',writings:[],readings:[],sources:[],origin:'语素',reason:'缺少读音'}];c.writingTypes=[{id:'han',name:'汉字'}];node('homophone-writing').value='han';setView('reading');await c.run();
+ assert.equal(summary.textContent,'待整理内容 · 1');assert.equal((node('homophone-review-results').innerHTML.match(/class="homophone-entry"/g)||[]).length,1);assert.doesNotMatch(node('homophone-review-results').innerHTML,/没有待整理内容|hidden-form/);assert.match(node('homophone-review-results').innerHTML,/缺少读音/);
 });

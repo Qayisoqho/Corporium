@@ -1,6 +1,6 @@
 .dictionary-order-note{display:block;margin:5px 0;color:var(--muted);font-size:.76rem}
+#dictionary-order-manager[data-order-kind=morpheme]>.dialog-bottom{display:none}
 #dictionary-layout-open{margin:0 8px 0 0;font-size:.82rem;padding:4px 9px}
-#morpheme-order-label{margin:0;max-width:170px}#morpheme-order{width:100%;font-size:.76rem!important;padding:2px 5px!important;min-height:27px!important}
 #dictionary-layout-dialog{width:min(690px,94vw);padding:12px 16px;font:var(--ui-style,normal) var(--ui-weight,400) .85rem/1.5 var(--ui-font,system-ui),sans-serif}
 #dictionary-layout-dialog h2{margin:3px 0 8px;font-size:1.12rem}
 #dictionary-layout-dialog button,#dictionary-layout-dialog select{font:inherit;min-height:29px;padding:3px 7px;margin:0}

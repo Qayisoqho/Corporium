@@ -36,11 +36,12 @@ function inlineSave({kind='corpus',workspace='corpus',isNew=false,fail=false}={}
  const calls=[],sent=[],listeners={},drafts=new Map(),key='draft';
  const d={kind,id:'entry',isNew,dirty:true,owner_language:'ordos',body:{ipa:'a',words:[{form:'a',gloss:'A'}]},words:[{id:'slot'}],layers:[],cells:[],host:{remove(){calls.push('remove');}},onSaved:async()=>{assert.equal(drafts.size,0);calls.push('saved-callback');}};drafts.set(key,d);
  const card={dataset:{exampleKey:key},append(){throw Error('unexpected outer error');}},button={closest:()=>card,hasAttribute:a=>a==='data-inline-save'};
- const c=vm.createContext({inlineDrafts:drafts,workspace,window:{corporiumRefreshUndoState:async()=>{assert.equal(drafts.size,0);calls.push('history');}},document:{addEventListener:(type,fn)=>listeners[type]=fn},inlineSlotEmpty:(_,i)=>!d.body.words[i].form&&!d.body.words[i].gloss&&!d.words[i].protected,repaintInline:()=>calls.push('paint'),
+ const c=vm.createContext({inlineDrafts:drafts,inlineOpening:new Map(),workspace,window:{corporiumRefreshUndoState:async()=>{assert.equal(drafts.size,0);calls.push('history');}},document:{addEventListener:(type,fn)=>listeners[type]=fn,querySelectorAll:()=>[]},inlineSlotEmpty:(_,i)=>!d.body.words[i].form&&!d.body.words[i].gloss&&!d.words[i].protected,repaintInline:()=>calls.push('paint'),
   originalApi:async(path,body)=>{assert.equal(d.saving,true);assert.equal(drafts.size,1);sent.push(body);calls.push(path);if(fail)throw Error('保存失败');return {id:'saved'};},
   api:()=>{throw Error('save must bypass premature workspace refresh');},
   refreshUndo:async()=>{assert.equal(drafts.size,0);calls.push('history');},loadTexts:async()=>calls.push('texts'),refreshExampleViews:async()=>{assert.equal(drafts.size,0);calls.push('views');}});
  const start=inline.indexOf("document.addEventListener('click',async e=>{"),end=inline.indexOf("window.addEventListener('beforeunload'",start);
+ vm.runInContext(inline.slice(inline.indexOf('function clearInlineEditView('),inline.indexOf('// Cached panels can contain')),c);
  vm.runInContext(inline.slice(start,end),c);
  return {d,drafts,calls,sent,save:()=>listeners.click({target:{closest:()=>button},preventDefault(){}})};
 }

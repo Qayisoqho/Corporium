@@ -25,6 +25,7 @@ LABELS = dict(zip(('/api/'+s for s in ('import','new-text','save','add','delete-
                   ('导入文本','新建文本','编辑句子','添加句子','删除句子','删除文本','移动句子','合并文本','修改文本信息','保存文件夹','删除文件夹','调整文件夹顺序')))
 LABELS.update({'/api/morpheme-'+a:n for a,n in [('save','保存语素'),('assign','整理组分语素'),('merge','归并语素'),('delete','删除语素'),('unassign','解除组分语素关联')]})
 LABELS['/api/object-media-save']='管理图片与录音'
+LABELS['/api/recorder-keep']='关联现场录音'
 LABELS['/api/homophone-phonology-save']='编辑同音语素表音系与归类'
 LABELS['/api/synonym-save']='编辑义项同义关系'
 LABELS['/api/collaborator-save']='编辑材料合作者'
@@ -56,10 +57,13 @@ LABELS['/api/segmentation-link']='关联形态分析与词典'
 LABELS.update({'/api/grammar-save':'保存语法标签','/api/grammar-delete':'删除语法标签定义'})
 LABELS.update({'/api/grammar-register-batch':'批量登记语法标签','/api/grammar-ignore':'忽略标签候选','/api/grammar-unignore':'恢复标签候选检查'})
 LABELS.update({'/api/layer-save':'保存标注层','/api/layer-delete':'删除标注层及内容','/api/annotation-save':'编辑附加标注'})
+LABELS['/api/layer-order']='调整标注层顺序'
 LABELS.update({'/api/writing-save':'保存书写类型','/api/writing-delete':'删除书写类型','/api/example-save':'保存独立例句','/api/example-delete':'删除独立例句'})
 LABELS.update({'/api/survey-'+a:label for a,label in {'save':'编辑调查提纲','template':'导入调查模板','delete':'删除调查条目','copy':'复制调查条目','order':'调整调查顺序','move':'移动调查条目','notes':'编辑研究笔记','evidence':'编辑调查例证','unlink':'移除调查例证引用','new-example':'新建调查例句'}.items()})
 LABELS.update({'/api/fieldwork-note-'+a:label for a,label in {'create':'新建调查笔记','save':'编辑调查笔记','copy':'复制调查笔记','delete':'删除调查笔记','reorder':'调整调查笔记顺序'}.items()})
-TABLES = ('texts','entries','folders','text_info','languages') + lexicon.TABLES + timeline.TABLES + collaborators.TABLES + grammar_survey.TABLES + fieldwork_notes.TABLES + object_media.TABLES + code_switching.TABLES + gloss_inheritance.TABLES
+import example_groups
+TABLES = ('texts','entries','folders','text_info','languages') + lexicon.TABLES + timeline.TABLES + collaborators.TABLES + grammar_survey.TABLES + fieldwork_notes.TABLES + object_media.TABLES + code_switching.TABLES + gloss_inheritance.TABLES + example_groups.TABLES
+LABELS.update({'/api/example-group-save':'编辑独立例句组','/api/example-group-delete':'解散独立例句组'})
 LABELS.update({'/api/code-'+a:label for a,label in {'save':'编辑正文语码标记','delete':'移除正文语码标记','link':'关联语码时间片段','unlink':'解除语码时间关联'}.items()})
 LABELS.update({'/api/timeline-'+key:label for key,label in {'speaker-save':'保存合作者','speaker-delete':'删除合作者','code-save':'保存语言标记','code-delete':'删除语言标记','delete-track':'删除空轨道'}.items()})
 LABELS.update({'/api/timeline-'+key:label for key,label in {'create':'新建时间轴','duplicate':'复制时间轴','delete':'删除时间轴','rename':'重命名时间轴','reorder':'调整时间轴顺序','text-order':'设置按时间轴自动排序','replace':'更换媒体并调整对齐','track':'保存时间轴轨道','interval':'编辑对齐区间','delete-interval':'删除对齐区间','split':'拆分时间区间','merge':'合并时间区间'}.items()})
@@ -250,6 +254,7 @@ def apply(db, path, body):
         lexicon.validate_changes(db,{(c['table'],i):(c['before'],c['after']) if redo else (c['after'],c['before']) for i,c in enumerate(changes)})
         timeline.hierarchy.validate(db)
         grammar_survey.validate(db)
+        example_groups.validate(db)
         fieldwork_notes.validate(db)
         code_switching.after_undo(db,changes)
         object_media.validate(db)
@@ -263,3 +268,5 @@ LABELS['/api/morpheme-sync-writings']='同步语素书写形式'
 LABELS.update({'/api/grammaticality-type-save':'设置合法性类型','/api/grammaticality-type-delete':'删除合法性类型','/api/grammaticality-save':'修改例句合法性'})
 
 LABELS['/api/quick-edit-settings']='词条快捷编辑设置'
+
+LABELS['/api/survey-evidence-groups']='引用独立例句组'

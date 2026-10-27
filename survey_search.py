@@ -64,6 +64,10 @@ def node_fields(n):
 def evidence_fields(e, source, scope):
     body = json.loads(e['body'])
     fields = {} if scope == 'examples' else dict(judgment=body.get('judgment', ''), context=rich_text(body.get('context')), local_notes=rich_text(body.get('notes')))
+    if scope!='examples':
+        for item in body.get('member_notes',{}).values():
+            for key,value in (('judgment',item.get('judgment','')),('context',rich_text(item.get('context'))),('local_notes',rich_text(item.get('notes')))):
+                fields[key]+='\n'+value
     if source is not None and scope != 'survey':
         fields.update({k: visible(source.get(k, '')) for k in ('original', 'ipa', 'translation', 'language_notes')})
         fields['sentence_notes'] = visible(source.get('notes', ''))
@@ -72,6 +76,18 @@ def evidence_fields(e, source, scope):
 
 
 def iter_sources(db, lid, evidence):
+    import example_groups
+    for eid in dict.fromkeys(e['record_id'] for e in evidence if e['kind']==example_groups.KIND):
+        try:group=example_groups.detail(db,lid,eid)
+        except ValueError:continue
+        joined={'notes':group['body']['name']+' '+group['body']['context'],'words':[]}
+        for member in group['members']:
+            if not member['record']:continue
+            source=member['record']['body']
+            for key in ('ipa','original','translation','language_notes'):joined[key]=joined.get(key,'')+'\n'+str(source.get(key,''))
+            joined['words'].extend(source.get('words',[]))
+            joined['notes']+='\n'+str(source.get('notes',''))
+        yield (example_groups.KIND,eid),joined
     for kind in ('corpus', 'independent'):
         ids = list(dict.fromkeys(e['record_id'] for e in evidence if e['kind'] == kind))
         for start in long_tasks.steps(range(0, len(ids), 400)):

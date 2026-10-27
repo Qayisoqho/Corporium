@@ -5,7 +5,6 @@
 .gloss:has(>.code-word-label){display:flex;align-items:baseline;gap:.35em;min-width:0}
 .code-gloss-text{min-width:0}
 .code-word-label{display:block;flex:0 1 auto;min-width:0;font:normal .65rem/1.2 var(--ui-font,system-ui),sans-serif;color:var(--green);font-variant-caps:normal;letter-spacing:.02em;max-width:14em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.code-word-label.code-review,.code-review{color:var(--warning,#986c28)}
 .code-panel{border:1px solid var(--line);border-radius:5px;padding:8px 10px;margin:8px 0;background:var(--surface,var(--paper));font-family:var(--ui-font,system-ui),sans-serif;min-width:0}
 .code-panel-heading,.code-span-heading,.code-audio-controls,.code-audio-link{display:flex;align-items:center;gap:6px;min-width:0}
 .code-panel-heading>span{font-size:.72rem;color:var(--muted)}

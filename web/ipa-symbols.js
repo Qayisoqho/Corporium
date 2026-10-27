@@ -93,7 +93,7 @@ const CorporiumIPA=(()=>{
 };
  const removed=new Set(["˩˥","˥˩","˧˥","˩˧","˥˩˥"]);
  const symbols=[];
- function add(category,text,zh,en){if(removed.has(text))return;const name=reviewedNames[text]??zh,english=en.replace(/\p{Script=Han}+/gu,' ');symbols.push({text,category,name,search:(text+' '+name+' '+english).toLowerCase(),display:/^\p{M}/u.test(text)?'◌'+text:text});}
+ function add(category,text,zh,en){if(removed.has(text))return;const sourceName=reviewedNames[text]??zh,name=globalThis.CorporiumI18n?.ipa(text,sourceName)??sourceName,english=en.replace(/\p{Script=Han}+/gu,' ');symbols.push({text,category,name,search:(text+' '+sourceName+' '+name+' '+english).toLowerCase(),display:/^\p{M}/u.test(text)?'◌'+text:text});}
  const places=['双唇 bilabial','唇齿 labiodental','齿 dental','齿龈 alveolar','龈后 postalveolar','卷舌 retroflex','硬腭 palatal','软腭 velar','小舌 uvular','咽 pharyngeal','声门 glottal'];
  const rows=[['塞音 plosive',['p b','','','t d','','ʈ ɖ','c ɟ','k ɡ','q ɢ','','ʔ']],['鼻音 nasal',['m','ɱ','','n','','ɳ','ɲ','ŋ','ɴ','','']],['颤音 trill',['ʙ','','','r','','','','','ʀ','','']],['闪音 tap flap',['','ⱱ','','ɾ','','ɽ','','','','','']],['擦音 fricative',['ɸ β','f v','θ ð','s z','ʃ ʒ','ʂ ʐ','ç ʝ','x ɣ','χ ʁ','ħ ʕ','h ɦ']],['边擦音 lateral fricative',['','','','ɬ ɮ','','','','','','','']],['近音 approximant',['','ʋ','','ɹ','','ɻ','j','ɰ','','','']],['边近音 lateral approximant',['','','','l','','ɭ','ʎ','ʟ','','','']]];
  for(const [manner,cells] of rows)cells.forEach((cell,i)=>cell.split(' ').filter(Boolean).forEach((s,j,a)=>add('consonants',s,places[i].split(' ')[0]+manner.split(' ')[0]+(a.length===2?(j?'（浊）':'（清）'):''),places[i]+' '+manner+' '+(a.length===2?(j?'voiced':'voiceless'):''))));
@@ -104,6 +104,7 @@ const CorporiumIPA=(()=>{
  // Additional Chinese-linguistics symbols use the actual characters, including ȶ U+0236.
  for(const [s,zh,en] of [["ȶ","龈腭爆发音（清）","voiceless alveolo-palatal plosive"],["ȡ","龈腭爆发音（浊）","voiced alveolo-palatal plosive"],["ȵ","龈腭鼻音","voiced alveolopalatal nasal"],["ȴ","龈腭边近音（浊）","voiced alveopalatal lateral approximant"],["ɿ","舌尖龈不圆唇元音","apical alveolar unrounded vowel"],["ʮ","舌尖龈圆唇元音","apical alveolar rounded vowel"],["ʅ","舌尖卷舌不圆唇元音","apical retroflex unrounded vowel"],["ʯ","舌尖卷舌圆唇元音","apical retroflex rounded vowel"],["ᴇ","中前不圆唇元音","mid front unrounded vowel"],["ᴀ","低央不圆唇元音","open central unrounded vowel"]])add('sinitic',s,zh,en);
  const categories={consonants:'辅音',vowels:'元音',other:'其他辅音',marks:'附加符号',prosody:'声调与超音段',sinitic:'汉语语言学符号'};
+ for(const key of Object.keys(categories))categories[key]=globalThis.CorporiumI18n?.phrase(categories[key])??categories[key];
  function find(query,category=''){const q=query.trim().toLowerCase();return symbols.filter(s=>(!category||s.category===category)&&(!q||q.split(/\s+/u).every(term=>s.search.includes(term))||[...s.text].some(c=>('u+'+c.codePointAt(0).toString(16).padStart(4,'0')).includes(q))))}
  return {symbols,categories,find};
 })();

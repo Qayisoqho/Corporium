@@ -179,5 +179,7 @@ def mutate(db,action,b,lid):
             import reduplication
             analyze(result);reduplication.check_relations(result)
         db.execute('INSERT INTO dictionary_examples VALUES(?,?,?,1) ON CONFLICT(id) DO UPDATE SET body=excluded.body,revision=dictionary_examples.revision+1',(xid,lid,json.dumps(result,ensure_ascii=False)))
-        return dict(id=xid,language_id=lid,body=result,revision=(old['revision'] if old else 0)+1)
+        import example_numbering
+        number=example_numbering.assign(db,lid,xid)
+        return dict(id=xid,language_id=lid,body=result,library_number=number,revision=(old['revision'] if old else 0)+1)
     raise ValueError('未知词典管理操作')

@@ -26,6 +26,20 @@ class GlossInheritanceTests(unittest.TestCase):
 
     def labels(self,e,ex):return [self.entries()[0]['words'][0]['gloss'],self.detail(ex,'independent')['body']['words'][0]['gloss']]
 
+    def test_export_reuse_never_changes_inputs_and_tracks_meaning_writes(self):
+        import gloss_inheritance as gloss
+        e,ex,x=self.fixture('手写')
+        with server.connect(audit=False) as db:
+            row=db.execute("SELECT * FROM corpus_units WHERE entry_id=? AND kind='word' AND position=0 AND active=1",(e['id'],)).fetchone()
+            original=dict(row);first=gloss.export_unit(db,row)
+            self.assertEqual(first['gloss'],'家')
+            self.assertEqual(gloss.export_unit(db,row),first)
+            self.assertEqual(dict(row),original)
+            cache=gloss.session(db);self.assertLessEqual(cache.export_bytes,4*1024**2)
+            db.execute('UPDATE gloss_meanings SET gloss=?,revision=revision+1 WHERE target_id=?',('住所',x['id']))
+            self.assertEqual(gloss.export_unit(db,row)['gloss'],'住所')
+            self.assertEqual(dict(row),original)
+
     def test_inherit_now_and_keep_unlinked_blank(self):
         e,ex,x=self.fixture('手写')
         self.assertEqual(self.labels(e,ex),['家','家'])

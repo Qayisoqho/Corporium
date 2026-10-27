@@ -63,7 +63,11 @@ def get(db,kind,rid):
         protected.update(json.loads(span[0]))
     for i,w in enumerate(words):w['protected']=w['id'] in protected or bool(body['words'][i].get('redup_id') or body['words'][i].get('morph_groups') or body['words'][i].get('infix_confirmation'))
     live={w['id'] for w in words};allowed={l['id'] for l in defs}
-    return dict(kind=kind,id=rid,body=body,language_id=lid,owner_language=scope,revision=revision,words=words,layers=defs,cells=cells,orphaned=[c for c in cells if not valid_cell(c,live,defs)])
+    result=dict(kind=kind,id=rid,body=body,language_id=lid,owner_language=scope,revision=revision,words=words,layers=defs,cells=cells,orphaned=[c for c in cells if not valid_cell(c,live,defs)])
+    if kind=='independent':
+        import example_numbering
+        result['library_number']=example_numbering.number(db,lid,rid)
+    return result
 
 def inline_save(db,b,lid):
     """Save fixed word slots and their layers as one undoable transaction."""
@@ -133,6 +137,11 @@ def create_sentence(db,b,lid):
     if b.get('survey_node'):
         if kind!='independent':raise ValueError('调查新例句必须是独立例句')
         grammar_survey.mutate(db,lid,'evidence',dict(node_id=b['survey_node'],version=b.get('survey_version'),kind=kind,record_id=rid,body={}))
+    if b.get('example_group'):
+        import example_groups
+        if kind!='independent':raise ValueError('只有独立例句可加入例句组')
+        group=example_groups.detail(db,lid,b['example_group'],False)
+        example_groups.mutate(db,lid,'save',dict(id=group['id'],token=b.get('example_group_token'),body=group['body'],members=[dict(example_id=m['example_id'],role=m['role']) for m in group['members']]+[dict(example_id=rid,role='')]))
     return dict(ok=True,id=rid,kind=kind,position=position,text_id=b.get('text_id'))
 
 def enrich(db,body,kind,rid):
@@ -148,6 +157,7 @@ def enrich(db,body,kind,rid):
     if kind=='independent':
         import languages
         lid=data['language_id'];language=dict(db.execute('SELECT * FROM languages WHERE id=?',(lid,)).fetchone())
+        body['library_number']=data['library_number']
         languages.annotate(body,lid,{lid:language})
     attach(body,[w['id'] for w in data['words']],data['layers'],data['cells'])
     import morpheme_colors
@@ -157,9 +167,19 @@ def enrich(db,body,kind,rid):
     return body
 
 def mutate(db,action,b,lid):
+    if action=='layer-order':
+        current=layers(db,lid)
+        snapshot=[dict(id=l['id'],revision=l['revision']) for l in current]
+        order=b.get('order')
+        if b.get('snapshot')!=snapshot:raise ValueError('标注层已变化，请重新打开')
+        if not isinstance(order,list) or any(not isinstance(x,str) for x in order) or len(order)!=len(current) or set(order)!={l['id'] for l in current}:raise ValueError('标注层排序必须包含本语言的全部层，且不能重复')
+        if order==[l['id'] for l in current]:return {'ok':True,'layers':current}
+        for position,xid in enumerate(order):
+            db.execute('UPDATE annotation_layers SET position=?,revision=revision+1 WHERE id=? AND language_id=?',(position,xid,lid))
+        return {'ok':True,'layers':layers(db,lid)}
     if action in ('layer-save','layer-delete'):
         old=db.execute('SELECT * FROM annotation_layers WHERE id=?',(b.get('id'),)).fetchone()
-        if b.get('id') and (not old or old['revision']!=b.get('revision')):raise ValueError('标注层已变化，请重新打开')
+        if b.get('id') and (not old or old['language_id']!=lid or old['revision']!=b.get('revision')):raise ValueError('标注层已变化，请重新打开')
         if action=='layer-delete':
             if b.get('confirmed') is not True:raise ValueError('删除标注层及其内容需要确认')
             db.execute('DELETE FROM annotation_cells WHERE layer_id=?',(b['id'],));db.execute('DELETE FROM annotation_layers WHERE id=?',(b['id'],));return {'ok':True}
@@ -196,7 +216,7 @@ def mutate(db,action,b,lid):
 def validate(db):
     if db.execute('SELECT 1 FROM annotation_cells c LEFT JOIN annotation_layers l ON l.id=c.layer_id WHERE l.id IS NULL').fetchone():raise ValueError('仍有标注引用此层，请先撤销标注内容或删除该层')
 
-def search(db,q):
+def search(db,q,*,ids_only=False):
     """Paginate empty searches in SQL; analyze only visible hits in filtered searches."""
     from corpus import analyze,QueryMatcher,normalize
     source=q.get('source','all');lid=q.get('language','all');query=q.get('q','');field=q.get('field','all');mode=q.get('mode','contains');case=q.get('case')=='true'
@@ -218,6 +238,7 @@ def search(db,q):
     extra,values=grammaticality.filter_sql(q,'q.body','q.language_id');sql+=extra+(" AND q.kind='independent'" if extra else '');args.extend(values)
     page=max(1,int(q.get('page',1)))
     if not normalize(query,case) and field!='reduplication':
+        if ids_only:return {'ids':[r[0] for r in db.execute('SELECT id FROM ('+sql+')',args)]}
         total=db.execute('SELECT COUNT(*) FROM ('+sql+')',args).fetchone()[0];pages=max(1,(total+19)//20);page=min(page,pages)
         visible=list(db.execute('SELECT * FROM ('+sql+') ORDER BY source_order,ordering,position LIMIT 20 OFFSET ?',[*args,(page-1)*20]))
     else:
@@ -237,6 +258,7 @@ def search(db,q):
                 live={w['id'] for w in units(db,r['kind'],r['id'],b)};layers_for_language=[v for v in defs.values() if v['language_id']==r['language_id']]
                 found=any(valid_cell(c,live,layers_for_language) for c in layer_hits[(r['kind'],r['id'])])
             if found:matches.append(r)
+        if ids_only:return {'ids':[r['id'] for r in matches]}
         total=len(matches);pages=max(1,(total+19)//20);page=min(page,pages);visible=matches[(page-1)*20:page*20]
     items=[]
     for r in visible:

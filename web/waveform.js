@@ -10,7 +10,7 @@ function decode(wave){
  const raw=Uint8Array.from(atob(wave.values),c=>c.charCodeAt(0));
  const data=wave.encoding==='f32'?new Float32Array(raw.buffer):new Int16Array(raw.buffer);
  const stride=wave.count*(wave.mode==='samples'?1:2),channels=[];
- if(data.length!==stride*wave.channel_count)throw Error('波形片段数据不完整，请重试');
+ if(data.length!==stride*wave.channel_count)throw Error((globalThis.CorporiumI18n?.f("e7588c03ff524b",()=>[])??'波形片段数据不完整，请重试'));
  for(let n=0;n<wave.channel_count;n++)channels.push(data.subarray(n*stride,(n+1)*stride));
  const result={...wave,channels};delete result.values;return result;
 }

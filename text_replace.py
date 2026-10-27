@@ -9,8 +9,9 @@ import corpus
 import lexicon
 import segmentation
 import gloss_inheritance
+import annotations
 
-FIELDS=('ipa','form','gloss','translation')
+FIELDS=('ipa','form','gloss','translation','layer')
 
 def settings(b):
     field=b.get('field');find=b.get('find');replacement=b.get('replacement','');mode=b.get('mode','contains')
@@ -20,7 +21,46 @@ def settings(b):
     owner=b.get('owner_kind','corpus')
     if owner not in ('corpus','independent'):raise ValueError('请选择文本语料或独立例句库')
     if owner=='independent' and b.get('text_id'):raise ValueError('独立例句替换不能限定文本')
-    return dict(field=field,find=find,replacement=replacement,mode=mode,case=b.get('case',True),text_id=b.get('text_id',''),owner_kind=owner)
+    opt=dict(field=field,find=find,replacement=replacement,mode=mode,case=b.get('case',True),text_id=b.get('text_id',''),owner_kind=owner)
+    if field=='layer':
+        layer_id=b.get('layer_id','')
+        if not isinstance(layer_id,str):raise ValueError('请选择当前语言的自定义标注层')
+        opt['layer_id']=layer_id
+    return opt
+
+
+def layer_cells(db,data,opt,lid):
+    """Only live cells of this language; orphaned annotations stay untouched."""
+    definitions=annotations.layers(db,lid)
+    if opt['layer_id'] and not any(l['id']==opt['layer_id'] for l in definitions):raise ValueError('请选择当前语言的自定义标注层')
+    selected={l['id']:l for l in definitions if not opt['layer_id'] or l['id']==opt['layer_id']}
+    rows={r['id']:r for r in data}
+    for row in data:
+        row['_replace_cells']=[]
+        body=json.loads(row['body']);row['_replace_language']=body.get('language_id') or lid
+        row['_replace_units']={w.get('annotation_id',''):i for i,w in enumerate(body.get('words',[]))} if opt['owner_kind']=='independent' else {}
+    if opt['owner_kind']=='corpus':
+        query="""SELECT u.entry_id,u.id,u.position FROM corpus_units u JOIN entries e ON e.id=u.entry_id
+                 JOIN texts t ON t.id=e.text_id WHERE t.language_id=? AND (?='' OR e.text_id=?) AND u.kind='word' AND u.active=1"""
+        for unit in long_tasks.steps(db.execute(query,(lid,opt['text_id'],opt['text_id']))):
+            if unit['entry_id'] in rows:rows[unit['entry_id']]['_replace_units'][unit['id']]=unit['position']
+    query="""SELECT c.* FROM annotation_cells c JOIN annotation_layers l ON l.id=c.layer_id
+             WHERE c.owner_kind=? AND l.language_id=? ORDER BY l.position,l.id,c.rowid"""
+    for cell in long_tasks.steps(db.execute(query,(opt['owner_kind'],lid))):
+        row=rows.get(cell['record_id']);definition=selected.get(cell['layer_id'])
+        if row is None or definition is None:continue
+        if row['_replace_language']!=lid:continue
+        positions=row['_replace_units']
+        if not annotations.valid_cell(cell,set(positions),[definition]):continue
+        row['_replace_cells'].append(dict(cell,word=positions.get(cell['unit_id']),layer_name=definition['name']))
+    return definitions
+
+
+def cell_identity(change):return change.get('cell_id',change['word'])
+
+
+def change_key(rid,cell,start,end,layer=False):
+    return json.dumps([rid,'layer',cell,start,end],ensure_ascii=False,separators=(',',':')) if layer else f'{rid}:{cell}:{start}:{end}'
 
 def pattern(opt):
     value=re.escape(opt['find'])
@@ -98,16 +138,17 @@ def edits_for(row,opt,selected):
 
 def plan(db,b,lid,check=True):
     opt=settings(b);data=records(db,opt,lid);regex=pattern(opt);changes=[]
+    definitions=layer_cells(db,data,opt,lid) if opt['field']=='layer' else None
     for row in long_tasks.steps(data):
         body=json.loads(row['body'])
-        cells=[(None,body[opt['field']])] if opt['field'] in ('ipa','translation') else [(i,w[opt['field']]) for i,w in enumerate(body['words'])]
-        for index,value in long_tasks.steps(cells):
+        cells=[(c['word'],c['value'],dict(cell_id=c['id'],layer_id=c['layer_id'],layer_name=c['layer_name'])) for c in row['_replace_cells']] if definitions is not None else [(None,body[opt['field']],{})] if opt['field'] in ('ipa','translation') else [(i,w[opt['field']],{}) for i,w in enumerate(body['words'])]
+        for index,value,extra in long_tasks.steps(cells):
             for m in long_tasks.steps(regex.finditer(value)):
                 if m.group()==opt['replacement']:continue
-                changes.append(dict(key=f"{row['id']}:{index}:{m.start()}:{m.end()}",id=row['id'],word=index,start=m.start(),end=m.end(),before=value,after=value[:m.start()]+opt['replacement']+value[m.end():],title=row['title'],position=row['position']))
+                changes.append(dict(key=change_key(row['id'],extra.get('cell_id',index),m.start(),m.end(),definitions is not None),id=row['id'],word=index,start=m.start(),end=m.end(),before=value,after=value[:m.start()]+opt['replacement']+value[m.end():],title=row['title'],position=row['position'],**extra))
                 if len(changes)>10000:raise ValueError('超过 10000 处匹配，请缩小查找范围')
     # Include current associations and layer content, not only entry revisions.
-    digest=hashlib.sha256(json.dumps([opt,data],ensure_ascii=False,sort_keys=True).encode())
+    digest=hashlib.sha256(json.dumps([lid,opt,data,definitions],ensure_ascii=False,sort_keys=True).encode())
     scope=" JOIN entries e ON e.id=u.entry_id JOIN texts t ON t.id=e.text_id WHERE t.language_id=? AND (?='' OR e.text_id=?)"
     queries=[
         'SELECT u.* FROM corpus_units u'+scope+' ORDER BY u.rowid',
@@ -124,7 +165,7 @@ def plan(db,b,lid,check=True):
     by_entry=defaultdict(list)
     for c in long_tasks.steps(changes):by_entry[c['id']].append(c)
     conflicts=[];blocked=[]
-    for row in long_tasks.steps(data if check else []):
+    for row in long_tasks.steps(data if check and definitions is None else []):
         chosen=by_entry[row['id']]
         if not chosen:continue
         try:
@@ -148,13 +189,24 @@ def apply(db,b,lid):
     chosen=[c for c in p['changes'] if c['key'] in keyset];pending=[];conflicts=[]
     by_entry=defaultdict(list);by_cell=defaultdict(list)
     for c in long_tasks.steps(chosen):
-        by_entry[c['id']].append(c);by_cell[(c['id'],c['word'])].append(c)
+        by_entry[c['id']].append(c);by_cell[(c['id'],cell_identity(c))].append(c)
     for row in long_tasks.steps(data):
         selected=by_entry[row['id']]
         if not selected:continue
+        if opt['field']=='layer':
+            pending.append((row,None,[],[]));continue
         body,issues,indices=edits_for(row,opt,selected);conflicts.extend(issues);pending.append((row,body,issues,indices))
     if conflicts and b.get('confirm_conflicts') is not True:return dict(needs_confirmation=True,conflicts=conflicts)
     for row,body,issues,indices in long_tasks.steps(pending):
+        if opt['field']=='layer':
+            for cell in row['_replace_cells']:
+                changes=by_cell[(row['id'],cell['id'])]
+                if not changes:continue
+                value=cell['value']
+                for c in sorted(changes,key=lambda c:c['start'],reverse=True):value=value[:c['start']]+opt['replacement']+value[c['end']:]
+                if value:db.execute('UPDATE annotation_cells SET value=?,revision=revision+1 WHERE id=?',(value,cell['id']))
+                else:db.execute('DELETE FROM annotation_cells WHERE id=?',(cell['id'],))
+            continue
         if opt['owner_kind']=='independent':
             # Literal replacement supplies a fixed-slot correspondence. Preserve
             # annotation IDs, language spans, media and dictionary targets. Old
@@ -178,6 +230,6 @@ def apply(db,b,lid):
     remaining=[]
     for c in long_tasks.steps(p['changes']):
         if c['key'] not in pending_keyset or c['key'] in keyset:continue
-        shift=sum(len(opt['replacement'])-(v['end']-v['start']) for v in by_cell[(c['id'],c['word'])] if v['end']<=c['start'])
-        remaining.append(f"{c['id']}:{c['word']}:{c['start']+shift}:{c['end']+shift}")
+        shift=sum(len(opt['replacement'])-(v['end']-v['start']) for v in by_cell[(c['id'],cell_identity(c))] if v['end']<=c['start'])
+        remaining.append(change_key(c['id'],cell_identity(c),c['start']+shift,c['end']+shift,opt['field']=='layer'))
     return dict(ok=True,sentences=len(pending),replacements=len(chosen),conflicts=len(conflicts),remaining_keys=remaining)

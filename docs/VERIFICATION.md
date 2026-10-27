@@ -1,4 +1,37 @@
-# 源码发布副本验证
+# 公开源码副本验证
+
+验证日期：**2026-10-27**。源码版本：**0.9.01026.4**。本轮从本副本目录执行，使用Windows x64和Python 3.12.14；版本号和既有安装包未因文档／源码同步而递增。
+
+## 同日后续：查找替换与连续关联修订
+
+自定义层／指定书写类型替换及连续自动关联已同步。本副本新增层替换回归4项和完整前端415项实际通过；代码与开发目录按散列核对，公开适配入口保留。开发目录另有73项相关后端和中英文实际浏览器流程、60组主题／字号及6组窄窗验证，这些不计为本副本另行执行的后端数量。此前232／412项属于下节的同步验证，保留原统计边界。
+
+## 文档／源码同步时实际执行（较早同日记录）
+
+- 232项相关后端回归通过，无失败、错误或跳过；通过本副本`run_tests.py`的数据库保护执行，确认server、recorder、word_analysis_memory和ui_localization均来自本副本。
+- `run_tests.py frontend`运行412项前端检查，通过且无跳过；该入口包含全部CJS和`test_*.js`，与只运行`*.test.cjs`的统计范围不同。
+- 五种配置`smoke`、`ordinary`、`dense`、`research`、`reduplication`各生成100句，生成器的17项关系检查、SQLite完整性和外键检查通过；媒体为合成输入。
+- 桌面源码自检通过，验证建项目、恢复设置及许可资源；不把源码自检当成已构建安装包或真实安装验收。
+- 更新并清理来源路径后的虚构Tëlira包导入成功：2篇文本、168句、573词条、1,221条词典关联，SQLite完整性和外键检查通过。
+- 当前Python运行模块、前端与构建资源按散列核对；公开专用启动入口、合成输入、测试隔离和示例验证逻辑保留，没有改回对开发者本机数据的依赖。
+
+后端覆盖整词匹配及复杂结构、快捷入典和词类登记、关联继承、例句组／编号、撤销与交换、备份恢复、录音模拟采集、语言显示、Excel／解析／字体／类目录及合成工具等23个模块。**本轮没有重新运行完整后端发现套件**，也未在此副本进行真实麦克风录音、实际Word粘贴、GUI逐帧性能或安装升级／卸载验收；不能将开发目录其他轮次的数字合并为本轮结果。
+
+## 复现
+
+```powershell
+python -B run_tests.py backend
+python -B run_tests.py backend --pattern test_assistance_refinement.py
+python -B run_tests.py frontend
+python -B desktop.py --self-test build/desktop-check
+python -B tools/test_materials.py generate --profile smoke --sentences 100 --output build/smoke/corpus.sqlite3
+```
+
+第一条是供后续按需运行的完整后端命令，不表示本轮又完整执行了一遍。测试数据库只允许在本副本build内；本轮临时材料和机器日志移到源码分发范围之外，不附带个人语料或构建环境。运行与构建说明见[README](../README.md)和[Windows构建](../packaging/README.md)。
+
+---
+
+# 2026-10-24旧源码副本验证（历史记录）
 
 验证日期：2026-10-24。版本：0.9.01024。环境：Windows x64、Python 3.12.14。
 

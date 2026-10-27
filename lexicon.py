@@ -18,6 +18,7 @@ import categories
 import dictionary_organization
 import dictionary_search
 import entry_dates
+import example_numbering
 import gloss_inheritance
 import paradigms
 from collections import Counter,defaultdict,OrderedDict
@@ -36,6 +37,7 @@ def initialize(db):
     morpheme_registry.initialize(db)
     dictionary_organization.initialize(db)
     dictionary_data.initialize(db)
+    example_numbering.initialize(db)
     annotations.initialize(db)
     grammar.initialize(db)
     morphology.initialize(db)
@@ -716,6 +718,7 @@ def export_bundle(db,lid,stream=False):
     units=streaming_json.UnitMap(db,lid) if stream else {r['id']:gloss_inheritance.export_unit(db,r) for r in db.execute('SELECT u.* FROM corpus_units u JOIN entries e ON e.id=u.entry_id JOIN texts t ON t.id=e.text_id WHERE t.language_id=?',(lid,))}
     for link in links:
         long_tasks.checkpoint(None,'正在整理词典及语料关联…')
+        if link['unit_id'] in units:continue
         u=dict(db.execute('SELECT * FROM corpus_units WHERE id=?',(link['unit_id'],)).fetchone())
         units[u['id']]=gloss_inheritance.export_unit(db,u) if not stream else u
         if u['parent_id'] and u['parent_id'] not in units:
@@ -723,11 +726,13 @@ def export_bundle(db,lid,stream=False):
             if parent: units[parent['id']]=gloss_inheritance.export_unit(db,parent) if not stream else dict(parent)
     rows={r['id']:dict(r) for r in db.execute('SELECT * FROM dictionary_targets WHERE language_id=?',(lid,))}
     for link in links:
+        if link['lexeme_id'] in rows:continue
         r=db.execute('SELECT * FROM dictionary_targets WHERE id=?',(link['lexeme_id'],)).fetchone()
         rows[r['id']]=dict(r)
-    extras=[gloss_inheritance.export_body(db,'independent',e) for e in gloss_inheritance.iter_rows(db,db.execute('SELECT * FROM dictionary_examples WHERE language_id=?',(lid,)),'independent')]
+    extras=[{**gloss_inheritance.export_body(db,'independent',e),'library_number':e['library_number']} for e in gloss_inheritance.iter_rows(db,db.execute('SELECT d.*,n.number library_number FROM dictionary_examples d JOIN example_numbers n ON n.id=d.id AND n.language_id=d.language_id WHERE d.language_id=? ORDER BY n.ordering',(lid,)),'independent')]
     for e in extras:
         for target in json.loads(e['body'])['targets']:
+            if target['lexeme_id'] in rows:continue
             r=db.execute('SELECT * FROM dictionary_targets WHERE id=?',(target['lexeme_id'],)).fetchone()
             rows[r['id']]=dict(r)
     # Include the complete base-entry chain for cross-language referenced entries.
@@ -741,7 +746,8 @@ def export_bundle(db,lid,stream=False):
             rows[base['id']]=dict(base);pending.append(dict(base))
     languages={lid}|{r['language_id'] for r in rows.values()}
     types=[dict(t) for t in db.execute('SELECT * FROM writing_types') if t['language_id'] in languages]
-    entry_ids={u['entry_id'] for u in units.values()};example_ids={e['id'] for e in extras}
+    entry_ids={r[0] for r in db.execute('SELECT DISTINCT entry_id FROM exchange_units')} if stream else {u['entry_id'] for u in units.values()}
+    example_ids={e['id'] for e in extras}
     cells=[dict(c) for c in db.execute('SELECT * FROM annotation_cells') if (c['owner_kind']=='corpus' and c['record_id'] in entry_ids) or (c['owner_kind']=='independent' and c['record_id'] in example_ids)]
     layer_ids={c['layer_id'] for c in cells}
     layer_defs=[dict(l) for l in db.execute('SELECT * FROM annotation_layers') if l['language_id']==lid or l['id'] in layer_ids]
@@ -750,7 +756,7 @@ def export_bundle(db,lid,stream=False):
     link_ids={l['id'] for l in links}
     analyses=[dict(r) for r in db.execute('SELECT * FROM morphology_analyses') if r['id'] in link_ids]
     segments=streaming_json.Rows(db,'SELECT s.* FROM unit_segments s JOIN exchange_units u ON u.id=s.id',transform=lambda r:gloss_inheritance.export_segment(db,r)) if stream else [gloss_inheritance.export_segment(db,r) for r in db.execute('SELECT * FROM unit_segments') if r['id'] in units]
-    return {'gloss_overrides':gloss_inheritance.export_overrides(db,lid),**{t:[dict(r) for r in db.execute('SELECT * FROM '+t) if r['language_id'] in tag_languages] for t in dictionary_organization.TABLES},**morpheme_registry.export_bundle(db,languages,rows),'synonym_links':synonyms.export_bundle(db,languages),'lexicon_version':13,'lexical_reviews':[dict(r) for r in db.execute('SELECT * FROM lexical_reviews') if r['id'] in link_ids],'component_links':[dict(r) for r in db.execute('SELECT * FROM component_links') if r['id'] in link_ids],'category_classes':[c for c in categories.listing(db) if c['language_id'] in tag_languages],'lexemes':[{k:v for k,v in r.items() if k not in ('target_kind','rowid')} for r in rows.values() if r['target_kind']=='lexeme'],'corpus_units':units.values() if stream else list(units.values()),'lexical_links':links,'morphology_analyses':analyses,'unit_segments':segments,'writing_types':types,'dictionary_examples':extras,'annotation_layers':layer_defs,'annotation_cells':cells,'grammar_tags':[r for r in grammar.listing(db) if r['language_id'] in tag_languages]}
+    return {'example_number_next':example_numbering.export_next(db,lid),'gloss_overrides':gloss_inheritance.export_overrides(db,lid),**{t:[dict(r) for r in db.execute('SELECT * FROM '+t) if r['language_id'] in tag_languages] for t in dictionary_organization.TABLES},**morpheme_registry.export_bundle(db,languages,rows),'synonym_links':synonyms.export_bundle(db,languages),'lexicon_version':13,'lexical_reviews':[dict(r) for r in db.execute('SELECT * FROM lexical_reviews') if r['id'] in link_ids],'component_links':[dict(r) for r in db.execute('SELECT * FROM component_links') if r['id'] in link_ids],'category_classes':[c for c in categories.listing(db) if c['language_id'] in tag_languages],'lexemes':[{k:v for k,v in r.items() if k not in ('target_kind','rowid')} for r in rows.values() if r['target_kind']=='lexeme'],'corpus_units':units.values() if stream else list(units.values()),'lexical_links':links,'morphology_analyses':analyses,'unit_segments':segments,'writing_types':types,'dictionary_examples':extras,'annotation_layers':layer_defs,'annotation_cells':cells,'grammar_tags':[r for r in grammar.listing(db) if r['language_id'] in tag_languages]}
 
 
 def import_bundle(db,bundle,language_map,entry_map,lid,layouts=None):
@@ -839,7 +845,8 @@ def import_bundle(db,bundle,language_map,entry_map,lid,layouts=None):
         ref=morphology.component_links.remap(json.loads(r['body']),oldlex,xmap,submap,classmap,type_map,tagmap)
         morphology.component_links.write(db,newlink,ref)
     emap={};independent_units={}
-    for e in long_tasks.steps(bundle.get('dictionary_examples',[])):
+    imported_examples=example_numbering.import_examples(bundle)
+    for e in long_tasks.steps(imported_examples):
         data=json.loads(e['body'])
         for t in long_tasks.steps(data['targets']):
             old=t['lexeme_id'];t['lexeme_id']=xmap[old]
@@ -847,9 +854,12 @@ def import_bundle(db,bundle,language_map,entry_map,lid,layouts=None):
             if t.get('component_ref'):t['component_ref']=morphology.component_links.remap(t['component_ref'],old,xmap,submap,classmap,type_map,tagmap)
             for key in long_tasks.steps(('usage_id','sense_id','form_id')):
                 if t.get(key):t[key]=submap[(old,t[key])]
-        created=dictionary_data.mutate(db,'example-save',dict(body=data),language_map[e['language_id']]);emap[e['id']]=created['id']
+        target_language=language_map[e['language_id']]
+        if 'library_number' in e:example_numbering.prepare_import(db,target_language,e['library_number'])
+        created=dictionary_data.mutate(db,'example-save',dict(body=data),target_language);emap[e['id']]=created['id']
         for a,b in long_tasks.steps(zip(data.get('words',[]),created['body']['words'])):
             if a.get('annotation_id'):independent_units[a['annotation_id']]=b['annotation_id']
+    if bundle.get('example_number_next') is not None:example_numbering.advance(db,lid,bundle['example_number_next'])
     lmap={}
     for l in long_tasks.steps(bundle.get('annotation_layers',[])):
         new=annotations.mutate(db,'layer-save',{k:v for k,v in l.items() if k not in ('id','revision')},language_map[l['language_id']]);lmap[l['id']]=new['id']

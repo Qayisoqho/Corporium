@@ -97,7 +97,7 @@ class CorporiumWorkspaceViews{
   const previousUndo=undoCommand;
   undoCommand=async function(...args){
    // Check before autosave/navigation wrappers can mutate or hide another draft.
-   if(typeof inlineDrafts!=='undefined'&&inlineDrafts.size){$('notice').textContent='请先保存或取消正在编辑的句子，再撤销或重做。';return;}
+   if(typeof inlineDrafts!=='undefined'&&inlineDrafts.size){$('notice').textContent=(globalThis.CorporiumI18n?.f("e45b5e8e1892dd",()=>[])??'请先保存或取消正在编辑的句子，再撤销或重做。');return;}
    const run=async()=>{
     const before=window.corporiumWorkspaceRevision;
     const result=await previousUndo(...args);

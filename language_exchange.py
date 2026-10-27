@@ -6,6 +6,7 @@ import lexicon
 import timeline
 import collaborators
 import grammar_survey
+import example_groups
 import fieldwork_notes
 import code_switching
 import gloss_inheritance
@@ -19,7 +20,7 @@ def export_bundle(db,lid,stream=False):
         t['info']=dict(db.execute('SELECT * FROM text_info WHERE text_id=?',(t['id'],)).fetchone() or {})
         t['entries']=streaming_json.Rows(db,'SELECT * FROM entries WHERE text_id=? ORDER BY position',(t['id'],),transform=lambda r:gloss_inheritance.export_body(db,'corpus',r)) if stream else [gloss_inheritance.export_body(db,'corpus',r) for r in gloss_inheritance.iter_rows(db,db.execute('SELECT * FROM entries WHERE text_id=? ORDER BY position',(t['id'],)),'corpus')]
     # Include referenced languages so mixed-language annotations remain interpretable.
-    refs={json.loads(e['body']).get('language_id') for t in text_rows for e in t['entries']}-{None,'',lid}
+    refs={r[0] for r in db.execute("SELECT DISTINCT json_extract(e.body,'$.language_id') FROM entries e JOIN texts t ON t.id=e.text_id WHERE t.language_id=?",(lid,))}-{None,'',lid}
     dictionary=lexicon.export_bundle(db,lid,stream=stream)
     refs|={x['language_id'] for x in dictionary['lexemes']+dictionary['annotation_layers']}-{lid}
     people_bundle=collaborators.export_bundle(db,lid)
@@ -28,7 +29,7 @@ def export_bundle(db,lid,stream=False):
     alignment['timeline_codes']=[dict(r) for r in db.execute('SELECT * FROM timeline_codes ORDER BY name,id') if r['id'] in code_ids]
     refs.update(json.loads(c['metadata'])['workspace_language_id'] for c in alignment['timeline_codes'] if json.loads(c['metadata']).get('workspace_language_id') not in (None,'',lid))
     refs.update(x for p in people_bundle['timeline_speakers'] for x in json.loads(p['metadata']).get('language_ids',[]) if x!=lid and db.execute('SELECT 1 FROM languages WHERE id=?',(x,)).fetchone())
-    return ({'format':'corpus-language-v1','language':language,'referenced_languages':[grammaticality.export_language(languages.require(db,x)) for x in refs], 'folders':[dict(r) for r in db.execute('SELECT * FROM folders WHERE language_id=? ORDER BY position',(lid,))],'texts':text_rows,**dictionary,**alignment,**people_bundle,**grammar_survey.export_bundle(db,lid),**fieldwork_notes.export_bundle(db,lid,stream=stream),**code_switching.export_bundle(db,lid,stream=stream)})
+    return ({'format':'corpus-language-v1','language':language,'referenced_languages':[grammaticality.export_language(languages.require(db,x)) for x in refs], 'folders':[dict(r) for r in db.execute('SELECT * FROM folders WHERE language_id=? ORDER BY position',(lid,))],'texts':text_rows,**dictionary,**alignment,**people_bundle,**grammar_survey.export_bundle(db,lid),**example_groups.export_bundle(db,lid),**fieldwork_notes.export_bundle(db,lid,stream=stream),**code_switching.export_bundle(db,lid,stream=stream)})
 
 # Exchange files are staged outside project data and expire after an hour.
 import tempfile

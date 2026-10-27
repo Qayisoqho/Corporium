@@ -1,0 +1,20 @@
+#recorder-dialog{width:min(660px,calc(100vw - 32px));max-height:calc(100dvh - 40px);overflow:auto}
+#recorder-dialog h2{margin-top:0}
+.recorder-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px}
+.recorder-grid label{margin:0;min-width:0;display:flex;flex-direction:column;gap:4px}
+.recorder-grid input,.recorder-grid select{width:100%;min-width:0}
+.recorder-grid>label:has(#recorder-name),#recorder-target-label{grid-column:1/-1}
+.recorder-settings{margin:14px 0}
+.recorder-settings .recorder-grid{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:10px}
+.recorder-monitor{display:flex;align-items:center;gap:12px;margin:16px 0;font-variant-numeric:tabular-nums}
+#recorder-time{min-width:5.5em}#recorder-meter{flex:1;min-width:30px;height:18px}#recorder-level{min-width:6em;text-align:right}
+.recorder-actions,.recorder-pending-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.recorder-pending-row{margin-top:10px}.recorder-pending-row select{flex:1;min-width:120px}
+#recorder-preview{width:100%;height:40px;margin:6px 0 12px}
+#recorder-pending{margin-top:16px}.recorder-help,.recorder-settings p,#recorder-format-note{color:var(--muted);font-size:.9em}
+#recorder-error{color:var(--danger,#b84a40)}
+#recorder-bar{display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);margin-bottom:8px}
+#recorder-bar[hidden]{display:none}
+.object-media-list-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px}
+.object-media-list-actions>:is(#object-media-record,#object-media-new){margin:0}
+@media(max-width:540px){.recorder-grid{grid-template-columns:1fr}.recorder-settings .recorder-grid{grid-template-columns:1fr}.recorder-monitor{gap:6px}}

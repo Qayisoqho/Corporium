@@ -1,0 +1,12 @@
+.formatted-copy-controls{display:inline-flex;align-items:center;gap:7px;vertical-align:middle;white-space:nowrap}
+.formatted-copy-controls button{font:inherit;line-height:inherit}
+#workspace-toolbar .formatted-copy-controls>button{background:transparent;border:1px solid transparent;padding:3px 7px;color:inherit;border-radius:4px}
+#workspace-toolbar .toolbar-row .formatted-copy-controls>button.is-copying,.formatted-copy-controls>button.is-copying{border:1px solid var(--green)!important;background:var(--accent)!important;color:var(--ink);outline:1px solid var(--green);outline-offset:-1px}
+.formatted-copy-count{font-size:.75rem;color:var(--muted)}
+.formatted-copy-controls [hidden]{display:none!important}
+.formatted-copy-mode .formatted-copy-pick{display:block;width:15px;height:15px;margin:6px auto 0;padding:0;accent-color:var(--green);cursor:pointer}
+.formatted-copy-mode .sentence-number:has(.formatted-copy-pick){text-align:center}
+.formatted-copy-mode .formatted-copy-has-gutter{position:relative}
+.formatted-copy-gutter{position:absolute;left:-30px;top:0;min-width:26px;text-align:center;font-size:.75rem;line-height:1.5;color:var(--muted);font-style:normal}
+.formatted-copy-mode .formatted-copy-group-pick{display:inline-block;vertical-align:middle;flex:none;width:15px;height:15px;margin:0 6px 0 0;padding:0;accent-color:var(--green)}
+.brief-mode .formatted-copy-gutter,.brief-mode .formatted-copy-pick,.brief-mode .formatted-copy-group-pick{display:block!important}

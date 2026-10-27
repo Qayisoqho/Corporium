@@ -25,7 +25,7 @@ const TimelineTree={
   const groups=new Map(),children=new Map(),result=[];
   for(const t of tracks){const map=t.parent_id?children:groups,key=t.parent_id||t.speaker_id||'';if(!map.has(key))map.set(key,[]);map.get(key).push(t);}
   function visit(t,depth){result.push({track:t,depth,children:children.get(t.id)?.length||0});if(!collapsed.has(t.id))for(const child of children.get(t.id)||[])visit(child,depth+1);}
-  for(const [id,roots] of groups){const speaker=speakers.find(s=>s.id===id);result.push({group:true,id:'speaker:'+id,name:speaker?speaker.name:'未指定说话人',count:roots.length});if(!collapsed.has('speaker:'+id))for(const t of roots)visit(t,0);}
+  for(const [id,roots] of groups){const speaker=speakers.find(s=>s.id===id);result.push({group:true,id:'speaker:'+id,name:speaker?speaker.name:(globalThis.CorporiumI18n?.f("7efffb98fea4dc",()=>[])??'未指定说话人'),count:roots.length});if(!collapsed.has('speaker:'+id))for(const t of roots)visit(t,0);}
   return result;
  }
 };

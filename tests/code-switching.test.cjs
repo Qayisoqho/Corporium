@@ -36,6 +36,6 @@ test('only the last word labels a code range, inline with its original rich glos
  const rich='<span class="grammar-label">PST</span>';
  assert.equal(c.gloss({code_mark:mark},rich),rich);
  const html=c.gloss({code_mark:{...mark,start:false,end:true}},rich);
- assert.ok(html.includes('<span class="code-gloss-text">'+rich+'</span><span class="code-word-label '));
+ assert.ok(html.includes('<span class="code-gloss-text">'+rich+'</span><span class="code-word-label"'));
  assert.ok(html.includes('>ZH</span>'));assert.ok(html.includes('&lt;quote>'));assert.ok(!html.includes('>·</span>'));
 });

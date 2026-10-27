@@ -27,3 +27,22 @@ test('dirty editor cancel is prevented immediately and only closes after approva
  vm.runInContext("guardDialogDiscard(event,true,'放弃？')",s);assert.equal(prevented,1);assert.equal(closed,0);await Promise.resolve();dialogs[0].children.at(-1).children[0].onclick();await new Promise(setImmediate);assert.equal(closed,0);
  vm.runInContext("guardDialogDiscard(event,true,'放弃？')",s);await Promise.resolve();dialogs[1].children.at(-1).children[1].onclick();await new Promise(setImmediate);assert.equal(closed,1);
 });
+
+function feedbackHarness(){
+ const full=fs.readFileSync(require.resolve('../web/app.js'),'utf8');
+ const feedback=full.slice(full.indexOf('// Existing action-error outlets'),full.indexOf('const $=id=>'));
+ let observer;const alerts=[];
+ const sandbox={MutationObserver:class{constructor(fn){observer=fn;}observe(){}},document:{body:{}},corporiumStatusText:'',corporiumAlert:message=>alerts.push(message)};
+ vm.createContext(sandbox);vm.runInContext(feedback,sandbox);
+ const outlet=(inline=false)=>({nodeType:1,id:'test-error',textContent:'Input is quiet',closest(selector){if(selector==='[data-inline-message]')return inline?this:null;if(selector==='.corporium-message')return null;return this;}});
+ return {alerts,outlet,update:el=>observer([{target:el,addedNodes:[]}])};
+}
+test('ongoing inline recording feedback stays visible without queuing modal alerts',()=>{
+ const {alerts,outlet,update}=feedbackHarness(),el=outlet(true);
+ for(let i=0;i<12;i++){el.textContent='Input is quiet';update(el);}
+ assert.equal(el.textContent,'Input is quiet');assert.deepEqual(alerts,[]);
+});
+test('ordinary action errors still open the shared alert and clear the outlet',()=>{
+ const {alerts,outlet,update}=feedbackHarness(),el=outlet(false);update(el);
+ assert.deepEqual(alerts,['Input is quiet']);assert.equal(el.textContent,'');
+});

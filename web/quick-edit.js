@@ -2,7 +2,7 @@
 (()=>{
  const editor=$('lexeme-editor'),form=$('lexeme-form'),save=$('save-lexeme');
  const dialog=document.createElement('dialog');dialog.id='lexeme-quick-editor';dialog.dataset.docked='true';
- dialog.innerHTML='<div class="dialog-top dialog-title-row"><h2>快捷编辑</h2><button type="button" id="quick-edit-return">返回完整编辑</button></div><div class="dialog-content" id="quick-edit-host"></div><div class="dialog-bottom" id="quick-edit-actions"></div>';
+ dialog.innerHTML=(globalThis.CorporiumI18n?.f("6e1fa1615a9670",()=>[])??'<div class="dialog-top dialog-title-row"><h2>快捷编辑</h2><button type="button" id="quick-edit-return">返回完整编辑</button></div><div class="dialog-content" id="quick-edit-host"></div><div class="dialog-bottom" id="quick-edit-actions"></div>');
  document.body.append(dialog);
  let formHome=null,saveHome=null,typeHome=null,expanded=false,sequence=0,columns=[];
  const typeField=$('morph-entry-type').closest('label'),identity=form.querySelector(':scope>.metadata-grid');
@@ -43,7 +43,7 @@
    dialog.showModal();window.CorporiumParadigms?.setQuick(true);rows.refresh();$('lexeme-headword').focus();
   }catch(e){$('lexeme-error').textContent=e.message;}
  }
- const button=document.createElement('button');button.type='button';button.id='lexeme-quick-open';button.textContent='快捷编辑';button.onclick=open;
+ const button=document.createElement('button');button.type='button';button.id='lexeme-quick-open';button.textContent=(globalThis.CorporiumI18n?.f("54e43c5e0d6bd5",()=>[])??'快捷编辑');button.onclick=open;
  const originalOpen=openLexemeEditor;
  openLexemeEditor=async function(...args){await originalOpen(...args);if(!editor.open)return;dockDialog(editor);const header=editor.querySelector('.dialog-top');header.classList.add('lexeme-editor-actions');header.prepend(button);};
  const component=wsComponent;
@@ -62,18 +62,18 @@
    if(row.registryPending||row.registryRecord)continue;
    if(!wsVal(row,'form').trim()&&(wsVal(row,'readings').trim()||wsReadWritings(row.querySelector('.ws-writings')).length)){
     event.preventDefault();event.stopImmediatePropagation();morphologyEditorBlock.open=true;
-    $('lexeme-error').textContent='请填写新语素的形式；完全留空的组分会在保存时舍弃。';(row.querySelector('.quick-component-form')||row.querySelector('[data-ws="form"]')).focus();return;
+    $('lexeme-error').textContent=(globalThis.CorporiumI18n?.f("0df01a47729d05",()=>[])??'请填写新语素的形式；完全留空的组分会在保存时舍弃。');(row.querySelector('.quick-component-form')||row.querySelector('[data-ws="form"]')).focus();return;
    }
   }
  },true);
 
- const manage=document.createElement('button');manage.id='quick-edit-manager-open';manage.textContent='词条快捷编辑管理';$('management-entries').append(manage);
- makeDialog('quick-edit-manager','<h2>词条快捷编辑管理</h2><label>语言<select id="quick-edit-language"></select></label><p>选择打开快捷编辑时始终显示的书写形式。</p><form id="quick-edit-settings-form"><div id="quick-edit-writing-types"></div><p id="quick-edit-settings-error" role="alert"></p><button class="primary" type="submit">保存设置</button></form>');
+ const manage=document.createElement('button');manage.id='quick-edit-manager-open';manage.textContent=(globalThis.CorporiumI18n?.f("827f3c551899e6",()=>[])??'词条快捷编辑管理');$('management-entries').append(manage);
+ makeDialog('quick-edit-manager',(globalThis.CorporiumI18n?.f("c08473fd6215d3",()=>[])??'<h2>词条快捷编辑管理</h2><label>语言<select id="quick-edit-language"></select></label><p>选择打开快捷编辑时始终显示的书写形式。</p><form id="quick-edit-settings-form"><div id="quick-edit-writing-types"></div><p id="quick-edit-settings-error" role="alert"></p><button class="primary" type="submit">保存设置</button></form>'));
  let settings=null,settingsSequence=0;
  async function load(){
   const request=++settingsSequence,lid=$('quick-edit-language').value;settings=null;$('quick-edit-settings-error').textContent='';$('quick-edit-writing-types').replaceChildren();
   try{const data=await api('quick-edit-settings?'+new URLSearchParams({language:lid}));if(request!==settingsSequence)return;settings=data;
-   $('quick-edit-writing-types').innerHTML=data.writing_types.map(t=>`<label><input type="checkbox" value="${esc(t.id)}" ${data.selected.includes(t.id)?'checked':''}> ${esc(t.name)}</label>`).join('')||'<small>此语言尚无书写类型，可先在书写类型管理中添加。</small>';
+   $('quick-edit-writing-types').innerHTML=data.writing_types.map(t=>`<label><input type="checkbox" value="${esc(t.id)}" ${data.selected.includes(t.id)?'checked':''}> ${esc(t.name)}</label>`).join('')||(globalThis.CorporiumI18n?.f("e5558898f26c4a",()=>[])??'<small>此语言尚无书写类型，可先在书写类型管理中添加。</small>');
   }catch(e){if(request===settingsSequence)$('quick-edit-settings-error').textContent=e.message;}
  }
  manage.onclick=async()=>{$('management-dialog').close();$('quick-edit-language').innerHTML=languageOptions();$('quick-edit-language').value=activeLanguage==='all'?'ordos':activeLanguage;$('quick-edit-manager').showModal();await load();};

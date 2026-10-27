@@ -11,3 +11,14 @@ test('missing chosen writings do not fall back to underlying forms, and unselect
  const html=c.item(row,{reading:'ma'},[],true);assert.match(html,/未填书写/);assert.doesNotMatch(html,/class="form"/);assert.equal(c.entries.length,1);
  assert.match(c.item(row,{reading:'ma'},[],false),/class="form"/); // Pending classification keeps its existing detailed view.
 });
+
+test('review records without the selected writing remain visible and inspectable without substituting the underlying form',()=>{
+ const source=fs.readFileSync('web/homophones.js','utf8'),c={writing:'han',activeLanguage:'one',orthographyStyle:s=>s,esc:s=>String(s||''),richGloss:s=>s};c.$=()=>({value:c.writing});vm.createContext(c);vm.runInContext(source.slice(source.indexOf(' function entry('),source.indexOf(' function readPageSize(')),c);
+ const row={identity:'m',form:'underlying',gloss:'meaning',writings:[],readings:[],sources:[],origin:'语素',reason:'缺少读音'};
+ for(const writings of [[],[{type_id:'han',text:'  \t '}]]){
+  const html=c.entry({...row,writings},[{id:'han',name:'汉字'}],true);assert.match(html,/class="homophone-entry"/);assert.match(html,/未填写所选书写/);assert.match(html,/meaning/);assert.match(html,/缺少读音/);assert.match(html,/data-homophone-morpheme="m"/);assert.doesNotMatch(html,/underlying/);
+  assert.equal(c.entry({...row,writings},[],false),'');
+ }
+ c.writing='';assert.match(c.entry(row,[],true),/underlying/);
+ c.writing='han';const written=c.entry({...row,writings:[{type_id:'han',text:'甲'}]},[{id:'han',name:'汉字',font:'Junicode'}],true);assert.match(written,/甲/);assert.doesNotMatch(written,/未填写所选书写/);
+});

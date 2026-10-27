@@ -10,6 +10,8 @@ import analysis_workspace
 import timeline
 import collaborators
 import grammar_survey
+import example_groups
+import example_numbering
 import fieldwork_notes
 import code_switching
 import dictionary_organization
@@ -22,7 +24,9 @@ import morpheme_registry
 import synonyms
 import link_review
 TABLES += link_review.TABLES
+TABLES += example_groups.TABLES
 TABLES += dictionary_organization.TABLES+morpheme_registry.TABLES+synonyms.TABLES+gloss_inheritance.TABLES
+TABLES = example_numbering.TABLES + TABLES
 
 def initialize(db):
     db.executescript('''CREATE TABLE IF NOT EXISTS folders(id TEXT PRIMARY KEY,name TEXT NOT NULL,position INTEGER,metadata TEXT NOT NULL DEFAULT '{}',revision INTEGER NOT NULL DEFAULT 1);
