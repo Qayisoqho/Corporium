@@ -56,7 +56,7 @@ class DesktopTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as e:opener.open(base+'/api/backup')
             self.assertEqual(e.exception.code,403)
             with opener.open(base+'/desktop-bootstrap?token=secret') as r:self.assertIn('data-project-action="new"',r.read().decode())
-            for page in ('/licenses','/license-notices.js','/license-notices.css','/style.css','/licenses/catalog','/licenses/developer-font'):
+            for page in ('/licenses','/license-notices.js','/license-notices.css','/style.css','/workbench.css','/i18n-settings.js','/licenses/catalog','/licenses/developer-font'):
                 with opener.open(base+page) as r:self.assertEqual(r.status,200)
             with opener.open(base+'/licenses/document?id=Microsoft-WebView2-Runtime-LICENSE.txt') as r:
                 self.assertIn('DISTRIBUTABLE CODE',json.load(r)['text'])

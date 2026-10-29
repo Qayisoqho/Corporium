@@ -355,7 +355,9 @@ def normalize(body):
         for sense in rows(usage.get('senses',[])):
             s={'id':identity(sense),'tags':tags(sense.get('tags',[]))}
             for k in ('short_gloss','definition','notes'): s[k]=text(sense.get(k,''))
-            if not any(s[k].strip() for k in ('short_gloss','definition','notes')) and not s['tags'] and not sense.get('features'): raise ValueError('请填写义项内容，或移除空白义项')
+            import sense_gloss
+            sense_gloss.normalize(sense,s)
+            if not any(s[k].strip() for k in ('short_gloss','definition','notes')) and not s.get('gloss_addition') and not s['tags'] and not sense.get('features'): raise ValueError('请填写义项内容，或移除空白义项')
             u['senses'].append(s)
         result['usages'].append(u)
     return paradigms.normalize(body,morphology.normalize(body,result))
@@ -380,7 +382,7 @@ def discard_empty_new_rows(body):
             if key=='usages':
                 senses=row.get('senses',[])
                 if isinstance(senses,list):
-                    row['senses']=[s for s in senses if not isinstance(s,dict) or s.get('id') or not(blank(s,('short_gloss','definition','notes')) and no_tags(s) and not s.get('features'))]
+                    row['senses']=[s for s in senses if not isinstance(s,dict) or s.get('id') or not(blank(s,('short_gloss','definition','notes','gloss_addition')) and no_tags(s) and not s.get('features'))]
                 empty=blank(row,('pos','subclass','notes')) and no_tags(row) and not row.get('features') and not row.get('senses')
             elif key=='variants':
                 empty=blank(row,('form','notes','pronunciation','conditions','source')) and no_tags(row) and not row.get('features') and not row.get('condition_types')
@@ -573,6 +575,57 @@ def examples(db,lid,page=1,kind='all',form_id='all'):
     return {'items':result,'total':total,'reference_total':reference_total,'occurrences':occurrence_count(db,lid,kind,form_id),'page':page,'pages':max(1,(total+19)//20)}
 
 
+def duplicate(db,lid,request):
+    """Copy owned identities; incoming corpus references stay with the source."""
+    import copy
+    kind=request.get('kind')
+    if kind not in ('lexeme','morpheme'):raise ValueError('请选择词条或语素')
+    source=get_lexeme(db,request.get('id'))
+    if source['language_id']!=lid or source['target_kind']!=kind:raise ValueError('条目不属于当前语言或类型')
+    if source['revision']!=request.get('revision'):raise ValueError('条目已变化，请刷新后复制')
+    if request.get('confirmed') is not True:raise ValueError('请确认建立独立副本')
+    table='lexemes' if kind=='lexeme' else 'morphemes'
+    data=json.loads(db.execute('SELECT body FROM '+table+' WHERE id=?',(source['id'],)).fetchone()[0]);identities={}
+    def collect(value):
+        if isinstance(value,list):
+            for child in value:collect(child)
+        elif isinstance(value,dict):
+            if value.get('id'):identities.setdefault(value['id'],str(uuid.uuid4()))
+            for key,child in value.items():
+                if key not in ('merged_records','converted_from'):collect(child)
+    collect(data)
+    keys={'id','parent_id','usage_id','sense_id','form_id','variant_id','base_sense_id','default_base_sense_id','primary_sense_id','analysis_id','component_id','target_id'}
+    def remap(value):
+        if isinstance(value,list):return [remap(v) for v in value]
+        if not isinstance(value,dict):return value
+        external=value.get('lexeme_id') and value['lexeme_id']!=source['id']
+        return {k:(copy.deepcopy(v) if k in ('merged_records','converted_from') else identities.get(v,v) if k in keys and isinstance(v,str) and not (external and k in ('usage_id','sense_id','form_id')) else remap(v)) for k,v in value.items()}
+    data=remap(data);data['homonym_number']=None;data.pop('created_at',None)
+    if kind=='lexeme':
+        confirmation=homonyms.plan(db,lid,source['headword'])['token']
+        result=mutate(db,'lexeme-save',dict(headword=source['headword'],body=data,homonym_confirmation=confirmation),lid)
+    else:result=morpheme_registry.mutate(db,'morpheme-save',dict(form=source['headword'],body=data),lid)
+    shared=set()
+    for row in db.execute('SELECT * FROM morpheme_components WHERE lexeme_id=?',(source['id'],)).fetchall():
+        old=json.loads(row['body']);value=remap(old)
+        if 'form_id' in old:value['form_id']=old['form_id']
+        db.execute('INSERT INTO morpheme_components VALUES(?,?,?,?,?,?,1)',(str(uuid.uuid4()),result['id'],identities.get(row['analysis_id'],row['analysis_id']),identities.get(row['component_id'],row['component_id']),row['morpheme_id'],json.dumps(value,ensure_ascii=False)))
+        shared.add(row['morpheme_id'])
+    for mid in shared:db.execute('UPDATE morphemes SET revision=revision+1 WHERE id=?',(mid,))
+    for row in db.execute('SELECT * FROM object_media WHERE kind=? AND record_id=?',(kind,source['id'])).fetchall():
+        db.execute('INSERT INTO object_media VALUES(?,?,?,?,?,?,?,1)',(str(uuid.uuid4()),lid,kind,result['id'],row['asset_id'],json.dumps(remap(json.loads(row['body'])),ensure_ascii=False),row['position']))
+    import synonyms
+    for row in db.execute('SELECT * FROM synonym_links WHERE language_id=?',(lid,)).fetchall():
+        ends=json.loads(row['body']);changed=False
+        for end in ends:
+            if end.get('kind')==kind and end.get('id')==source['id']:
+                end['id']=result['id'];end['sense']=identities.get(end['sense'],end['sense']);changed=True
+        if changed:
+            ends.sort(key=synonyms.key)
+            db.execute('INSERT INTO synonym_links VALUES(?,?,?,?,?)',(str(uuid.uuid4()),lid,*map(synonyms.key,ends),json.dumps(ends,ensure_ascii=False)))
+    return get_lexeme(db,result['id'])
+
+
 def mutate(db,action,body,lid):
     if action=='lexeme-auto-link':
         plan=auto_link_plan(db,lid,body.get('text_id',''),body.get('ignore_symbols','-=.'),body.get('ignore_position','edges'))
@@ -612,7 +665,8 @@ def mutate(db,action,body,lid):
         xid=body.get('id')
         old=get_lexeme(db,xid) if xid else None
         if old and old['target_kind']=='morpheme':raise ValueError('请在语素列表中编辑此记录')
-        import multipart_forms
+        import multipart_forms,dictionary_link_changes
+        link_fingerprint=dictionary_link_changes.token(db,old,body) if old else None
         data=normalize(multipart_forms.align_spellings(body.get('body',{}),headword,old,'headword'))
         categories.register_usages(db,lid,data,True)
         if old and 'form_parts' not in body.get('body',{}) and old['body'].get('form_parts'):
@@ -635,12 +689,7 @@ def mutate(db,action,body,lid):
         if xid:
             old=get_lexeme(db,xid)
             if old['revision']!=body.get('revision'): raise ValueError('词条已修改，请重新打开后编辑')
-            for link in long_tasks.steps(db.execute('SELECT DISTINCT usage_id,sense_id FROM lexical_links WHERE lexeme_id=?',(xid,))):
-                try:selection(data,link['usage_id'],link['sense_id'])
-                except ValueError as error:
-                    usage,sense=selection(old['body'],link['usage_id'],link['sense_id'])
-                    label=(sense or {}).get('short_gloss') or (sense or {}).get('definition') or (usage or {}).get('pos') or '未填写'
-                    raise ValueError('要移除的义项或用法「'+label+'」仍被语料直接引用，请先解除或调整这些关联；义项重新编号不会自动转移关联。') from error
+            dictionary_link_changes.apply(db,old,data,body,link_fingerprint)
             db.execute('UPDATE lexemes SET headword=?,body=?,revision=revision+1 WHERE id=?',(headword,json.dumps(data,ensure_ascii=False),xid))
             if old['headword']!=headword:homonyms.clear_singleton(db,lid,old['headword'])
         else:
@@ -886,7 +935,7 @@ def auto_gloss_key(value,lookup,features=()):
     Complex structures remain ordered and opaque. Never flatten affixes, infixes,
     relational arguments or bracketed groups into inherent features.
     """
-    value=re.sub(r'[;:_\\]', '.', value)
+    value=re.sub(r'[;:\\]', '.', value)
     if any(c in value for c in '-=+<>[](){}'):
         return ('structured',value,tuple(sorted(set(features))))
     parts=value.split('.')
@@ -937,7 +986,7 @@ def auto_link_plan(db,lid,text_id='',ignore_symbols='-=.',ignore_position='edges
     for x in catalog():
         xb=x['body']
         labels={(u['id'],s['id']):f'{ui}.{si}' for ui,u in enumerate(paradigms.usages(xb),1) for si,s in enumerate(u['senses'],1)}
-        for u,s,form in paradigms.candidates(xb):
+        for u,s,form in paradigms.matching_candidates(xb,x['headword'],lambda gloss,features:auto_gloss_key(gloss,lookups.get(x['language_id'],{}),features)):
             if not s['short_gloss']:continue
             features=list(dict.fromkeys([*xb.get('features',[]),*u.get('features',[]),*s.get('features',[]),*(form.get('features',[]) if form else [])]))
             spelling=form['form'] if form else x['headword']

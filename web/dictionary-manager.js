@@ -55,13 +55,13 @@ $('standalone-editor').addEventListener('cancel',e=>guardDialogDiscard(e,standal
 $('standalone-editor').querySelector('.close').onclick=e=>{e.preventDefault();if($('standalone-editor').dispatchEvent(new Event('cancel',{cancelable:true})))$('standalone-editor').close();};
 window.addEventListener('beforeunload',e=>{if($('standalone-editor').open&&standaloneDirty){e.preventDefault();e.returnValue='';}});
 $('standalone-form').onsubmit=async event=>{
-  event.preventDefault();$('standalone-save').disabled=true;
+  event.preventDefault();const source={kind:'independent',id:standaloneEditing?.id};const run=async()=>{$('standalone-save').disabled=true;
   try{const body={};for(const k of ['original','ipa','translation','source','notes'])body[k]=$('standalone-'+k).value;
     body.grammaticality=$('standalone-grammaticality')?.value||'';
     body.words=CorporiumPairs.parse($('standalone-words').value);
     body.targets=[...$('standalone-targets').children].map(row=>({lexeme_id:row.querySelector('.target-lexeme').value,usage_id:row.querySelector('.target-usage').value,sense_id:row.querySelector('.target-sense').value,form_id:row.querySelector('.target-form').value,features:readFeatures(row.querySelector('.target-features')),component_ref:row.dataset.componentRef&&row.dataset.componentLexeme===row.querySelector('.target-lexeme').value?JSON.parse(row.dataset.componentRef):undefined,segmentation_ref:row.dataset.segmentationRef?JSON.parse(row.dataset.segmentationRef):undefined}));
-    const saved=standaloneCommit?await standaloneCommit(body):await api('example-save',{id:standaloneEditing?.id,revision:standaloneEditing?.revision,body,_language:standaloneLexeme.language_id});standaloneDirty=false;standaloneCommit=null;$('standalone-editor').close();if(workspace==='dictionary'&&standaloneLexeme.id)await showLexeme(standaloneLexeme.id);else await refreshExampleViews();document.dispatchEvent(new CustomEvent('corporium-independent-saved',{detail:saved}));
-  }catch(e){$('standalone-error').textContent=e.message;}finally{$('standalone-save').disabled=false;}
+    const saved=standaloneCommit?await standaloneCommit(body):await api('example-save',{id:standaloneEditing?.id,revision:standaloneEditing?.revision,body,_language:standaloneLexeme.language_id});standaloneDirty=false;standaloneCommit=null;$('standalone-editor').close();if(workspace==='dictionary'&&standaloneLexeme.id)await showLexeme(standaloneLexeme.id);else await refreshExampleViews();if(source.id)await window.corporiumSentenceInspector?.afterExampleSave?.(source);document.dispatchEvent(new CustomEvent('corporium-independent-saved',{detail:saved}));
+  }catch(e){$('standalone-error').textContent=e.message;}finally{$('standalone-save').disabled=false;}};return window.corporiumPreserveExampleLocation?window.corporiumPreserveExampleLocation(source,run):run();
 };
 async function renderStandalone(x,request,initialPage=1){
   const allEntries=await api('dictionary-examples?id='+encodeURIComponent(x.id));const entries=allEntries.filter(e=>exampleForm==='all'||e.body.targets.some(t=>t.lexeme_id===x.id&&(exampleForm==='unassigned'?!t.form_id:t.form_id===exampleForm)));const standaloneTags=await api('grammar-tags?language='+encodeURIComponent(x.language_id));if(request!==exampleRequest||dictionarySelection!==x.id)return;

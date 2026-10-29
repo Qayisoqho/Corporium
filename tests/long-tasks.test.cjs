@@ -52,7 +52,7 @@ test('cancelled task closes modal without undo refresh and permits retry',async(
 });
 test('undo refresh can queue another task without deadlock',async()=>{
  const h=harness([]);h.context.refreshUndo=async()=>{await h.context.api('grammar-audit?source=all');};
- await h.context.api('lexeme-auto-link',{token:'plan'});assert.equal(h.calls.filter(c=>c[0]==='task-start').length,2);
+ await h.context.api('import',{content:'test'});assert.equal(h.calls.filter(c=>c[0]==='task-start').length,2);
 });
 test('empty dictionary controls use an ordinary read; real searches stay cancellable without opening or discarding editors',async()=>{
  const h=harness([]);h.context.window.corporiumLeaveMorpheme=async()=>{throw Error('must keep editor');};h.context.window.corporiumFlushSurvey=async()=>{throw Error('must not autosave a read');};
@@ -82,4 +82,17 @@ test('completed searches and other tasks return results and dismiss progress bef
 });
 test('search progress is removed after startup and execution errors',async()=>{
  for(const failStart of [false,true]){const h=harness([{state:'error',message:'search failed'}]);h.context.failStart=failStart;await assert.rejects(h.context.api('lexemes?q=test'),/failed/);assert.equal(h.dialogs.find(n=>n.dataset.taskProgress==='true').removed,true);}
+});
+
+for(const fail of [false,true])test('one automatic-link progress window spans both phases and closes on '+(fail?'failure':'success'),async()=>{
+ const h=harness([]);let opens=0,closes=0;const dialog=h.dialogs[0];dialog.showModal=()=>{opens++;dialog.open=true;};dialog.close=()=>{closes++;dialog.open=false;};
+ const action=h.context.window.corporiumWithTaskProgress(async()=>{
+  await h.context.api('lexeme-auto-link',{token:'plan'});
+  assert.equal(dialog.open,true);assert.equal(h.context.window.corporiumLongTaskActive(),true);
+  if(fail)h.context.failStart=true;
+  return h.context.api('lexeme-auto-preview?language=ordos');
+ });
+ if(fail)await assert.rejects(action,/start failed/);else await action;
+ assert.equal(opens,1);assert.equal(closes,1);assert.equal(dialog.open,false);assert.equal(h.context.window.corporiumLongTaskActive(),false);
+ assert.equal(h.calls.filter(c=>c[0]==='undo').length,0);
 });

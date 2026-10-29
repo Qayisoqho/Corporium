@@ -8,7 +8,7 @@ test('old media replies never contaminate a switched timeline',async()=>{const {
 const survey=fs.readFileSync(require.resolve('../web/grammar-survey.js'),'utf8');
 test('Shift range includes both endpoints, reverse ranges and a missing anchor',()=>{const s={};vm.createContext(s);vm.runInContext(survey.match(/function selectionRange[^\n]+/)[0],s);const run=(a,b)=>Array.from(s.selectionRange(['a','b','c','d'],a,b));assert.deepEqual(run('a','c'),['a','b','c']);assert.deepEqual(run('d','b'),['b','c','d']);assert.deepEqual(run('hidden','b'),['b']);});
 test('pan input paints the latest position on the next frame without waiting for release or network',async()=>{
- const element={value:'10000'},frames=[],s={from:0,request:0,panFrame:0,$:()=>element,safeTL:f=>f,requestAnimationFrame:f=>{frames.push(f);return frames.length;},renderTracks(){s.rendered=s.from;},drawWave(){s.painted=s.from;},remember(){},loadWave(){s.loaded=s.from;}};
+ const element={value:'10000'},frames=[],s={from:0,request:0,panFrame:0,viewportBusy:false,waveOnFrame:false,wheelTimer:null,clearTimeout(){},setTimeout(){return 1;},syncSpan(){},$:()=>element,safeTL:f=>f,requestAnimationFrame:f=>{frames.push(f);return frames.length;},renderViewport(){s.rendered=s.from;},drawWave(){s.painted=s.from;},remember(){},loadWave(){s.loaded=s.from;}};
  vm.createContext(s);vm.runInContext(source.match(/function schedulePan[^\n]+/)[0]+'\n'+source.match(/\$\('tl-pan'\)\.oninput=[^\n]+/)[0],s);
  element.oninput();element.value='80000';element.oninput();assert.equal(frames.length,1);frames[0]();assert.equal(s.rendered,80000);assert.equal(s.painted,80000);assert.equal(s.loaded,80000);
 });

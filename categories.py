@@ -4,10 +4,12 @@ import uuid
 import word_structure
 
 TABLES=('category_classes',)
+def needed(db):return bool(db.execute("SELECT 1 FROM sqlite_master WHERE name='category_classes'").fetchone()) and 'position' not in {r[1] for r in db.execute('PRAGMA table_info(category_classes)')}
 TAG_NAMES=dict(register='语域',region='地域',period='使用状态',generation='使用人群',domain='领域',other='其他')
 
 def usage_tags(body):
     yield from body.get('tags',[])
+    for s in body.get('senses',[]):yield from s.get('tags',[])
     for v in body.get('variants',[]):yield from v.get('tags',[])
     for u in body.get('usages',[]):
         yield from u.get('tags',[])
@@ -25,6 +27,9 @@ def initialize_forms(db,lid):
 
 def initialize(db):
     db.execute("CREATE TABLE IF NOT EXISTS category_classes(id TEXT PRIMARY KEY,language_id TEXT NOT NULL,kind TEXT NOT NULL,name TEXT NOT NULL,parent_id TEXT,notes TEXT NOT NULL DEFAULT '',revision INTEGER NOT NULL DEFAULT 1)")
+    if needed(db):
+        db.execute('ALTER TABLE category_classes ADD COLUMN position INTEGER NOT NULL DEFAULT 0')
+        for n,r in enumerate(db.execute('SELECT id FROM category_classes ORDER BY name,id').fetchall()):db.execute('UPDATE category_classes SET position=? WHERE id=?',(n,r['id']))
     for r in db.execute('SELECT id FROM languages').fetchall():initialize_forms(db,r['id'])
     for r in db.execute('SELECT id,language_id,body FROM lexemes').fetchall():
         b=json.loads(r['body'])
@@ -33,7 +38,7 @@ def initialize(db):
 
 def listing(db,lid='all'):
     templates={r['id']:json.loads(r['body']) for r in db.execute('SELECT * FROM morph_class_templates')}
-    return [{**dict(r),'template':templates.get(r['id'],{'title':'主要部分','slots':[]})} for r in db.execute("SELECT * FROM category_classes WHERE kind!='_seed' AND (?='all' OR language_id=?) ORDER BY name,id",(lid,lid))]
+    return [{**dict(r),'template':templates.get(r['id'],{'title':'主要部分','slots':[]})} for r in db.execute("SELECT * FROM category_classes WHERE kind!='_seed' AND (?='all' OR language_id=?) ORDER BY position,name,id",(lid,lid))]
 
 def ensure(db,lid,kind,name,parent=None):
     name=name.strip()
@@ -43,7 +48,7 @@ def ensure(db,lid,kind,name,parent=None):
         if found:return found['id']
     old=db.execute('SELECT * FROM category_classes WHERE language_id=? AND kind=? AND name=? AND parent_id IS ?',(lid,kind,name,parent)).fetchone()
     if old:return old['id']
-    xid=str(uuid.uuid4());db.execute('INSERT INTO category_classes VALUES(?,?,?,?,?,?,1)',(xid,lid,kind,name,parent,''));return xid
+    xid=str(uuid.uuid4());position=db.execute('SELECT COALESCE(MAX(position),-1)+1 FROM category_classes WHERE language_id=? AND kind=? AND parent_id IS ?',(lid,kind,parent)).fetchone()[0];db.execute('INSERT INTO category_classes VALUES(?,?,?,?,?,?,1,?)',(xid,lid,kind,name,parent,'',position));return xid
 
 def register_usages(db,lid,body,strict=False):
     for t in usage_tags(body):
@@ -51,6 +56,7 @@ def register_usages(db,lid,body,strict=False):
         if strict and not db.execute("SELECT 1 FROM category_classes WHERE language_id=? AND kind='usage_tag' AND name=?",(lid,name)).fetchone():raise ValueError('使用标签类型不存在，请先在类管理中建立')
         ensure(db,lid,'usage_tag',name)
     for v in body.get('variants',[]):
+        if not v.get('kind'):continue
         name=FORM_NAMES.get(v.get('kind','other'),v.get('kind','其他形式'))
         if strict and not db.execute("SELECT 1 FROM category_classes WHERE language_id=? AND kind='form' AND name=?",(lid,name)).fetchone():raise ValueError('形式类型不存在，请先在类管理中建立')
         ensure(db,lid,'form',name)
@@ -71,13 +77,47 @@ def used(db,c):
     return False
 
 def mutate(db,action,b,lid):
+    import class_changes
+    previous=class_changes.before(db,b,lid)
+    return class_changes.finish(db,b,_mutate(db,action,b,lid),previous)
+
+def _mutate(db,action,b,lid):
+    if action=='class-order':
+        import class_changes
+        if b.get('kind') not in ('pos','grammar','form','morph','usage_tag'):raise ValueError('分类类型无效')
+        return class_changes.order(db,'category_classes',lid,b,b['kind'])
     old=db.execute('SELECT * FROM category_classes WHERE id=?',(b.get('id'),)).fetchone()
     if b.get('id') and (not old or old['language_id']!=lid or old['revision']!=b.get('revision')):raise ValueError('分类已变化，请重新打开')
     if action=='class-delete':
         if not old:raise ValueError('分类不存在')
-        if db.execute('SELECT 1 FROM category_classes WHERE parent_id=?',(old['id'],)).fetchone() or used(db,old):raise ValueError('此类仍有子类或被词条或标签使用，请先调整引用')
-        db.execute('DELETE FROM morph_class_templates WHERE id=?',(old['id'],))
-        db.execute('DELETE FROM category_classes WHERE id=?',(old['id'],));return {'ok':True}
+        deleted=[dict(old),*[dict(r) for r in db.execute('SELECT * FROM category_classes WHERE parent_id=?',(old['id'],))]]
+        ids={r['id'] for r in deleted};names={r['name'] for r in deleted}
+        parent=db.execute('SELECT name FROM category_classes WHERE id=?',(old['parent_id'],)).fetchone() if old['parent_id'] else None
+        if old['kind']=='grammar':db.executemany("UPDATE grammar_tags SET category='',revision=revision+1 WHERE language_id=? AND category=?",[(lid,n) for n in names])
+        for table in ('lexemes','morphemes'):
+            for r in db.execute('SELECT id,body FROM '+table+' WHERE language_id=?',(lid,)).fetchall():
+                body=json.loads(r['body']);encoded=json.dumps(body,ensure_ascii=False)
+                if old['kind']=='pos':
+                    for u in body.get('usages',[]):
+                        if parent and u.get('pos')==parent['name'] and u.get('subclass') in names:u['subclass']=''
+                        elif not parent and u.get('pos')==old['name']:u['pos']='';u['subclass']=''
+                elif old['kind']=='form':
+                    for v in body.get('variants',[]):
+                        if FORM_NAMES.get(v.get('kind'),v.get('kind')) in names:v['kind']=''
+                elif old['kind']=='morph':
+                    ws=body.get('word_structure',{})
+                    for m in ws.get('memberships',[]):
+                        if m['class_id'] in ids:m['class_id']=''
+                elif old['kind']=='usage_tag':
+                    owners=[body,*body.get('variants',[]),*body.get('senses',[])]
+                    for u in body.get('usages',[]):owners.extend([u,*u.get('senses',[])])
+                    for owner in owners:
+                        if 'tags' in owner:owner['tags']=[t for t in owner['tags'] if TAG_NAMES.get(t['type'],t['type']) not in names]
+                after=json.dumps(body,ensure_ascii=False)
+                if after!=encoded:db.execute('UPDATE '+table+' SET body=?,revision=revision+1 WHERE id=?',(after,r['id']))
+        for cid in ids:
+            db.execute('DELETE FROM morph_class_templates WHERE id=?',(cid,));db.execute('DELETE FROM category_classes WHERE id=?',(cid,))
+        return {'ok':True,'deleted_classes':deleted}
     kind=b.get('kind');name=b.get('name','');notes=b.get('notes','');parent_id=b.get('parent_id') or None
     if kind not in ('pos','grammar','form','morph','usage_tag') or not isinstance(name,str) or not name.strip() or not isinstance(notes,str):raise ValueError('请填写有效的类名、类型和备注')
     name=name.strip()
@@ -87,7 +127,9 @@ def mutate(db,action,b,lid):
     peers=listing(db,lid)
     if any(c['id']!=b.get('id') and c['kind']==kind and c['name'].casefold()==name.casefold() and (kind in ('grammar','form','usage_tag') or c['parent_id']==parent_id) for c in peers):raise ValueError('同一范围已有这个类名')
     xid=old['id'] if old else str(uuid.uuid4())
-    db.execute('INSERT INTO category_classes VALUES(?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET name=excluded.name,notes=excluded.notes,revision=category_classes.revision+1',(xid,lid,kind,name,parent_id,notes))
+    position=old['position'] if old else b.get('position',db.execute('SELECT COALESCE(MAX(position),-1)+1 FROM category_classes WHERE language_id=? AND kind=? AND parent_id IS ?',(lid,kind,parent_id)).fetchone()[0])
+    if type(position) is not int:raise ValueError('分类顺序无效')
+    db.execute('INSERT INTO category_classes VALUES(?,?,?,?,?,?,1,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,notes=excluded.notes,revision=category_classes.revision+1',(xid,lid,kind,name,parent_id,notes,position))
     if kind=='morph' and ('template' in b or not old):
         value=word_structure.template(b.get('template',{}))
         db.execute('INSERT INTO morph_class_templates VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body',(xid,json.dumps(value,ensure_ascii=False)))

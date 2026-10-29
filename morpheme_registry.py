@@ -10,13 +10,13 @@ STATES=('pending','confirmed','disputed')
 
 def realization(morpheme,form_id=None):
     """Resolve an explicit shared form, never infer a variant from spelling."""
-    import morphology
+    import morphology,sense_gloss
     if form_id is not None and not isinstance(form_id,str):raise ValueError('请选择有效的语素形式')
     variant=morphology.form_selection(morpheme['body'],form_id)
     body=morpheme['body']
     return dict(form=variant['form'] if variant else morpheme['form'],
                 readings=[variant['pronunciation']] if variant and variant.get('pronunciation') else body.get('readings',[]),
-                gloss=body.get('gloss',''),writings=body.get('writings',[]))
+                gloss=sense_gloss.effective(body,'gloss'),writings=body.get('writings',[]))
 
 
 def save_plan(db,lid,xid,body,assignments=None):
@@ -154,7 +154,7 @@ def listing(db,lid,q='',page=1,status='',search=None,page_size=30,order=''):
     rows=[{**dict(r),'body':json.loads(r['body'])} for r in db.execute("SELECT m.*, (SELECT count(*) FROM morpheme_components c WHERE c.morpheme_id=m.id) component_count FROM morphemes m WHERE ?='all' OR m.language_id=? ORDER BY m.form COLLATE NOCASE,m.number,m.id",(lid,lid))]
     counts={}
     for r in rows:counts[(r['language_id'],r['form'])]=counts.get((r['language_id'],r['form']),0)+1
-    index=MorphemeIndex(db,lid,rows).prepare(search or {})
+    index=MorphemeIndex(db,lid,rows,search_spec=spec or {},query=q).prepare(spec or {})
     hits=[r for r in rows if index.matches(r,q)]
     if order:hits=entry_dates.sort_rows(hits,order)
     from dictionary_paging import paginate
@@ -193,6 +193,36 @@ def detail(db,mid,lid):
     import dictionary_targets
     return {**m,'components':items,'references':dictionary_targets.references(db,mid),'dictionary_body':dictionary_targets.common(db,mid)}
 
+def prepare_body(db,lid,b,old=None):
+    form=text(b.get('form','')).strip()
+    if not form:raise ValueError('请填写语素形式')
+    data=b.get('body',{})
+    if not isinstance(data,dict):raise ValueError('语素内容格式错误')
+    data={**(old['body'] if old else {}),**data,**{k:text(data.get(k,'')) for k in ('gloss','notes')},'status':state(data.get('status','pending'))}
+    from manual_status import clean
+    data=clean({**data,'status':b.get('body',{}).get('status')})
+    from homophones import readings
+    import word_structure
+    data['readings']=readings(data.get('readings',[]))
+    data['writings']=word_structure.writings(data)
+    seen=set();sense_rows=[]
+    for s in long_tasks.steps(word_structure.rows(data.get('senses',[]))):
+        sid=word_structure.identity(s,seen)
+        sense_rows.append({**s,'id':sid,'gloss':text(s.get('gloss','')),'definition':text(s.get('definition',''))})
+    data['senses']=sense_rows
+    import dictionary_targets
+    import multipart_forms
+    data=multipart_forms.align_spellings(data,form,old,'form')
+    data=dictionary_targets.normalize(db,lid,data,old)
+    form,parts=multipart_forms.realization(form,data,require_circumfix=not old or 'form_parts' in b.get('body',{}) or not multipart_forms.circumfix(old['body']))
+    if parts:data['form_parts']=parts
+    data['variants']=clean_variants(db,lid,data)
+    if multipart_forms.circumfix(data):
+        for v in data['variants']:
+            v['form'],v['form_parts']=multipart_forms.realization(v['form'],{**v,'entry_type':'circumfix'},require_circumfix=True)
+    return form,data
+
+
 def mutate(db,action,b,lid,*,defer_writings=False):
     import lexicon,languages
     languages.require(db,lid)
@@ -201,40 +231,19 @@ def mutate(db,action,b,lid,*,defer_writings=False):
     if action=='morpheme-save':
         old=get(db,b['id'],lid) if b.get('id') else None
         if old:check_revision(old,b.get('revision'))
-        form=text(b.get('form','')).strip()
-        if not form:raise ValueError('请填写语素形式')
-        data=b.get('body',{})
-        if not isinstance(data,dict):raise ValueError('语素内容格式错误')
-        data={**(old['body'] if old else {}),**data,**{k:text(data.get(k,'')) for k in ('gloss','notes')},'status':state(data.get('status','pending'))}
-        from manual_status import clean
-        data=clean({**data,'status':b.get('body',{}).get('status')})
-        from homophones import readings
-        import word_structure
-        data['readings']=readings(data.get('readings',[]))
-        data['writings']=word_structure.writings(data)
-        seen=set();sense_rows=[]
-        for s in long_tasks.steps(word_structure.rows(data.get('senses',[]))):
-            sid=word_structure.identity(s,seen)
-            sense_rows.append({**s,'id':sid,'gloss':text(s.get('gloss','')),'definition':text(s.get('definition',''))})
-        data['senses']=sense_rows
-        import dictionary_targets
-        import multipart_forms
-        data=multipart_forms.align_spellings(data,form,old,'form')
-        data=dictionary_targets.normalize(db,lid,data,old)
-        form,parts=multipart_forms.realization(form,data,require_circumfix=not old or 'form_parts' in b.get('body',{}) or not multipart_forms.circumfix(old['body']))
-        if parts:data['form_parts']=parts
+        import dictionary_link_changes,lexicon
+        common=lexicon.get_lexeme(db,old['id']) if old else None
+        fingerprint=dictionary_link_changes.token(db,common,b) if common else None
+        form,data=prepare_body(db,lid,b,old)
         import categories
         categories.register_usages(db,lid,data,strict=True)
-        data['variants']=clean_variants(db,lid,data)
-        if multipart_forms.circumfix(data):
-            for v in data['variants']:
-                v['form'],v['form_parts']=multipart_forms.realization(v['form'],{**v,'entry_type':'circumfix'},require_circumfix=True)
         import entry_dates
         entry_dates.stamp(data,old['body'] if old else None)
         allowed={r['id'] for r in db.execute('SELECT id FROM writing_types WHERE language_id=?',(lid,))}
         if any(w['type_id'] not in allowed for w in data['writings']):raise ValueError('语素书写类型不属于当前语言')
         number=old['number'] if old and old['form']==form else db.execute('SELECT COALESCE(MAX(number),0)+1 FROM morphemes WHERE language_id=? AND form=?',(lid,form)).fetchone()[0]
         mid=old['id'] if old else str(uuid.uuid4())
+        if common:dictionary_link_changes.apply(db,common,data,b,fingerprint)
         db.execute('INSERT INTO morphemes VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET form=excluded.form,number=excluded.number,body=excluded.body,revision=excluded.revision',(mid,lid,form,number,json.dumps(data,ensure_ascii=False),(old['revision'] if old else 0)+1))
         if old:sync_components(db,old,form,data)
         return get(db,mid,lid)

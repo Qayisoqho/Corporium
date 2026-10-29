@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync('web/paradigms.js','utf8');
-function setup(){const c=vm.createContext({crypto:require('node:crypto')});vm.runInContext(source.split('(()=>{')[0],c);return c;}
+function setup(){const c=vm.createContext({crypto:require('node:crypto')});vm.runInContext(fs.readFileSync('web/sense-gloss.js','utf8'),c);vm.runInContext(source.split('(()=>{')[0],c);return c;}
 test('removing an unrelated sense does not change stable references or meaning metadata',()=>{
  const c=setup(),m={id:'meaning',base_sense_id:'second',gloss_mode:'inherit',gloss_addition:'ACC',notes:'keep'};
  assert.equal(c.paradigmDetachSense(m,{id:'first',short_gloss:'other'}),m);

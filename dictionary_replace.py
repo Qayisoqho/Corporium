@@ -67,7 +67,9 @@ def cells(row,field,kind='lexeme',writing_type=''):
                 elif isinstance(v,(dict,list)):yield from walk(v,p)
         elif isinstance(value,list):
             for i,v in enumerate(value):yield from walk(v,path+[i])
-    yield from walk(paradigms.project(row['body']),['body'])
+    # Ordinary additions belong to their own fields; replacements use free text.
+    # Existing inherited table cells retain their explicit override behavior.
+    yield from walk(paradigms.project(row['body'],ordinary=False),['body'])
 
 def plan(db,b,lid):
     if lid=='all':raise ValueError('请先选择一个语言工作区')

@@ -25,10 +25,14 @@ def initialize(db):
         'id','@morpheme','pos','','features',json('[]'),'tags',json('[]'),'senses',
         json_insert(COALESCE((SELECT json_group_array(json_object('id',json_extract(s.value,'$.id'),
           'short_gloss',COALESCE(json_extract(s.value,'$.gloss'),''),
+          'gloss_addition',COALESCE(json_extract(s.value,'$.gloss_addition'),''),
+          'show_gloss_addition',json(COALESCE(s.value->'$.show_gloss_addition','true')),
           'definition',COALESCE(json_extract(s.value,'$.definition'),''),
           'features',json(COALESCE(json_extract(s.value,'$.features'),'[]')),
           'tags',json(COALESCE(json_extract(s.value,'$.tags'),'[]')))) FROM json_each(m.body,'$.senses') s),'[]'),
           '$[#]',json_object('id','@main','short_gloss',COALESCE(json_extract(m.body,'$.gloss'),''),
+          'gloss_addition',COALESCE(json_extract(m.body,'$.gloss_addition'),''),
+          'show_gloss_addition',json(COALESCE(m.body->'$.show_gloss_addition','true')),
           'definition',COALESCE(json_extract(m.body,'$.definition'),''),'features',json('[]'),'tags',json('[]'))))))),
       '$.orthographies',json(COALESCE(json_extract(m.body,'$.orthographies'),
         (SELECT json_group_array(json_object('id','@writing:'||w.key,'type_id',json_extract(w.value,'$.type_id'),
@@ -45,8 +49,9 @@ def common(db,mid):
 
 def normalize(db,lid,data,old=None):
     """Native compact fields plus stable meanings used by both association paths."""
-    import lexicon,morphology
+    import lexicon,morphology,sense_gloss
     data=dict(data)
+    sense_gloss.normalize(data,data)
     for field,choices in [('entry_type',TYPES),('affix_function',FUNCTIONS),('affix_position',POSITIONS)]:
         data[field]=morphology.choice(data.get(field,'unspecified'),choices,{'entry_type':'语素类型','affix_function':'构词功能','affix_position':'词缀位置'}[field])
     data['definition']=lexicon.text(data.get('definition',''))
@@ -65,6 +70,7 @@ def normalize(db,lid,data,old=None):
             import uuid
             data['orthographies'].append(dict(id=str(uuid.uuid4()),type_id=type_id,label=row['name'],font=row['font'],text=value))
     for sense in data.get('senses',[]):
+        sense_gloss.normalize(sense,sense)
         sense['tags']=lexicon.tags(sense.get('tags',[]))
         sense['features']=morphology.check_features(db,lid,sense.get('features',[]))
     # Converted words retain their full usage hierarchy. Native fields edit only
@@ -76,7 +82,7 @@ def normalize(db,lid,data,old=None):
             kept=[]
             for sense in usage.get('senses',[]):
                 if sense['id']==primary:
-                    sense.update(short_gloss=data.get('gloss',''),definition=data['definition']);found=True;kept.append(sense)
+                    sense.update(short_gloss=data.get('gloss',''),definition=data['definition'],**{k:data[k] for k in ('gloss_addition','show_gloss_addition') if k in data});found=True;kept.append(sense)
                 elif sense['id'] in extra:
                     value=extra.pop(sense['id']);kept.append({**sense,**{k:v for k,v in value.items() if k!='gloss'},'short_gloss':value.get('gloss','')})
             usage['senses']=kept
@@ -95,3 +101,11 @@ def write_body(db,row,body):
 def references(db,mid):
     return dict(corpus=db.execute('SELECT count(*) FROM lexical_links WHERE lexeme_id=?',(mid,)).fetchone()[0],
         independent=db.execute("SELECT count(*) FROM dictionary_examples e WHERE EXISTS(SELECT 1 FROM json_each(e.body,'$.targets') t WHERE json_extract(t.value,'$.lexeme_id')=?)",(mid,)).fetchone()[0])
+
+def reference_state(db,mid,lid='all'):
+    row=db.execute('SELECT id,language_id,target_kind,revision FROM dictionary_targets WHERE id=?',(mid,)).fetchone()
+    if not row:raise ValueError('词条不存在，请刷新词典')
+    if lid!='all' and row['language_id']!=lid:raise ValueError('词条或语言范围已变化，请重新打开')
+    refs=references(db,mid)
+    components=db.execute('SELECT count(*) FROM morpheme_components WHERE morpheme_id=?',(mid,)).fetchone()[0] if row['target_kind']=='morpheme' else 0
+    return dict(id=mid,language_id=row['language_id'],target_kind=row['target_kind'],revision=row['revision'],references=refs,components=components,can_delete=not components and not any(refs.values()))

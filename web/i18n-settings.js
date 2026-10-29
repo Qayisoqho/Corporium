@@ -53,9 +53,16 @@
    }
   };
  }else if(document.getElementById('desktop-recent')){
-  const field=document.createElement('label');field.className='startup-interface-language';field.append(document.createTextNode(label),select);
-  document.getElementById('desktop-error').after(field);
-  select.onchange=()=>apply().catch(error=>{document.getElementById('desktop-error').textContent=error.message;select.value=I.locale;});
+  const field=document.createElement('label');field.className='startup-interface-language';field.append(document.createTextNode(I.ui('语言 / Language','Language / 语言')),select);
+  document.getElementById('startup-language').append(field);
+  // The control is visible immediately; wait for the native preferences bridge.
+  select.disabled=document.documentElement.dataset.desktop==='true'&&!window.pywebview?.api?.set_ui_language;
+  window.addEventListener('pywebviewready',()=>{select.disabled=false;},{once:true});
+  select.onchange=async()=>{
+   select.disabled=true;
+   try{await apply();}catch(error){document.getElementById('desktop-error').textContent=error.message;select.value=I.locale;}
+   finally{select.disabled=false;}
+  };
  }
  async function restore(){
   let state;try{state=JSON.parse(sessionStorage.getItem(projectKey())||'null');sessionStorage.removeItem(projectKey());}catch{}

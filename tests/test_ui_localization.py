@@ -7,6 +7,15 @@ import ui_localization as ui
 import desktop
 
 class InterfaceLanguageTests(unittest.TestCase):
+    def test_dictionary_copy_messages_translate_without_translating_copied_data(self):
+        ui.catalog.cache_clear();ui.patterns.cache_clear();ui.message.cache_clear()
+        result=ui.present({'undo':{'label':'复制词典条目'}},'/api/undo-state','en')
+        self.assertEqual(result['undo']['label'],'Duplicate dictionary entry')
+        error=ui.present({'error':'条目已变化，请刷新后复制'},'/api/dictionary-copy','en')
+        self.assertEqual(error['error'],'The entry has changed. Refresh it before duplicating')
+        record={'headword':'复制词典条目','body':{'notes':'条目已变化，请刷新后复制'}}
+        self.assertEqual(ui.present(record,'/api/dictionary-copy','en'),record)
+
     def test_locale_is_explicit_and_bounded(self):
         self.assertEqual(ui.language({'Cookie':'corporium-ui-language=en'}),'en')
         self.assertEqual(ui.language({'X-Corporium-UI-Language':'en','Cookie':'corporium-ui-language=zh-CN'}),'en')

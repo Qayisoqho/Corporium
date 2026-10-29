@@ -41,8 +41,10 @@ def normalize(scope):
     return dict(mode=mode,text_ids=sorted(set(ids)) if mode=='texts' else [],include_dictionary=include if mode=='texts' else mode in ('language','dictionary'),include_independent=independent if mode=='texts' else mode in ('language','independent'))
 
 
-def calculate(db,lid,scope):
+def calculate(db,lid,scope,*,case=True,selection=None):
     import grammaticality
+    from vocabulary_statistics import Collector
+    vocabulary=Collector(db,case,selection)
     catalogs={r['id']:grammaticality.definitions(r['metadata']) for r in db.execute('SELECT id,metadata FROM languages')};judgments={}
     def judgment(body,language,count):
         item=grammaticality.selected(body.get('grammaticality',''),catalogs[body.get('language_id') or language]);key=(body.get('language_id') or language,item['id'])
@@ -59,9 +61,14 @@ def calculate(db,lid,scope):
             referenced.add(r['id'])
     rows={tid:dict(id=tid,title=texts[tid]['title'],kind='text',sentences=0,words=0,excluded=0) for tid in texts if tid in chosen}
     corpus_sentences=corpus_words=excluded=overlap=0
-    for r in long_tasks.steps(db.execute('SELECT e.id,e.text_id,e.body,t.title,t.language_id FROM entries e JOIN texts t ON t.id=e.text_id ORDER BY t.rowid,e.position')):
-        if r['text_id'] not in chosen and r['id'] not in referenced:continue
-        body=json.loads(r['body']);words=body.get('words',[]);count=sum(word_counter(w) for w in words)
+    def corpus_rows():
+        cursor=db.execute('SELECT e.id,e.text_id,e.body,t.title,t.language_id FROM entries e JOIN texts t ON t.id=e.text_id ORDER BY t.rowid,e.position')
+        while batch:=cursor.fetchmany(400):
+            selected=[r for r in batch if r['text_id'] in chosen or r['id'] in referenced]
+            vocabulary.load_batch([r['id'] for r in selected]);yield from selected
+    for r in long_tasks.steps(corpus_rows()):
+        body=json.loads(r['body']);words=body.get('words',[])
+        count=vocabulary.record(r['id'],body,body.get('language_id') or r['language_id'],r['text_id'],word_counter)
         row=rows.setdefault(r['text_id'],dict(id=r['text_id'],title=r['title'],kind='dictionary_reference',sentences=0,words=0,excluded=0))
         row['sentences']+=1;row['words']+=count;row['excluded']+=len(words)-count
         corpus_sentences+=1;corpus_words+=count;excluded+=len(words)-count
@@ -69,12 +76,14 @@ def calculate(db,lid,scope):
     all_independent=scope.get('include_independent',mode in ('language','independent'))
     independent=dict(id='independent',title='独立例句库',kind='independent',sentences=0,words=0,excluded=0)
     if include or all_independent:
-        for r in long_tasks.steps(db.execute("SELECT body,language_id FROM dictionary_examples WHERE ?='all' OR language_id=?",(lid,lid))):
+        for r in long_tasks.steps(db.execute("SELECT id,body,language_id FROM dictionary_examples WHERE ?='all' OR language_id=? ORDER BY rowid",(lid,lid))):
             body=json.loads(r['body'])
             if not all_independent and not body.get('targets'):continue
-            words=body.get('words',[]);count=sum(word_counter(w) for w in words)
+            words=body.get('words',[]);count=vocabulary.record('independent:'+r['id'],body,body.get('language_id') or r['language_id'],None,word_counter)
             judgment(body,r['language_id'],count)
             independent['sentences']+=1;independent['words']+=count;independent['excluded']+=len(words)-count
-    return dict(words=corpus_words+independent['words'],sentences=corpus_sentences+independent['sentences'],texts=len(rows),lexemes=lexemes,
+    result=dict(words=corpus_words+independent['words'],sentences=corpus_sentences+independent['sentences'],texts=len(rows),lexemes=lexemes,
                 excluded=excluded+independent['excluded'],dictionary_included=include,dictionary_corpus_sentences=len(referenced),overlap_sentences=overlap,
                 corpus_sentences=corpus_sentences,independent_sentences=independent['sentences'],rows=list(rows.values())+([independent] if include or all_independent else []),grammaticality=list(judgments.values()))
+    result['_vocabulary']=vocabulary.finish(result);result['_hits']=vocabulary.hits
+    return result

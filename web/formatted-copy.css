@@ -4,9 +4,9 @@
 #workspace-toolbar .toolbar-row .formatted-copy-controls>button.is-copying,.formatted-copy-controls>button.is-copying{border:1px solid var(--green)!important;background:var(--accent)!important;color:var(--ink);outline:1px solid var(--green);outline-offset:-1px}
 .formatted-copy-count{font-size:.75rem;color:var(--muted)}
 .formatted-copy-controls [hidden]{display:none!important}
-.formatted-copy-mode .formatted-copy-pick{display:block;width:15px;height:15px;margin:6px auto 0;padding:0;accent-color:var(--green);cursor:pointer}
-.formatted-copy-mode .sentence-number:has(.formatted-copy-pick){text-align:center}
-.formatted-copy-mode .formatted-copy-has-gutter{position:relative}
-.formatted-copy-gutter{position:absolute;left:-30px;top:0;min-width:26px;text-align:center;font-size:.75rem;line-height:1.5;color:var(--muted);font-style:normal}
+.formatted-copy-mode .formatted-copy-pick{display:inline-block;width:15px;height:15px;margin:0;padding:0;vertical-align:middle;flex:none;accent-color:var(--green);cursor:pointer}
+.formatted-copy-mode .formatted-copy-choice{display:inline-flex;align-items:center;flex:none;margin:0 6px 0 0}
 .formatted-copy-mode .formatted-copy-group-pick{display:inline-block;vertical-align:middle;flex:none;width:15px;height:15px;margin:0 6px 0 0;padding:0;accent-color:var(--green)}
-.brief-mode .formatted-copy-gutter,.brief-mode .formatted-copy-pick,.brief-mode .formatted-copy-group-pick{display:block!important}
+.brief-mode .formatted-copy-choice,.brief-mode .formatted-copy-pick,.brief-mode .formatted-copy-group-pick{display:inline-flex!important}
+html.brief-mode.formatted-copy-mode :is(.entry,.lex-example)>.entry-head:has(.formatted-copy-pick){display:flex!important;align-items:center;min-height:18px!important;padding:0!important;margin:0 0 4px!important}
+.brief-mode.formatted-copy-mode .entry-head:has(.formatted-copy-pick)>:not(label){display:none!important}

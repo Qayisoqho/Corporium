@@ -76,13 +76,15 @@ def save(db, body):
         old=require(db,lid)
         previous_glossary=json.loads(old['metadata']).get('glossary',{})
         if old['revision']!=body.get('revision'): raise ValueError('语言信息已更新，请重新打开')
+        import paradigm_templates
+        template_result=paradigm_templates.apply(db,body)
         db.execute('UPDATE languages SET name=?,metadata=?,revision=revision+1 WHERE id=?',(name,json.dumps(data,ensure_ascii=False),lid))
     else:
         lid=str(uuid.uuid4())
         db.execute('INSERT INTO languages VALUES(?,?,?,1)',(lid,name,json.dumps(data,ensure_ascii=False)))
     grammar.sync_legacy(db,lid,previous_glossary,glossary)
     lexicon.categories.initialize_forms(db,lid)
-    return {'ok':True,'id':lid}
+    return {'ok':True,'id':lid,**(template_result if body.get('id') else {})}
 
 
 def request_scope(db, path, body):
@@ -101,6 +103,9 @@ def request_scope(db, path, body):
     if path=='morpheme-unassign':
         r=db.execute('SELECT m.language_id FROM morpheme_components c JOIN morphemes m ON m.id=c.morpheme_id WHERE c.id=?',(body.get('id'),)).fetchone()
         if r:ids.append(r[0])
+    if path in ('dictionary-copy','dictionary-save-impact'):
+        row=db.execute('SELECT language_id FROM dictionary_targets WHERE id=?',(body.get('id'),)).fetchone()
+        if row:ids.append(row[0])
     if path.startswith('morpheme-'):
         for key in ('id','target_id','morpheme_id'):
             if body.get(key):
@@ -148,7 +153,7 @@ def request_scope(db, path, body):
     elif path in ('save','delete-entry','reorder-entry','duplicate-entry'):
         row=db.execute('SELECT t.language_id FROM entries e JOIN texts t ON t.id=e.text_id WHERE e.id=?',(body.get('id'),)).fetchone()
         if row: ids.append(row[0])
-    elif path in ('organize-text','save-text-info','delete-text','add','move','copy-entries','merge','split','sentence-create'):
+    elif path in ('organize-text','save-text-info','delete-text','copy-text','add','move','copy-entries','merge','split','sentence-create'):
         keys={'sentence-create':['text_id'],'add':['text_id'],'move':['source_id','target_id'],'copy-entries':['source_id','target_id'],'merge':['first_id','second_id'],'split':['source_id']}.get(path,['id'])
         for key in keys:
             row=db.execute('SELECT language_id FROM texts WHERE id=?',(body.get(key),)).fetchone()

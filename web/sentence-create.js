@@ -24,14 +24,23 @@ async function beginSentenceDraft(options={}){
  inlineDrafts.set(key,d);
  host.innerHTML=(globalThis.CorporiumI18n?.f("d8661b92678a4b",()=>[renderEditableExample(d.body,kind,id)])??'<div class="entry-head"><strong>新建句子</strong><small>保存后建立记录，可保存空句</small></div>'+renderEditableExample(d.body,kind,id));
  const target=options.host||({'corpus':$('results'),'library':$('library-results'),'dictionary':$('standalone-examples'),'survey':$('survey-content'),'timeline':$('tl-editor')}[workspace])||main;
- if(options.host||workspace==='timeline')target.prepend(host);else target.before(host);host.querySelector('[data-inline-field="ipa"]')?.focus({preventScroll:true});host.scrollIntoView({block:'nearest'});
+ if(workspace==='corpus')target.append(host);else if(options.host||workspace==='timeline')target.prepend(host);else target.before(host);host.querySelector('[data-inline-field="ipa"]')?.focus({preventScroll:true});host.scrollIntoView({block:'nearest'});
  return d;
+}
+async function saveNewCorpusInPlace(r,d){
+ const detail=await api('annotations?kind=corpus&id='+encodeURIComponent(r.id));
+ const e={...detail.body,id:r.id,kind:'corpus',text_id:r.text_id,position:r.position,title:texts.find(t=>t.id===r.text_id)?.title||'',text_language_id:detail.owner_language,warnings:detail.body.warnings||[],revision:detail.revision};
+ const box=document.createElement('div');box.innerHTML=corpusEntryCard(e);const card=box.firstElementChild;
+ const top=d.host.getBoundingClientRect().top;d.host.replaceWith(card);items.push(e);
+ card.querySelector('[data-edit]').onclick=safe(()=>edit(e));
+ card.querySelector('[data-context]').onclick=safe(async()=>{clearFilters();await selectText(r.text_id);page=Math.ceil(r.position/pageSize());await search();$('entry-'+r.id)?.scrollIntoView({block:'center'});});
+ await loadTexts();window.scrollBy({top:card.getBoundingClientRect().top-top,behavior:'instant'});return true;
 }
 (()=>{
  const oldStandalone=openStandalone;
  openStandalone=async function(x,e=null){if(e)return oldStandalone(x,e);return beginSentenceDraft({kind:'independent',language_id:x.language_id,targets:x.id?[{lexeme_id:x.id}]:[]});};
  $('add').textContent=(globalThis.CorporiumI18n?.f("3631315ff720ca",()=>[])??'＋ 添加句子');
- $('add').onclick=safe(()=>beginSentenceDraft({kind:'corpus',text_id:selected,onSaved:async r=>{clearFilters();page=Math.ceil(r.position/pageSize());}}));
+ $('add').onclick=safe(()=>beginSentenceDraft({kind:'corpus',text_id:selected,onSaved:saveNewCorpusInPlace}));
  const previousHome=showHome;showHome=async function(...args){try{await leaveSentenceDrafts();return previousHome(...args);}catch(e){await corporiumAlert(e.message);}};
  const previousWorkspace=setWorkspace;setWorkspace=async function(name){if(name!==workspace)await leaveSentenceDrafts();return previousWorkspace(name);};
  const previousLanguage=switchLanguage;switchLanguage=async function(id){if(id!==activeLanguage)await leaveSentenceDrafts();return previousLanguage(id);};

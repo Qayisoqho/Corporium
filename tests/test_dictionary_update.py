@@ -125,7 +125,9 @@ class MorphemeMediaTests(unittest.TestCase):
         cls=self.api('class-save',dict(kind='form',name='特殊变体'));custom=next(c for c in self.api('classes') if c['id']==cls['id'])
         tag=self.api('class-save',dict(kind='usage_tag',name='限制'));usage=next(c for c in self.api('classes') if c['id']==tag['id'])
         m=self.api('morpheme-save',dict(form='x',body=dict(variants=[dict(form='y',kind='特殊变体',tags=[dict(type='限制',value='特殊语境')])])) )
-        for c in (custom,usage):self.assertEqual(self.call('/api/class-delete',c)[0],400)
+        for c in (custom,usage):
+            self.assertEqual(self.call('/api/class-delete',c)[0],200);self.undo()
+        custom=next(c for c in self.api('classes') if c['id']==custom['id']);usage=next(c for c in self.api('classes') if c['id']==usage['id'])
         self.api('class-save',dict(custom,name='特别变体'));self.api('class-save',dict(usage,name='使用限制'))
         saved=self.api('morpheme?id='+m['id']);self.assertEqual(saved['body']['variants'][0]['kind'],'特别变体');self.assertEqual(saved['body']['variants'][0]['tags'][0]['type'],'使用限制')
         self.assertEqual(self.api('morphemes?q=特殊语境')['total'],1)

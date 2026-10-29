@@ -33,8 +33,9 @@ class SyncCache:
 def meanings(row, kind):
     body=json.loads(row['body'])
     if kind=='morphemes' and body.get('usages') is None:
-        return {('@morpheme','@main'):body.get('gloss',''),
-                **{('@morpheme',s['id']):s.get('gloss','') for s in body.get('senses',[])}}
+        import sense_gloss
+        return {('@morpheme','@main'):sense_gloss.effective(body,'gloss'),
+                **{('@morpheme',s['id']):sense_gloss.effective(s,'gloss') for s in body.get('senses',[])}}
     import paradigms
     return {(u['id'],s['id']):s.get('short_gloss','')
             for u in paradigms.usages(body) for s in u.get('senses',[])}
@@ -55,16 +56,21 @@ def replace_short(value,old,new):
     def compact(value):
         return corpus.compact_gloss(re.sub(r'#(?:sub|sup|super)\[\]|\[\]','',value))
     if old:
-        atom=lambda token:re.compile(r'(^|[._:;\\\s\[\-=+~<>])('+re.escape(token)+r')(?=$|[._:;\\\s\]\-=+~<>]|#(?:sub|sup|super)\[)',re.IGNORECASE)
-        match=atom(old).search(value)
+        atom=lambda token:re.compile(r'(^|[.:;\\\s\[\-=+~<>])('+re.escape(token)+r')(?=$|[.:;\\\s\]\-=+~<>]|#(?:sub|sup|super)\[)',re.IGNORECASE)
+        # Script wrappers do not create a way into an underscore-connected atom.
+        masked=re.sub(r'#(?:sub|sup|super)\[[^\[\]]*\]',lambda m:'\ue000'*len(m[0]),value)
+        joined=[(m.start(),m.end()) for m in re.finditer(r'[^.:;\\\s\[\]\-=+~<>]+',masked) if '_' in m[0]]
+        def atom_matches(token):
+            return (m for m in atom(token).finditer(value) if all(m.end(2)<=a or m.start(2)>=z or (m.start(2),m.end(2))==(a,z) for a,z in joined))
+        match=next(atom_matches(old),None)
         if match:
             return compact(value[:match.start(2)]+new+value[match.end(2):])
         # Automatic association permits ordinary registered tags in either order.
-        parts=re.split(r'[._:;\\]',old)
+        parts=re.split(r'[.:;\\]',old)
         if len(parts)>1 and all(parts) and not any(c in old+value for c in '-=+~<>[](){}#'):
             matches=[]
             for part in parts:
-                match=next((m for m in atom(part).finditer(value) if (m.start(2),m.end(2)) not in matches),None)
+                match=next((m for m in atom_matches(part) if (m.start(2),m.end(2)) not in matches),None)
                 if not match:break
                 matches.append((match.start(2),match.end(2)))
             if len(matches)==len(parts):

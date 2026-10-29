@@ -122,7 +122,7 @@ aside>*{flex-shrink:0}
 
 html .brand,html:not([data-theme="forest"]) .brand{font-family:Junicode,Georgia,serif;font-size:2.25rem;line-height:1.15;letter-spacing:-.04em}
 html:not([data-theme="forest"]) .brand::after{content:none}
-.brand #brand-language{display:block;font-size:.9rem;line-height:1.5;letter-spacing:0;margin:12px 0 0;overflow-wrap:anywhere}
+.brand #brand-language{display:block;font-family:var(--ui-font),"Microsoft YaHei",sans-serif;font-style:var(--ui-style,normal);font-weight:var(--ui-weight,400);font-size:.9rem;line-height:1.5;letter-spacing:0;margin:12px 0 0;overflow-wrap:anywhere}
 .brand #brand-native{display:block;font-size:1.05rem;line-height:1.5;letter-spacing:0;margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .brand #brand-native[hidden]{display:none}
 @media(min-width:601px) and (max-width:900px){html .brand,html:not([data-theme="forest"]) .brand{font-size:1.8rem}}
@@ -185,14 +185,14 @@ html.custom-ui-font body #dictionary-detail .dictionary-heading h2,html.custom-u
 .language-body .gloss,.gloss,.grammar-label{font-family:var(--gloss-font,Junicode),"Microsoft YaHei",serif!important;font-weight:var(--gloss-weight,400)}
 .grammar-label{font-style:var(--gloss-style,normal)!important}
 .language-body .ipa{font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400)}
-html .ipa,html #ipa{font-size:calc(1.1875rem * var(--ipa-scale))}
-html .lex-example-body .ipa{font-size:calc(1.1875rem * var(--ipa-scale))}
+html .ipa,html #ipa{font-size:calc(var(--example-font-size,1.125rem) * var(--ipa-scale))}
+html .lex-example-body .ipa{font-size:calc(var(--example-font-size,1.125rem) * var(--ipa-scale))}
 html .inline-words input.gloss{font-style:var(--gloss-style,normal)!important;font-variant:normal!important;font-variant-caps:normal!important;font-feature-settings:"smcp" 0,"c2sc" 0!important;text-transform:none}
 .sentence-number{font-size:.85rem;color:var(--muted);margin-bottom:8px;font-style:normal;font-variant:normal}
 #global-settings{width:100%;margin-top:12px}
 @font-face{font-family:Junicode;src:url('/font/Junicode/Junicode-Bold.ttf') format('truetype');font-weight:700;font-style:normal;font-display:swap}
 @font-face{font-family:Junicode;src:url('/font/Junicode/Junicode-BoldItalic.ttf') format('truetype');font-weight:700;font-style:italic;font-display:swap}
-#home-example-original.home-ipa{font-size:calc(clamp(1.05rem,2vw,1.25rem) * var(--ipa-scale) * var(--home-example-scale))}
+#home-example-original.home-ipa{font-size:calc(var(--example-font-size,1.125rem) * var(--ipa-scale) * var(--home-example-scale))}
 .morph-features{display:flex;flex-wrap:wrap;gap:6px 18px;max-height:240px;overflow:auto;padding:8px;border:1px solid var(--line);border-radius:6px}.morph-features label{display:inline-flex;align-items:center;gap:5px;margin:3px 0;font-size:.85rem}.morph-condition-types{display:flex;flex-wrap:wrap;gap:15px}.morph-condition-types label{display:inline-flex;align-items:center;gap:5px}.morphology-view{margin:20px 0;padding:14px;border:1px solid var(--line);border-radius:6px}.morphology-view button{padding:4px 8px}.morph-form-view{border-top:1px solid var(--line);padding:12px 0}.morph-form-view p,.morph-evidence{font-size:.85rem;margin:6px 0}.morph-form-view>strong{font-family:Junicode,serif;font-size:1.25rem}#morph-entry-editor{border:1px solid var(--line);padding:12px;border-radius:6px}#link-form-description{font-size:.85rem}#example-form{max-width:100%}
 .morph-evidence{display:block}
 /* Native controls otherwise prohibit selecting their labels in Chromium. */
@@ -562,8 +562,8 @@ dialog.corporium-message input{width:100%;margin-top:10px}
 .corporium-message-actions button{padding:5px 14px;min-height:32px}
 
 html[data-home="false"] :is(#corpus-workspace,#dictionary-workspace,#example-library,#survey-workspace,#grammar-workspace,#timeline-workspace,#analysis-workspace) .editable-example .slot-tools [data-slot-selection]{flex-basis:auto;margin:0 5px 0 0}
-html[data-home="false"] :is(#corpus-workspace,#dictionary-workspace,#example-library,#survey-workspace,#grammar-workspace,#timeline-workspace,#analysis-workspace) .editable-example .inline-words input.inline-piece{font-size:calc(1rem * var(--inline-row-scale,1))}
-html[data-home="false"] :is(#corpus-workspace,#dictionary-workspace,#example-library,#survey-workspace,#grammar-workspace,#timeline-workspace,#analysis-workspace) .editable-example textarea.ipa{font-size:calc(1.1875rem * var(--ipa-scale,1))}
+html[data-home="false"] :is(#corpus-workspace,#dictionary-workspace,#example-library,#survey-workspace,#grammar-workspace,#timeline-workspace,#analysis-workspace) .editable-example .inline-words input.inline-piece{font-size:calc(var(--example-font-size,1.125rem) * var(--inline-row-scale,1))}
+html[data-home="false"] :is(#corpus-workspace,#dictionary-workspace,#example-library,#survey-workspace,#grammar-workspace,#timeline-workspace,#analysis-workspace) .editable-example textarea.ipa{font-size:calc(var(--example-font-size,1.125rem) * var(--ipa-scale,1))}
 
 .sentence-input-tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:0 0 10px;padding-bottom:5px}.sentence-input-tabs [aria-selected=true]{background:var(--green);color:var(--paper)}.sentence-pair-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:5px 0}.sentence-pair-tools small{color:var(--muted)}.sentence-pair-grid{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}.sentence-pair{width:145px;max-width:100%;padding:4px;border:1px solid var(--line);border-radius:5px;background:var(--paper)}.sentence-pair input{display:block;width:100%;min-width:0;margin:2px 0;padding:4px 6px}.sentence-pair-head{display:flex;gap:4px;align-items:center}.sentence-pair-head small{flex:1;color:var(--muted)}.sentence-pair-head button{padding:0 6px;min-height:22px}.sentence-pair-editor[hidden]{display:none}
 

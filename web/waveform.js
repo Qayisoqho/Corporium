@@ -24,6 +24,13 @@ class Cache extends Map{
  setBudget(value){if(Number.isFinite(value)&&value>0)this.limit=value;this.trim();}
  trim(){while(this.size&&this.bytes>this.limit)this.delete(this.keys().next().value);}
 }
+function renderSources(overview,detail,from,span){
+ const valid=source=>source?.ready&&source.channels?.length&&source.step_ms>0;
+ if(!valid(detail))return valid(overview)?[overview]:[];
+ const channel=detail.channels[0],count=detail.count??(detail.mode==='samples'||!ArrayBuffer.isView(channel)?channel.length:channel.length/2);
+ if(detail===overview||detail.start_ms<=from&&detail.start_ms+count*detail.step_ms>=from+span)return [detail];
+ return valid(overview)?[overview,detail]:[detail];
+}
 function draw(ctx,source,from,span,gain,width,height){
  if(!source?.ready||!source.channels?.length||!source.step_ms)return;
  const samples=source.mode==='samples',channels=source.channels;
@@ -57,7 +64,7 @@ function draw(ctx,source,from,span,gain,width,height){
   ctx.restore();
  });
 }
-const api={Cache,decode,draw,bytes};
+const api={Cache,decode,draw,bytes,renderSources};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 else root.CorporiumWaveform=api;
 })(typeof window==='undefined'?globalThis:window);

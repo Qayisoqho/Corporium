@@ -3,7 +3,13 @@
  const progress=document.createElement('dialog');progress.className='long-task-dialog';progress.setAttribute('aria-labelledby','long-task-title');
  progress.innerHTML=(globalThis.CorporiumI18n?.f("5711a67ad7b9d8",()=>[])??'<h2 id="long-task-title" tabindex="-1" autofocus>正在处理</h2><p id="long-task-message" role="status"></p><progress id="long-task-progress" max="100" aria-label="任务进度"></progress><p class="long-task-hint">处理期间暂停其他操作。取消不会修改原数据。</p><button id="long-task-cancel" type="button">取消任务</button>');
  document.body.append(progress);progress.addEventListener('cancel',e=>e.preventDefault());
- let queue=Promise.resolve(),active=false;
+ let queue=Promise.resolve(),active=false,progressHolds=0;
+ // Consecutive phases of one action keep their progress window open.
+ window.corporiumWithTaskProgress=async function(action){
+  progressHolds++;
+  try{return await action();}
+  finally{if(!--progressHolds){active=false;if(progress.open)progress.close();}}
+ };
  window.corporiumLongTaskActive=()=>active;
  async function execute(kind,request,title){
   const background=kind==='dictionary';
@@ -15,11 +21,14 @@
   if(await window.corporiumLeaveCodes?.()===false)throw new DOMException('','AbortError');
   }
   let id=null,cancelRequested=false,finished=false;active=!background;
-  $('long-task-title').textContent=title;$('long-task-message').textContent=(globalThis.CorporiumI18n?.f("96b6f7fc63bf08",()=>[])??'正在准备…');$('long-task-progress').removeAttribute('value');$('long-task-cancel').disabled=false;$('long-task-cancel').textContent=(globalThis.CorporiumI18n?.f("976c4962fc4a10",()=>[])??'取消任务');
+  const updating=progressHolds>0&&kind==='auto-match',hint=progress.querySelector?.('.long-task-hint');
+  $('long-task-title').textContent=updating?(globalThis.CorporiumI18n?.ui('更新剩余候选','Updating remaining candidates')??'更新剩余候选'):title;
+  if(hint)hint.textContent=updating?(globalThis.CorporiumI18n?.ui('关联已保存。取消只停止剩余候选的刷新。','Links have been saved. Cancelling only stops refreshing the remaining candidates.')??'关联已保存。取消只停止剩余候选的刷新。'):(globalThis.CorporiumI18n?.ui('处理期间暂停其他操作。取消不会修改原数据。','Other actions are paused while processing. Cancelling will not change the original data.')??'处理期间暂停其他操作。取消不会修改原数据。');
+  $('long-task-message').textContent=(globalThis.CorporiumI18n?.f("96b6f7fc63bf08",()=>[])??'正在准备…');$('long-task-progress').removeAttribute('value');$('long-task-cancel').disabled=false;$('long-task-cancel').textContent=(globalThis.CorporiumI18n?.f("976c4962fc4a10",()=>[])??'取消任务');
   $('long-task-cancel').onclick=async()=>{cancelRequested=true;$('long-task-cancel').disabled=true;$('long-task-cancel').textContent=(globalThis.CorporiumI18n?.f("fb949a945e4c1d",()=>[])??'正在取消…');$('long-task-message').textContent=(globalThis.CorporiumI18n?.f("66b7a40120d863",()=>[])??'正在取消并清理临时文件…');if(id)try{await taskApi('task-cancel',{id});}catch(e){$('long-task-message').textContent=(globalThis.CorporiumI18n?.f("98e26d93a7b4a2",()=>[])??'取消请求暂未送达，正在重试…');}};
   let status=null,statusText=null,statusCancel=null;
   if(background){status=document.createElement('div');status.className='dictionary-search-progress';status.dataset.taskProgress='true';status.setAttribute('role','status');statusText=document.createElement('span');statusText.textContent=(globalThis.CorporiumI18n?.f("c6e69ac1211a99",()=>[])??'正在检索…');statusCancel=document.createElement('button');statusCancel.type='button';statusCancel.textContent=(globalThis.CorporiumI18n?.f("327a00b61f4aab",()=>[])??'取消');statusCancel.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("78dc12a8b44205",()=>[])??'取消词典检索'));statusCancel.onclick=()=>{statusText.textContent=(globalThis.CorporiumI18n?.f("dcec169534621f",()=>[])??'正在取消检索…');statusCancel.disabled=true;return $('long-task-cancel').onclick();};status.append(statusText,statusCancel);$('dictionary-notice').after(status);}
-  else progress.showModal();
+  else if(!progress.open)progress.showModal();
   try{
    id=(await taskApi('task-start',{kind,request})).id;
    for(;;){
@@ -35,7 +44,7 @@
     await new Promise(resolve=>setTimeout(resolve,background?80:400));
    }
   }finally{
-   const close=()=>{active=false;if(background)status?.remove();else if(progress.open)progress.close();};
+   const close=()=>{active=!background&&progressHolds>0;if(background)status?.remove();else if(!progressHolds&&progress.open)progress.close();};
    // Finished results must dismiss their UI even if forgetting a job is slow.
    if(finished||background)close();
    try{if(id){if(!finished)await taskApi('task-cancel',{id}).catch(()=>{});else void taskApi('task-forget',{id}).catch(()=>{});}}
@@ -54,7 +63,7 @@
   ['dictionary-replace-preview',(globalThis.CorporiumI18n?.f("1ec1b918c8ea2b",()=>[])??'预览词典替换')],['dictionary-replace-apply',(globalThis.CorporiumI18n?.f("e5b82ae81988ce",()=>[])??'应用词典替换')],
   ['punctuation-preview',(globalThis.CorporiumI18n?.f("eeabd0a2f97a91",()=>[])??'预览标点拆分')],['punctuation-apply',(globalThis.CorporiumI18n?.f("627bf37ab4d1ac",()=>[])??'应用标点拆分')],['lexeme-auto-link',(globalThis.CorporiumI18n?.f("ed221d0390701e",()=>[])??'批量关联词典')],
   ['dictionary-batch-preview',(globalThis.CorporiumI18n?.f("534ea9b85cc6b5",()=>[])??'预览词条批量编辑')],['dictionary-batch-apply',(globalThis.CorporiumI18n?.f("a976334faee7bb",()=>[])??'批量编辑词条')],['dict-org-assign',(globalThis.CorporiumI18n?.f("5ac06e02fa45e4",()=>[])??'批量归类')],['homophone-phonology-save',(globalThis.CorporiumI18n?.f("f0f4ed8e474514",()=>[])??'保存音系与读音归类')],['morpheme-assign',(globalThis.CorporiumI18n?.f("ee98d0529d33b6",()=>[])??'整理组分语素')],['morpheme-merge',(globalThis.CorporiumI18n?.f("2365efb60f28ef",()=>[])??'归并语素')],
-  ['move',(globalThis.CorporiumI18n?.f("ac9c8195a6b1ac",()=>[])??'移动句子')],['copy-entries',(globalThis.CorporiumI18n?.f("5082a78b4d102a",()=>[])??'复制句子')],['merge',(globalThis.CorporiumI18n?.f("bae65771ff285e",()=>[])??'合并文本')],['split',(globalThis.CorporiumI18n?.f("3c4e51b67d7b34",()=>[])??'拆分文本')],['word-transfer',(globalThis.CorporiumI18n?.f("e521852b9b3490",()=>[])??'转移词格')],
+  ['move',(globalThis.CorporiumI18n?.f("ac9c8195a6b1ac",()=>[])??'移动句子')],['copy-text',globalThis.CorporiumI18n?.phrase('复制文本')??'复制文本'],['copy-entries',(globalThis.CorporiumI18n?.f("5082a78b4d102a",()=>[])??'复制句子')],['merge',(globalThis.CorporiumI18n?.f("bae65771ff285e",()=>[])??'合并文本')],['split',(globalThis.CorporiumI18n?.f("3c4e51b67d7b34",()=>[])??'拆分文本')],['word-transfer',(globalThis.CorporiumI18n?.f("e521852b9b3490",()=>[])??'转移词格')],
   ['lexeme-save',(globalThis.CorporiumI18n?.f("bd426a1a41a750",()=>[])??'保存词条')],['morpheme-save',(globalThis.CorporiumI18n?.f("132ad2c2a8adc9",()=>[])??'保存语素')]
  ]);
  api=async function(path,body){
@@ -70,7 +79,7 @@
   if(body&&operations.has(name)&&(!['lexeme-save','morpheme-save'].includes(name)||body.id)&&(name!=='analysis-save'||body.kind==='snapshot')){
    const result=await run('operation',{language:body._language||activeLanguage,operation:name,body},operations.get(name));
    // Outside the serial task promise: refreshing a view can itself enqueue a search.
-   if(!name.startsWith('analysis-')&&!name.endsWith('-preview')&&name!=='excel-inspect')await refreshUndo().catch(()=>{});
+   if(!name.startsWith('analysis-')&&!name.endsWith('-preview')&&name!=='excel-inspect'&&name!=='lexeme-auto-link')await refreshUndo().catch(()=>{});
    return result;
   }
   return normalApi(path,body);

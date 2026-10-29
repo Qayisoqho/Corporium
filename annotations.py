@@ -72,7 +72,7 @@ def get(db,kind,rid):
 def inline_save(db,b,lid):
     """Save fixed word slots and their layers as one undoable transaction."""
     import lexicon
-    from corpus import analyze,parse,export_entry,compact_gloss,compact_empty_pairs
+    from corpus import analyze,parse,export_entry,normalize_edited_pair
     gloss_inheritance.check_revision(db,b['kind'],b['id'],b)
     if 'slot_ids' in b:return inline_slots_save(db,b,lid)
     d=get(db,b['kind'],b['id']);new=b['body']
@@ -92,7 +92,7 @@ def inline_save(db,b,lid):
     for old,w in zip(body['words'],new['words']):
         form=lexicon.text(w['form']);value=lexicon.text(w['gloss'])
         if (form,value)!=(old['form'],old['gloss']):
-            form,value=compact_empty_pairs(form,value);value=compact_gloss(value)
+            form,value=normalize_edited_pair(form,value)
         old.update(form=form,gloss=value)
     import punctuation
     punctuation.recognize_inline(body,d,b.get('slot_ids',[w['id'] for w in d['words']]),b.get('cells',[]))
@@ -216,6 +216,66 @@ def mutate(db,action,b,lid):
 def validate(db):
     if db.execute('SELECT 1 FROM annotation_cells c LEFT JOIN annotation_layers l ON l.id=c.layer_id WHERE l.id IS NULL').fetchone():raise ValueError('仍有标注引用此层，请先撤销标注内容或删除该层')
 
+def search_catalog(db,lid):
+    fields=[]
+    for r in db.execute("SELECT id,name FROM annotation_layers WHERE ?='all' OR language_id=? ORDER BY position,id",(lid,lid)):
+        fields.append(dict(id='layer:'+r['id'],name=r['name'],group='layer'))
+    for r in db.execute("SELECT id,name FROM writing_types WHERE ?='all' OR language_id=? ORDER BY rowid",(lid,lid)):
+        fields.append(dict(id='writing:'+r['id'],name=r['name'],group='writing'))
+    return dict(fields=fields)
+
+
+class SearchFields:
+    """Query-local custom values shared by sentence and survey searches."""
+    def __init__(self,db,lid,q):
+        import corpus,long_tasks
+        from collections import defaultdict
+        self.db=db;self.field=q.get('field','all');self.query=q.get('q','');self.case=q.get('case')=='true';self.mode=q.get('mode') or ('exact' if q.get('exact')=='true' else 'contains')
+        self.cells=defaultdict(list);self.links=defaultdict(set);self.targets={};self.types={};self.defs={}
+        if not self.query.strip() or self.field not in ('all','layers','writings') and not self.field.startswith(('layer:','writing:')):return
+        catalog=search_catalog(db,lid)
+        if self.field.startswith(('layer:','writing:')) and self.field not in {f['id'] for f in catalog['fields']}:raise ValueError('自定义检索字段已删除或不属于当前语言，请重新选择')
+        if self.field in ('all','layers') or self.field.startswith('layer:'):
+            self.defs={r['id']:dict(r) for r in db.execute("SELECT * FROM annotation_layers WHERE ?='all' OR language_id=?",(lid,lid)) if (self.field.startswith('layer:') or r['searchable']) and (not self.field.startswith('layer:') or r['id']==self.field[6:])}
+            for c in long_tasks.steps(db.execute("SELECT c.* FROM annotation_cells c JOIN annotation_layers l ON l.id=c.layer_id WHERE ?='all' OR l.language_id=?",(lid,lid))) if self.defs else ():
+                if c['layer_id'] in self.defs and self.hit(c['value']):self.cells[(c['owner_kind'],c['record_id'])].append(dict(c))
+        if self.field in ('all','writings') or self.field.startswith('writing:'):
+            self.types={r['id']:dict(r) for r in db.execute("SELECT * FROM writing_types WHERE ?='all' OR language_id=?",(lid,lid)) if not self.field.startswith('writing:') or r['id']==self.field[8:]}
+            import word_structure
+            sql=" UNION ALL ".join("SELECT id,language_id,json_extract(body,'$.orthographies') orthographies,json_extract(body,'$.writings') writings,json_extract(body,'$.word_structure') structure FROM "+table+" WHERE ?='all' OR language_id=?" for table in ('lexemes','morphemes'))
+            for r in long_tasks.steps(db.execute(sql,(lid,lid,lid,lid))) if self.types else ():
+                body=dict(orthographies=json.loads(r['orthographies'] or '[]'),writings=json.loads(r['writings'] or '[]'),word_structure=json.loads(r['structure'] or '{}'));values=[]
+                for w in [*body.get('orthographies',[]),*body.get('writings',[]),*word_structure.writing_rows(body)]:
+                    if w.get('type_id') in self.types and self.types[w['type_id']]['language_id']==r['language_id'] and self.hit(w.get('text','')):
+                        values.append(dict(field='writing:'+w['type_id'],label=self.types[w['type_id']]['name'],text=w['text']))
+                if values:self.targets[r['id']]=(r['language_id'],values)
+            if self.targets:
+                for r in long_tasks.steps(db.execute('SELECT u.entry_id,l.lexeme_id,COALESCE(p.position,u.position) word_position FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id LEFT JOIN corpus_units p ON p.id=u.parent_id WHERE u.active=1')):
+                    if r['lexeme_id'] in self.targets:self.links[r['entry_id']].add((r['lexeme_id'],r['word_position']))
+
+    def hit(self,value):
+        from corpus import normalize
+        a,b=normalize(value,self.case),normalize(self.query,self.case)
+        return a==b if self.mode=='exact' else a.startswith(b) if self.mode=='prefix' else a.endswith(b) if self.mode=='suffix' else b in a
+
+    def values(self,kind,rid,body,lid):
+        found=[];cells=self.cells.get((kind,rid),[])
+        if cells:
+            definitions=[v for v in self.defs.values() if v['language_id']==lid]
+            live={w['id']:w['position'] for w in units(self.db,kind,rid,body)}
+            for c in cells:
+                if valid_cell(c,live,definitions):found.append(dict(field='layer:'+c['layer_id'],label=self.defs[c['layer_id']]['name'],text=c['value'],word=live.get(c['unit_id'])))
+        targets=self.links.get(rid,()) if kind=='corpus' else set()
+        if kind=='independent' and self.targets and any(t.get('lexeme_id') in self.targets for t in body.get('targets',[])):
+            from corpus import analyze
+            from segmentation import decorate_refs
+            analyzed=analyze(copy.deepcopy(body));decorate_refs(analyzed)
+            targets={(t.get('lexeme_id'),(t.get('segmentation_ref') or {}).get('word')) for t in analyzed.get('targets',[]) if not t.get('segmentation_review')}
+        for xid,position in targets:
+            if xid in self.targets and self.targets[xid][0]==lid:found.extend(dict(v,word=position) for v in self.targets[xid][1])
+        return list({(v['field'],v['text'],v.get('word')):v for v in found}.values())
+
+
 def search(db,q,*,ids_only=False):
     """Paginate empty searches in SQL; analyze only visible hits in filtered searches."""
     from corpus import analyze,QueryMatcher,normalize
@@ -242,21 +302,16 @@ def search(db,q,*,ids_only=False):
         total=db.execute('SELECT COUNT(*) FROM ('+sql+')',args).fetchone()[0];pages=max(1,(total+19)//20);page=min(page,pages)
         visible=list(db.execute('SELECT * FROM ('+sql+') ORDER BY source_order,ordering,position LIMIT 20 OFFSET ?',[*args,(page-1)*20]))
     else:
-        layer_hits={};defs={r['id']:dict(r) for r in db.execute('SELECT * FROM annotation_layers WHERE searchable=1')}
+        custom=SearchFields(db,lid,q)
         def hit(value):
             a=normalize(value,case);b=normalize(query,case)
             return a==b if mode=='exact' else a.startswith(b) if mode=='prefix' else a.endswith(b) if mode=='suffix' else b in a
-        if field in ('all','layers'):
-            for c in db.execute('SELECT * FROM annotation_cells'):
-                if c['layer_id'] in defs and hit(c['value']):layer_hits.setdefault((c['owner_kind'],c['record_id']),[]).append(dict(c))
         matches=[]
         matcher=QueryMatcher(query,field,mode=mode,case=case)
         for r in gloss_inheritance.iter_rows(db,db.execute('SELECT * FROM ('+sql+') ORDER BY source_order,ordering,position',args),lightweight=True):
             b=gloss_inheritance.load(db,r['kind'],r['id'],r['body'],metadata=False,lightweight=True);_,found=matcher(b)
             if field in ('all','original'):found=found or hit(b.get('original',''))
-            if not found and (r['kind'],r['id']) in layer_hits:
-                live={w['id'] for w in units(db,r['kind'],r['id'],b)};layers_for_language=[v for v in defs.values() if v['language_id']==r['language_id']]
-                found=any(valid_cell(c,live,layers_for_language) for c in layer_hits[(r['kind'],r['id'])])
+            if not found:found=bool(custom.values(r['kind'],r['id'],b,r['language_id']))
             if found:matches.append(r)
         if ids_only:return {'ids':[r['id'] for r in matches]}
         total=len(matches);pages=max(1,(total+19)//20);page=min(page,pages);visible=matches[(page-1)*20:page*20]
@@ -273,7 +328,7 @@ def search(db,q,*,ids_only=False):
 def inline_slots_save(db,b,lid):
     """Explicit word identities permit insertion, merging and movement without re-matching."""
     import lexicon
-    from corpus import analyze,parse,export_entry,compact_gloss,compact_empty_pairs
+    from corpus import analyze,parse,export_entry,normalize_edited_pair
     d=get(db,b['kind'],b['id'])
     if d['owner_language']!=lid:raise ValueError('例句不属于当前语言')
     # Validate concurrency and layer configuration before any mutation.
@@ -305,8 +360,7 @@ def inline_slots_save(db,b,lid):
         item=copy.deepcopy(old[s][1]) if s in old else {'form_kind':'content','gloss_kind':'content'}
         form=lexicon.text(w.get('form',''));gloss=lexicon.text(w.get('gloss',''))
         if s not in old or (form,gloss)!=(item['form'],item['gloss']):
-            form,gloss=compact_empty_pairs(form,gloss)
-            gloss=compact_gloss(gloss)
+            form,gloss=normalize_edited_pair(form,gloss)
         if not form.strip() and not gloss.strip():
             emptied.add(s)
             if item.get('morph_groups') or item.get('infix_confirmation'):

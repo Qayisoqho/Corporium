@@ -12,7 +12,7 @@ import dictionary_targets
 import paradigms
 from itertools import islice
 
-HIDDEN_KEYS=frozenset(('gloss_mode','gloss_addition','default_base_sense_id','status','id','font','font_variant','language_id','parent_id','targets','revision','segmentation_ref','token_id','annotation_id','gloss_frozen','gloss_sources','gloss_revision','_gloss_active_bindings'))
+HIDDEN_KEYS=frozenset(('gloss_mode','gloss_addition','show_gloss_addition','default_base_sense_id','status','id','font','font_variant','language_id','parent_id','targets','revision','segmentation_ref','token_id','annotation_id','gloss_frozen','gloss_sources','gloss_revision','_gloss_active_bindings'))
 PLAIN_WORDS=(frozenset(('form','gloss')),frozenset(('form','gloss','form_kind','gloss_kind')))
 
 LABELS=dict(headword='词形',notes='备注',homonym_note='同形词辨析',homonym_number='同形词编号',entry_type='条目类型',features='语法特征',tags='使用标签',usages='词类用法',pos='词类',subclass='词类子类',senses='义项',short_gloss='简短释义',definition='详细释义',variants='形式与变体',form='形式',pronunciation='读音',readings='读音',conditions='出现条件',condition_types='条件类型',variation='变体关系',status='分析状态',name='名称',source='研究依据',kind='形式类型',orthographies='自定义书写',label='名称',text='内容',type='类型',value='值',note='说明',relation='条目关系',base_id='基本条目',word_structure='形态分析与语素构成',memberships='形态类与主要部分',class_id='形态类',usage_id='所属用法',parts='主要部分',title='标题',variant_id='关联变体',writings='组分书写',analyses='分析方案',level='分析层面',default='默认分析',components='组分',role='角色',gloss='标注',lexeme_id='关联词条',sense_id='关联义项',form_id='关联形式',segments='不连续片段',semantic_classes='语义类',media='媒体',caption='说明',creator='创作者',speakers='发言人',examples='例句与例证',ipa='IPA',translation='自由翻译',words='词格',punctuation='标点',start_ms='起始毫秒',end_ms='结束毫秒',target_id='关联形式',type_id='书写类型')

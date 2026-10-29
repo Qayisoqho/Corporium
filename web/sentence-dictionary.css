@@ -1,4 +1,5 @@
 .sentence-dictionary-dialog {width:min(760px,calc(100vw - 32px));max-width:calc(100vw - 32px)}
+.sentence-dictionary-dialog .dialog-content {container-type:inline-size}
 .sentence-dictionary-dialog .intake-fields {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}
 .sentence-dictionary-dialog label {min-width:0}
 .sentence-dictionary-dialog input,.sentence-dictionary-dialog select {width:100%;min-width:0;max-width:100%;box-sizing:border-box}
@@ -18,5 +19,16 @@
 #intake-source {overflow-wrap:anywhere}
 #intake-wordform {font-family:var(--annotation-font,Junicode);font-style:var(--form-style,italic);font-weight:var(--form-weight,400)}
 #intake-gloss {font-family:var(--gloss-font,Junicode);font-style:normal;font-variant-caps:normal}
-@container (max-width:500px) {.sentence-dictionary-dialog .intake-fields {grid-template-columns:minmax(0,1fr)}}
-@media (max-width:600px) {.sentence-dictionary-dialog .intake-fields {grid-template-columns:minmax(0,1fr)}}
+.sentence-dictionary-dialog .intake-control-row{display:flex;align-items:stretch;gap:6px;min-width:0;position:relative}
+.sentence-dictionary-dialog .intake-control-row>input,.sentence-dictionary-dialog .intake-control-row>label{flex:1;min-width:0;margin:0}
+.sentence-dictionary-dialog .intake-pos-picker{flex:none;width:2.2em;padding-inline:4px;appearance:none;text-align:center;cursor:pointer}
+.sentence-dictionary-dialog .intake-gloss-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end}
+#intake-grammar{grid-column:2;grid-row:1;margin:0;font:inherit}
+#intake-grammar>summary{grid-column:2;grid-row:1;list-style:none;cursor:pointer;white-space:nowrap;border:1px solid var(--line);border-radius:4px;padding:6px 8px;background:var(--surface,var(--paper));font:inherit;font-size:.8125rem;line-height:1.47}
+#intake-grammar>summary::after{content:' ▾'}
+#intake-grammar-fields{grid-column:1/-1;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:6px;margin:4px 0 0;padding:8px;border:1px solid var(--line);border-radius:4px;background:var(--paper)}
+#intake-grammar-fields>label{margin:0;min-width:0}
+#intake-grammar-fields .sense-addition-toggle{padding:0;display:flex;align-items:center;gap:5px}
+#intake-grammar-fields .sense-addition-toggle input{width:auto;flex:none;margin:0}
+@container (max-width:620px) {.sentence-dictionary-dialog .intake-fields {grid-template-columns:minmax(0,1fr)}}
+@media (max-width:700px) {.sentence-dictionary-dialog .intake-fields {grid-template-columns:minmax(0,1fr)}}

@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const source=fs.readFileSync('web/paradigms.js','utf8').replace(/\r\n/g,'\n');
 function setup(){
- const c={crypto:require('node:crypto')};vm.createContext(c);vm.runInContext(source.split('(()=>{')[0],c);return c;
+ const c={crypto:require('node:crypto')};vm.createContext(c);vm.runInContext(fs.readFileSync('web/sense-gloss.js','utf8'),c);vm.runInContext(source.split('(()=>{')[0],c);return c;
 }
 function table(title='变格',form='f'){
  return {title,rows:[{labels:['单数','宾格'],realizations:[{form_id:form,meanings:[{id:'m1'},{id:'m2'}]}]}]};

@@ -16,6 +16,7 @@ import paradigms
 import morpheme_registry
 import segmentation
 import word_analysis_memory
+import sense_gloss
 
 
 def digest(value):
@@ -101,7 +102,7 @@ def intake_preview(db, b, lid):
                 source_gloss=u.get('display_gloss', u['gloss']), linked=bool(old), peers=peers, target=target)
     # Bind the source association, chosen target, and reviewed fields as well as revisions.
     data['token'] = digest([data, old, {k: b.get(k) for k in
-        ('mode', 'target_kind', 'entry_type', 'form', 'gloss', 'pos', 'usage_id', 'sense_id', 'form_id', 'query')}])
+        ('mode', 'target_kind', 'entry_type', 'form', 'gloss', 'gloss_addition', 'show_gloss_addition', 'pos', 'usage_id', 'sense_id', 'form_id', 'query')}])
     # A search result is not part of the saved decision. Recheck only the source,
     # selected target and same-form peers when saving, never the whole catalog.
     if b.get('include_items', True):
@@ -128,6 +129,8 @@ def intake_apply(db, b, lid):
     mode = b.get('mode', 'new')
     form = lexicon.text(b.get('form', '')).strip()
     gloss = lexicon.text(b.get('gloss', '')).strip()
+    gloss_fields=sense_gloss.normalize(b,dict(gloss=gloss))
+    effective_gloss=sense_gloss.effective(gloss_fields,'gloss')
     pos = lexicon.text(b.get('pos', '')).strip()
     # Reuse the language's catalogue spelling when typing an existing class;
     # normal lexeme saving creates a genuinely new class in this transaction.
@@ -136,7 +139,7 @@ def intake_apply(db, b, lid):
     x = p['target']
     uid, sid, fid = b.get('usage_id') or None, b.get('sense_id') or None, b.get('form_id') or None
     if mode == 'new':
-        if not form or not gloss:
+        if not form or not (effective_gloss if b.get('target_kind')=='morpheme' else gloss):
             raise ValueError('请填写词形与简短标注')
         if p['peers'] and b.get('confirm_homonym') is not True:
             raise ValueError('存在同形条目，请确认建立独立记录')
@@ -149,7 +152,7 @@ def intake_apply(db, b, lid):
                     pos=pos, senses=[dict(id=sid, short_gloss=gloss)])])), d['language_id'])
         elif kind == 'morpheme':
             m = morpheme_registry.mutate(db, 'morpheme-save', dict(form=form,
-                body=dict(gloss=gloss, entry_type=b.get('entry_type', 'unspecified'))), d['language_id'])
+                body=dict(**gloss_fields, entry_type=b.get('entry_type', 'unspecified'))), d['language_id'])
             x = lexicon.get_lexeme(db, m['id']); uid, sid = '@morpheme', '@main'
         else:
             raise ValueError('请选择词条或语素')
@@ -158,16 +161,16 @@ def intake_apply(db, b, lid):
         if not x:
             raise ValueError('请选择已有条目')
         if mode == 'sense':
-            if not gloss:
+            if not (effective_gloss if x['target_kind']=='morpheme' else gloss):
                 raise ValueError('请填写新义项的简短标注')
             sid = str(uuid.uuid4())
             if x['target_kind'] == 'morpheme':
                 body = copy.deepcopy(morpheme_registry.get(db, x['id'])['body'])
-                body.setdefault('senses', []).append(dict(id=sid, gloss=gloss))
+                body.setdefault('senses', []).append(dict(id=sid, **gloss_fields))
                 if body.get('primary_sense_id'):
                     u, _ = lexicon.selection(x['body'], uid, None)
                     if not u:raise ValueError('请选择意义分组')
-                    next(v for v in body['usages'] if v['id'] == uid)['senses'].append(dict(id=sid, short_gloss=gloss))
+                    next(v for v in body['usages'] if v['id'] == uid)['senses'].append(dict(id=sid,short_gloss=gloss,**{k:v for k,v in gloss_fields.items() if k!='gloss'}))
                 else:uid = '@morpheme'
             else:
                 body = copy.deepcopy(x['body'])
@@ -216,7 +219,7 @@ def candidate(x, usage, sense, form, tags, extra=()):
     lookup = {canon(t['symbol']).casefold(): t['id'] for t in tags.values()}
     for t in tags.values():
         for alias in t['aliases']:lookup[canon(alias).casefold()] = t['id']
-    present = {lookup.get(canon(v).casefold()) for v in re.split(r'[._:;\\]', value)}
+    present = {lookup.get(canon(v).casefold()) for v in re.split(r'[.:;\\]', value)}
     added = [tags[f]['symbol'] for f in features if f in tags and f not in present]
     if added and any(c in value for c in '-=+<>[](){}'):
         return None  # Attaching features to an opaque structure would invent scope.
@@ -265,8 +268,9 @@ def completion_preview(db, b, lid):
     targets = {r['id']: {**dict(r), 'body': json.loads(r['body'])} for r in db.execute('SELECT * FROM dictionary_targets WHERE language_id=? ORDER BY id', (d['language_id'],))}
     homonyms.decorate_many(db, [x for x in targets.values() if x['target_kind'] == 'lexeme'])
     exact, relaxed = {}, {}
+    lookup={name.casefold():t['id'] for t in tags.values() for name in [t['symbol'],*t['aliases']]}
     for x in targets.values():
-        for u,s,f in paradigms.candidates(x['body']):
+        for u,s,f in paradigms.matching_candidates(x['body'],x['headword'],lambda gloss,features:lexicon.auto_gloss_key(gloss,lookup,features)):
             c = candidate(x, u, s, f, tags)
             if c:
                 exact.setdefault(canon(c['matched_form']), []).append(c)

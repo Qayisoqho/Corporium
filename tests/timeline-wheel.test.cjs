@@ -3,7 +3,7 @@ const source=fs.readFileSync(require.resolve('../web/timeline.js'),'utf8');
 const listener=source.slice(source.indexOf("panel.addEventListener('wheel'"),source.indexOf('let resizing=null;'));
 function harness(){
  const inputs={},state={from:-10000,span:60000,request:0,data:{},wheelTimer:null,TimelineGeometry:require('../web/timeline-geometry.js'),sec:n=>String(n/1000),$ :id=>inputs[id]||=( {} ),noDraft(){},renderTracks(){},drawWave(){},syncSpan(){},safeTL:fn=>fn,load(){},clearTimeout(){},setTimeout(fn){state.pending=fn;return 1;},panel:{addEventListener(type,fn,options){state.handler=fn;assert.equal(options.passive,false);}}};
- state.frames=[];state.panFrame=0;state.requestAnimationFrame=fn=>state.frames.push(fn);state.remember=()=>{state.remembered=state.from;};state.loadWave=()=>{state.waveAt=state.from;};state.renderTracks=()=>{state.rendered=state.from;};
+ state.frames=[];state.panFrame=0;state.viewportBusy=false;state.waveOnFrame=false;state.requestAnimationFrame=fn=>state.frames.push(fn);state.remember=()=>{state.remembered=state.from;};state.loadWave=()=>{state.waveAt=state.from;};state.renderViewport=()=>{state.rendered=state.from;};
  vm.runInNewContext(source.match(/function schedulePan[^\n]+/)[0]+'\n'+listener,state);return state;
 }
 function wheel(s,values={}){const e={ctrlKey:false,shiftKey:true,deltaX:0,deltaY:100,deltaMode:0,clientX:300,target:{closest:()=>({getBoundingClientRect:()=>({left:100,width:1000})})},preventDefault(){this.prevented=true;},...values};s.handler(e);return e;}
@@ -22,7 +22,7 @@ test('Shift wheel pans waveform and lanes at the current scale, coalescing paint
   const target={closest:query=>{assert.ok(query.includes(selector));return {getBoundingClientRect:()=>({width:1000})};}};
   assert.ok(wheel(s,{target}).prevented);wheel(s,{target});wheel(s,{target});
   assert.equal(s.from,33000);assert.equal(s.span,10000);assert.equal(s.head,32000);assert.equal(s.selectedInterval,'one');assert.equal(JSON.stringify(s.data),data);assert.equal(s.frames.length,1);assert.equal(s.waveAt,undefined);
-  s.frames.shift()();assert.equal(s.rendered,33000);assert.equal(s.waveAt,33000);assert.equal(s.remembered,33000);assert.equal(s.pending,undefined);
+  s.frames.shift()();assert.equal(s.rendered,33000);assert.equal(s.waveAt,33000);assert.equal(s.remembered,33000);assert.equal(typeof s.pending,'function');
  }
 });
 test('Shift wheel accepts browser horizontal deltas, line/page units and one-millisecond views',()=>{
@@ -36,7 +36,16 @@ test('Shift wheel clamps to the timeline bounds, stays out of other controls and
  assert.ok(wheel(s,{deltaY:-100}).prevented);assert.equal(s.from,0);assert.equal(s.request,0);assert.equal(s.frames.length,0);
  s.from=110000;wheel(s);assert.equal(s.from,110000);assert.equal(s.frames.length,0);
  assert.ok(!wheel(s,{target:{closest:()=>null}}).prevented);assert.equal(s.from,110000);
- s.from=30000;wheel(s,{ctrlKey:true,deltaY:-100});assert.ok(s.span<10000);assert.equal(s.frames.length,0);assert.equal(typeof s.pending,'function');
+ s.from=30000;wheel(s,{ctrlKey:true,deltaY:-100});assert.ok(s.span<10000);assert.equal(s.frames.length,1);assert.equal(typeof s.pending,'function');
+});
+
+test('continuous playback zoom paints once per frame and settles without a full timeline task',()=>{
+ const s=harness();Object.assign(s,{from:0,span:60000,head:10000,data:{complete:true,extent:[0,120000]}});
+ let patches=0,fullLoads=0;s.renderViewport=()=>patches++;s.load=()=>fullLoads++;
+ for(let i=0;i<80;i++)wheel(s,{ctrlKey:true,deltaY:i%2?10:-10});
+ assert.equal(s.frames.length,1);assert.equal(patches,0);assert.equal(s.waveAt,undefined);assert.equal(s.viewportBusy,true);
+ s.frames.shift()();assert.equal(patches,1);assert.equal(s.waveAt,undefined);assert.equal(s.head,10000);
+ s.pending();assert.equal(s.viewportBusy,false);assert.equal(s.waveAt,s.from);assert.equal(fullLoads,0);
 });
 test('ordinary wheel is contained only when axes overflow, including at the bottom',()=>{
  const start=source.indexOf("panel.querySelector('.tl-scroll-axes').addEventListener('wheel'");

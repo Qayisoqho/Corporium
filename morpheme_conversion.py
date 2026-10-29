@@ -27,6 +27,7 @@ def converted(source):
     main=senses[0] if senses else {}
     if main:body['primary_sense_id']=main['id']
     body['gloss']=main.get('short_gloss','');body['definition']=main.get('definition','')
+    body.update({k:main[k] for k in ('gloss_addition','show_gloss_addition') if k in main})
     body['senses']=[dict(s,gloss=s.get('short_gloss','')) for s in senses[1:]]
     body['readings']=body.get('readings',[])
     body['writings']=[dict(type_id=o['type_id'],text=o['text']) for o in body.get('orthographies',[]) if o.get('type_id')]

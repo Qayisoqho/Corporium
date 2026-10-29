@@ -15,6 +15,18 @@ test('compact peak amplitudes retain both signs and separate channels',()=>{
 test('corrupt compact data is rejected before drawing',()=>{
  assert.throws(()=>waveform.decode({mode:'peaks',channel_count:2,count:3,encoding:'i16',values:'AAAAAA=='}),/不完整/);
 });
+
+test('a covering detail skips the hidden overview; partial details keep surrounding context',()=>{
+ const overview={ready:true,start_ms:0,step_ms:100,count:1000,channels:[new Int16Array(2000)]};
+ const detail={ready:true,start_ms:1000,step_ms:1,mode:'samples',channels:[new Float32Array(1000)]};
+ assert.deepEqual(waveform.renderSources(overview,detail,1000,1000),[detail]);
+ assert.deepEqual(waveform.renderSources(overview,detail,500,2000),[overview,detail]);
+ assert.deepEqual(waveform.renderSources(overview,null,0,1000),[overview]);
+ assert.deepEqual(waveform.renderSources(overview,overview,0,1000),[overview]);
+ const peaks={ready:true,start_ms:1000,step_ms:10,channels:[new Int16Array(200)]};
+ assert.deepEqual(waveform.renderSources(overview,peaks,1000,1000),[peaks]);
+ assert.deepEqual(waveform.renderSources(overview,peaks,1000,1500),[overview,peaks]);
+});
 test('sample view draws the native alternating waveform as a connected line',()=>{
  const c=context(),wave={ready:true,mode:'samples',step_ms:1,start_ms:100,channels:[new Float32Array([0,1,-1,0])]};
  waveform.draw(c,wave,100,4,1,400,100);

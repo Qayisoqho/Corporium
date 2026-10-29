@@ -20,8 +20,9 @@ class ClassTests(unittest.TestCase):
     def test_hierarchy_rename_delete_references_and_undo(self):
         root=self.create('名词');child=self.create('II类',parent_id=root['id'])
         code,x=self.call('/api/lexeme-save',dict(headword='test',body={'usages':[{'pos':'名词','subclass':'II类'}]}));self.assertEqual(code,200,x)
-        self.assertEqual(self.call('/api/class-delete',child)[0],400)
-        self.assertEqual(self.call('/api/class-delete',root)[0],400)
+        self.assertEqual(self.call('/api/class-delete',child)[0],200);self.undo();child=next(r for r in self.call('/api/classes')[1] if r['id']==child['id'])
+        self.assertEqual(self.call('/api/class-delete',root)[0],200);self.undo();root=next(r for r in self.call('/api/classes')[1] if r['id']==root['id'])
+        child=next(r for r in self.call('/api/classes')[1] if r['id']==child['id'])
         self.assertEqual(self.call('/api/class-save',{**child,'name':'III类'})[0],200)
         self.assertEqual(self.call('/api/lexeme?id='+x['id'])[1]['body']['usages'][0]['subclass'],'III类')
         self.assertEqual(self.call('/api/class-save',{**child,'name':'stale'})[0],400)
@@ -57,7 +58,7 @@ class ClassTests(unittest.TestCase):
         preset=next(c for c in self.call('/api/classes')[1] if c['name']=='派生形式')
         custom=self.create('强调形式','form')
         code,x=self.call('/api/lexeme-save',dict(headword='test',body={'variants':[{'form':'tests','kind':'强调形式'}]}));self.assertEqual(code,200,x)
-        self.assertEqual(self.call('/api/class-delete',custom)[0],400)
+        self.assertEqual(self.call('/api/class-delete',custom)[0],200);self.undo();custom=next(r for r in self.call('/api/classes')[1] if r['id']==custom['id'])
         self.assertEqual(self.call('/api/class-save',{**custom,'name':'加强形式'})[0],200)
         self.assertEqual(self.call('/api/lexeme?id='+x['id'])[1]['body']['variants'][0]['kind'],'加强形式')
         bundle=self.call('/api/export-language?language=ordos')[1]
@@ -76,7 +77,7 @@ class ClassTests(unittest.TestCase):
         server.init()
         with server.connect() as db:self.assertEqual(db.execute('SELECT body FROM lexemes WHERE id=?',(x['id'],)).fetchone()[0],raw)
         c=next(c for c in self.call('/api/classes?language=ordos')[1] if c['name']=='屈折形式')
-        self.assertEqual(self.call('/api/class-delete',c)[0],400)
+        self.assertEqual(self.call('/api/class-delete',c)[0],200);self.undo();c=next(r for r in self.call('/api/classes')[1] if r['id']==c['id'])
         self.assertEqual(self.call('/api/class-save',{**c,'name':'屈折变形'})[0],200)
         self.assertEqual(self.call('/api/lexeme?id='+x['id'])[1]['body']['variants'][0]['kind'],'屈折变形')
     def test_usage_tag_types_all_scopes_rename_undo_and_exchange(self):
@@ -84,7 +85,7 @@ class ClassTests(unittest.TestCase):
         tag={'type':'证据等级','value':'待验证','note':'调查笔记'}
         code,x=self.call('/api/lexeme-save',dict(headword='tag-demo',body={'tags':[tag],'variants':[{'form':'demo','tags':[tag]}],'usages':[{'pos':'名词','tags':[tag],'senses':[{'short_gloss':'例','tags':[tag]}]}]}))
         self.assertEqual(code,200,x)
-        self.assertEqual(self.call('/api/class-delete',category)[0],400)
+        self.assertEqual(self.call('/api/class-delete',category)[0],200);self.undo();category=next(r for r in self.call('/api/classes')[1] if r['id']==category['id'])
         self.assertEqual(self.call('/api/class-save',{**category,'name':'可靠程度'})[0],200)
         import categories
         body=self.call('/api/lexeme?id='+x['id'])[1]['body']

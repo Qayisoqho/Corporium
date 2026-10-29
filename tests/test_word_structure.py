@@ -39,7 +39,7 @@ class WordStructureTests(unittest.TestCase):
         self.assertEqual(word['body']['word_structure']['analyses'][0]['components'][1]['lexeme_id'],root['id'])
         code,r=self.call('/api/class-save',{**c,'name':'II类'});self.assertEqual(code,200,r)
         self.assertEqual(self.get(word)['body']['word_structure']['memberships'][0]['class_id'],c['id'])
-        self.assertEqual(self.call('/api/class-delete',{**c,'revision':c['revision']+1})[0],400)
+        self.assertEqual(self.call('/api/class-delete',{**c,'revision':c['revision']+1})[0],200);self.undo()
         before=self.get(word);body=copy.deepcopy(before['body']);body['word_structure']['memberships'][0]['notes']='修改'
         self.save('word',body,before);self.undo()
         self.assertEqual(self.get(word)['body']['word_structure']['memberships'][0]['notes'],'例外说明')

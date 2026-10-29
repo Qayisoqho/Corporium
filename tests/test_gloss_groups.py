@@ -14,7 +14,7 @@ class GlossGroupTests(unittest.TestCase):
     undo=test_lexicon.LexiconTests.undo
 
     def test_dot_equivalents_and_bracketed_candidates(self):
-        for separator in ['.', ';', ':', '_', '\\']:
+        for separator in ['.', ';', ':', '\\']:
             gloss='son'+separator+'NOM'+separator+'SG'
             self.assertEqual(list(grammar.tokens(gloss,'ordos',{},candidates=True)),['NOM','SG'])
             e=corpus.analyze(dict(ipa='',translation='',words=[dict(form='puer',gloss=gloss)]))
@@ -22,8 +22,8 @@ class GlossGroupTests(unittest.TestCase):
             self.assertEqual(e['warnings'],[])
         self.assertEqual(list(grammar.tokens('son[nom.sg]','ordos',{},candidates=True)),['nom','sg'])
         self.assertEqual(list(grammar.tokens('son#sub[nom.sg]','ordos',{},candidates=True)),[])
-        self.assertEqual(list(grammar.tokens('son[nom;sg_acc\\pl]','ordos',{},candidates=True)),['nom','sg','acc','pl'])
-        for symbol in ['NOM_SG','NOM\\SG','NOM;SG','NOM:SG']:
+        self.assertEqual(list(grammar.tokens('son[nom;sg_acc\\pl]','ordos',{},candidates=True)),['nom','pl'])
+        for symbol in ['NOM\\SG','NOM;SG','NOM:SG']:
             self.assertEqual(self.call('/api/grammar-save',dict(symbol=symbol))[0],400)
 
     def test_groups_do_not_create_morphemes_and_tags_find_sentence(self):

@@ -13,6 +13,25 @@ class DesktopResumeTests(unittest.TestCase):
     setUp=test_desktop.DesktopTests.setUp
     tearDown=test_desktop.DesktopTests.tearDown
 
+    def test_startup_language_is_available_without_project_and_survives_creation(self):
+        bridge=desktop.Bridge(self.projects);bridge._origin='http://127.0.0.1:12345'
+        bridge._window=type('Window',(),{'get_current_url':lambda _:bridge._origin+'/'})()
+        old_db=server.DB
+        for locale in ('en','zh-CN'):
+            self.assertNotIn('error',bridge.set_ui_language(locale))
+            handler=object.__new__(desktop.make_handler(self.projects,'secret'))
+            handler.path='/';handler.headers={'Cookie':'corporium=secret'};out=[]
+            handler.send=lambda data,code=200,mime=None:out.append(data)
+            handler.do_GET();html=out[0]
+            self.assertIn('data-theme="docoid"',html);self.assertIn('data-ui-language="'+locale+'"',html)
+            self.assertIn('/workbench.css',html);self.assertIn('/i18n-settings.js',html)
+            self.assertLess(html.index('id="startup-language"'),html.index('<main '))
+            self.assertEqual(desktop.Projects(self.root/'settings').status()['ui_language'],locale)
+            self.assertIsNone(self.projects.current);self.assertEqual(server.DB,old_db)
+        bridge.set_ui_language('en');self.projects.create(self.root/'new project')
+        resumed=desktop.Projects(self.root/'settings');self.assertTrue(resumed.restore_last())
+        self.assertEqual(resumed.status()['ui_language'],'en')
+
     def test_last_successful_project_reopens_with_home_resources(self):
         path=self.root/'上次项目'
         self.projects.create(path)

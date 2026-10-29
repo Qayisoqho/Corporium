@@ -56,6 +56,10 @@ def search(db, q, lid):
     else:
         matches = []
         matcher=corpus.QueryMatcher(q.get('q',''),q.get('field','all'),q.get('exact')=='true',q.get('case')=='true',q.get('mode'))
+        import annotations
+        # The outer text scope still owns the result set. A sentence inside that
+        # text may use another language's layers and dictionary spellings.
+        custom=annotations.SearchFields(db,'all' if q.get('field','all') in ('all','layers','writings') else lid,q)
         # These fields cannot depend on an inherited dictionary gloss. Resolve
         # meanings only for the visible results, rather than for the whole scan.
         raw_only=q.get('field') in ('form','ipa','translation','notes') and q.get('warnings')!='true'
@@ -65,6 +69,9 @@ def search(db, q, lid):
             entry = json.loads(row['body']) if raw_only else gloss_inheritance.load(db,row['kind'],row['id'],row['body'],metadata=False,lightweight=q.get('warnings')!='true')
             entry['text_notes'] = json.loads(row['text_metadata']).get('notes', '')
             hits, ok = matcher(entry)
+            extra=custom.values(row['kind'],row['id'],entry,entry.get('language_id') or row['text_language_id'])
+            hits=sorted(set(hits)|{v['word'] for v in extra if v.get('word') is not None})
+            ok=ok or bool(extra)
             if not ok:
                 continue
             if q.get('warnings') == 'true':

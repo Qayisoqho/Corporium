@@ -72,7 +72,7 @@ def mutate(db,action,b,lid,*,lookup=None,publish_result=True):
     aliases=[a.strip() for a in aliases if a.strip()];names=[symbol,*aliases]
     def valid_symbol(n):
         base=re.sub(r'#(?:sub|super|sup)\[[A-Za-z0-9]+\]','',n)
-        return bool(base) and not re.search(r'[\s.\-=:+~/;_\\,!?，。；：！？\[\](){}<>#]',base)
+        return bool(base) and not re.search(r'[\s.\-=:+~/;\\,!?，。；：！？\[\](){}<>#]',base)
     if any(not valid_symbol(n) for n in names):raise ValueError('单个标签不能包含分隔符；上下标可写为 #sub[POT] 或 #super[2]')
     if len({n.casefold() for n in names})!=len(names):raise ValueError('标签和别名不能重复（不区分大小写）')
     lookup=index([r for r in listing(db,lid) if r['id']!=b.get('id')]) if lookup is None else lookup
@@ -159,22 +159,28 @@ def import_bundle(db,bundle,mapping):
 def tokens(gloss,lid,lookup,lower=False,*,candidates=False):
     # Formal recognition and discovery share parsing, not authority. Neither a
     # Latin spelling nor grammatical brackets register a tag implicitly.
-    decorated=r'[A-Za-z0-9]+(?:#(?:sub|super|sup)\[[^\[\]]*\])+'
-    if re.search(decorated,gloss):
-        for part in re.split('('+decorated+')',gloss):
-            if re.fullmatch(decorated,part):
-                if recognized(part,lid,lookup) or candidates and (lower or grammar_reference.candidate(part)):yield part
-            elif part:yield from tokens(part,lid,lookup,lower,candidates=candidates)
-        return
-    raw=plain(gloss);chunks=[];cursor=0
+    # Protect script runs before looking for grammatical brackets. An underscore
+    # connects the entire atom, including text on either side of a script run.
+    script=r'#(?:sub|super|sup)\[([^\[\]]*)\]';saved=[];marker='\ue000'
+    while marker in gloss:marker+='\ue000'
+    def hide(match):
+        saved.append(match[0]);return marker+str(len(saved)-1)+marker
+    raw=plain(re.sub(script,hide,gloss));chunks=[];cursor=0
     try:groups,_=segmentation.angles(raw,True)
     except ValueError:groups=[]
     for start,end,content in groups:
         chunks.append((raw[cursor:start],False));chunks.append((content,True));cursor=end
     chunks.append((raw[cursor:],False))
     for chunk, bracketed in [(part,forced or square) for value,forced in chunks for part,square in gloss_chunks(value)]:
-        for token in re.split(r'[\s.\-=:+~/;_\\,!?，。；：！？(){}<>]+',chunk):
+        for token in re.split(r'[\s.\-=:+~/;\\,!?，。；：！？(){}<>]+',chunk):
             token=token.strip('«»“”"')
+            token=re.sub(re.escape(marker)+r'(\d+)'+re.escape(marker),lambda m:saved[int(m[1])],token)
+            if re.search(script,token):
+                base=re.sub(script,'',token)
+                if not base:
+                    yield from tokens(re.sub(script,r'\1',token),lid,lookup,lower,candidates=candidates)
+                elif recognized(token,lid,lookup,bracketed) or candidates and lower and re.fullmatch(r'[A-Za-z0-9_]+',base):yield token
+                continue
             if not token or '#' in token:continue
             if recognized(token,lid,lookup,bracketed):yield token;continue
             person=re.fullmatch(r'([123])([A-Za-z]+)',token)

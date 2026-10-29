@@ -146,8 +146,8 @@ let waveDrawFrame=0;
 function scheduleWaveDraw(){if(!waveDrawFrame)waveDrawFrame=requestAnimationFrame(()=>{waveDrawFrame=0;drawWave();});}
 function drawWave(){const c=$('tl-wave'),ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);const cached=waveCache.get(assetId+':'+from+':'+(from+span)+':'+Math.min(8192,c.width||1200)),detail=cached||wave;
  ctx.strokeStyle=getComputedStyle(panel).getPropertyValue('--tl-accent').trim()||'#294c6b';ctx.fillStyle=ctx.strokeStyle;
- for(const source of [waveOverview,detail]){if(!source?.ready||!source.channels?.length)continue;
-  if(source===detail){const count=source.count??source.channels[0].length,left=Math.max(0,(source.start_ms-from)/span*c.width),right=Math.min(c.width,(source.start_ms+count*source.step_ms-from)/span*c.width);if(right>left)ctx.clearRect(left,0,right-left,c.height);}
+ for(const source of CorporiumWaveform.renderSources(waveOverview,detail,from,span)){
+  if(source===detail){const channel=source.channels[0],count=source.count??(source.mode==='samples'||!ArrayBuffer.isView(channel)?channel.length:channel.length/2),left=Math.max(0,(source.start_ms-from)/span*c.width),right=Math.min(c.width,(source.start_ms+count*source.step_ms-from)/span*c.width);if(right>left)ctx.clearRect(left,0,right-left,c.height);}
   CorporiumWaveform.draw(ctx,source,from,span,waveGain,c.width,c.height);
  }
  const cursor=$('tl-wave-head');if(cursor)cursor.style.left=head===from+span?'calc(100% - 1px)':(head-from)/span*100+'%';
@@ -164,7 +164,11 @@ function fitBlockTexts(blocks){
  for(const block of blocks){const text=block.querySelector('span'),height=block.clientHeight;if(!text||!height)continue;const line=parseFloat(getComputedStyle(text).lineHeight);if(!line)continue;const lines=String(Math.max(1,Math.floor((height-4)/line)));if(text.style.getPropertyValue('--tl-text-lines')!==lines)updates.push([text,lines]);}
  for(const [text,lines] of updates)text.style.setProperty('--tl-text-lines',lines);
 }
-const blockTextObserver=new ResizeObserver(entries=>fitBlockTexts(entries.map(e=>e.target)));
+const blockHeights=new WeakMap();
+function fitResizedBlockTexts(entries){const changed=[];for(const entry of entries){const height=entry.borderBoxSize?.[0]?.blockSize??entry.target.clientHeight;if(blockHeights.get(entry.target)===height)continue;blockHeights.set(entry.target,height);changed.push(entry.target);}if(changed.length)fitBlockTexts(changed);}
+// Horizontal zoom changes width, but the line clamp depends only on height.
+// Typography changes still run the explicit complete batch below.
+const blockTextObserver=new ResizeObserver(fitResizedBlockTexts);
 let blockTextFrame=0;
 function scheduleBlockTextFit(){if(!blockTextFrame)blockTextFrame=requestAnimationFrame(()=>{blockTextFrame=0;fitBlockTexts(panel.querySelectorAll('.tl-block'));});}
 new MutationObserver(scheduleBlockTextFit).observe(document.documentElement,{attributes:true,attributeFilter:['style','class']});
@@ -185,6 +189,27 @@ function renderTracks(){
  $('tl-tracks').querySelectorAll('[data-tree-toggle]').forEach(b=>b.onclick=()=>{const key=b.dataset.treeToggle;collapsedTracks.has(key)?collapsedTracks.delete(key):collapsedTracks.add(key);renderTracks();});paintSelection();
 }
 
+// Viewport changes preserve track controls, focused blocks and their observers.
+// Only entering/leaving blocks need DOM creation/removal; retained blocks move.
+function renderViewport(){
+ if(!data)return;
+ if(!data.complete){renderTracks();return;}
+ syncPan();$('tl-ruler').innerHTML=Array.from({length:5},(_,i)=>`<span style="left:${i*25}%">${waveTime(from+i*span/4)}</span>`).join('');
+ const visible=new Map(),textStyles=new Map();
+ for(const i of data.intervals){if(i.end_ms<from||i.start_ms>from+span)continue;if(!visible.has(i.track_id))visible.set(i.track_id,[]);visible.get(i.track_id).push(i);}
+ for(const lane of $('tl-tracks').querySelectorAll('.tl-lane')){
+  const existing=new Map([...lane.querySelectorAll('.tl-block')].map(el=>[el.dataset.interval,el]));
+  const rows=visible.get(lane.dataset.track)||[],ids=new Set(rows.map(i=>i.id));
+  for(const [id,el] of existing)if(!ids.has(id)){blockTextObserver.unobserve(el);el.remove();existing.delete(id);}
+  for(const i of rows){
+   let el=existing.get(i.id);
+   if(el){existing.delete(i.id);el.style.left=(Math.max(from,i.start_ms)-from)/span*100+'%';el.style.width=Math.max(0,(Math.min(from+span,i.end_ms)-Math.max(from,i.start_ms))/span*100)+'%';}
+   else{if(i.entry_id&&!textStyles.has(i.language_id))textStyles.set(i.language_id,ipaStyle(i.language_id));lane.insertAdjacentHTML('beforeend',block(i,textStyles.get(i.language_id)));el=lane.lastElementChild;const next=existing.values().next().value;if(next)lane.insertBefore(el,next);blockTextObserver.observe(el);}
+  }
+ }
+ panel.querySelectorAll('.tl-playhead').forEach(e=>e.style.left=head===from+span?'calc(100% - 1px)':(head-from)/span*100+'%');paintSelection();
+}
+
 function block(i,textStyle){const left=(Math.max(from,i.start_ms)-from)/span*100,width=(Math.min(from+span,i.end_ms)-Math.max(from,i.start_ms))/span*100;return (globalThis.CorporiumI18n?.f("ee0d5330a3b8c6",()=>[esc(i.text),time(i.start_ms),time(i.end_ms),i.id===selectedInterval?'selected ':'',i.status==='review'?'review ':'',data.media&&(i.start_ms<0||i.end_ms>data.media.metadata.duration_ms)?'outside':'',esc(i.id),left,Math.max(0,width),esc(i.text),time(i.start_ms),time(i.end_ms),i.missing_entry?(globalThis.CorporiumI18n?.f("9b982f9e7a0e5d",()=>[])??' · 原句已删除'):'',i.entry_id?'tl-ipa':'',i.entry_id?(textStyle??ipaStyle(i.language_id)):'',i.status==='review'?'? ':'',esc(i.text)])??`<div tabindex="0" role="button" aria-label="${esc(i.text)} ${time(i.start_ms)} 到 ${time(i.end_ms)}" class="tl-block ${i.id===selectedInterval?'selected ':''}${i.status==='review'?'review ':''}${data.media&&(i.start_ms<0||i.end_ms>data.media.metadata.duration_ms)?'outside':''}" data-interval="${esc(i.id)}" style="left:${left}%;width:${Math.max(0,width)}%" title="${esc(i.text)} · ${time(i.start_ms)}—${time(i.end_ms)}${i.missing_entry?' · 原句已删除':''}"><i class="tl-edge left" data-edge="left"></i><span class="${i.entry_id?'tl-ipa':''}" style="${i.entry_id?(textStyle??ipaStyle(i.language_id)):''}">${i.status==='review'?'? ':''}${esc(i.text)}</span><i class="tl-edge right" data-edge="right"></i></div>`);}
 async function save(action,b,automatic=false){if(!automatic)await noDraft();const id=sid;const result=await call(action,{id,revision:data.session.revision,...b});if(result.renumbered)$('tl-editor').dataset.intervalKey='';await refreshUndo();document.dispatchEvent(new Event('corporium-alignment-changed'));if(id===sid){await load();await listNames();}}
 async function listNames(){const rows=await call('list');$('tl-session-name').textContent=rows.find(r=>r.id===sid)?.name||(globalThis.CorporiumI18n?.f("077b7e3ef09df9",()=>[])??'尚无时间轴');}
@@ -192,9 +217,9 @@ function seek(ms){boundedPlayer.stop();head=Math.round(ms);if(data.media&&head>=
 let playFrame=0,followTimer=null,followLoading=false;
 function animatePlayback(){if(media.paused||workspace!=='timeline')return;head=Math.round(media.currentTime*1000);updateHead();playFrame=requestAnimationFrame(animatePlayback);}
 function followPlayback(){
- if(media.paused||!data||workspace!=='timeline'||gesture||rangeGesture)return;
+ if(media.paused||!data||workspace!=='timeline'||gesture||rangeGesture||viewportBusy)return;
  const next=TimelineGeometry.follow(from,span,head,data.extent);if(next===from)return;
- from=next;request++;renderTracks();drawWave();remember();
+ from=next;request++;renderViewport();drawWave();remember();
  if(data.complete){void loadWave();return;}if(!followTimer&&!followLoading)followTimer=setTimeout(refreshPlaybackWindow,120);
 }
 async function refreshPlaybackWindow(){
@@ -285,7 +310,7 @@ $('tl-create-child').onclick=safeTL(async()=>{await noDraft();if(!timeSelection)
 $('tl-child-confirm').onclick=safeTL(()=>{showDraft($('tl-child-track').value,...timeSelection);selectedInterval=null;pendingEntry=null;dirtyInterval=true;$('timeline-child-dialog').close();});
 document.addEventListener('corporium-people-changed',safeTL(async()=>{if(data){Object.assign(data,await call('catalog'));renderTracks();}}));
 $('tl-play').onclick=safeTL(async()=>{if(!media.paused){boundedPlayer.stop();return;}await playTimeSelection();});$('tl-play-region').onclick=safeTL(async()=>{const i=currentInterval();if(!i)throw Error((globalThis.CorporiumI18n?.f("51146b7a7fbc37",()=>[])??'请先选中区间'));setSelection(i.start_ms,i.end_ms);await playTimeSelection(true);});$('tl-loop').onclick=()=>{loop=!loop;transportIcon('tl-loop','loop',(globalThis.CorporiumI18n?.f("1a11a7d406c8c4",()=>[])??'循环选中'),loop);};$('tl-speed').onchange=()=>{media.playbackRate=Number($('tl-speed').value);media.preservesPitch=true;};$('tl-volume').oninput=()=>{media.volume=Number($('tl-volume').value);$('tl-volume-label').textContent=Math.round(media.volume*100)+'%';try{localStorage.setItem('corporium-media-volume',media.volume);}catch{}};$('tl-mute').onclick=()=>media.muted=!media.muted;media.addEventListener('volumechange',()=>transportIcon('tl-mute',media.muted?'mute':'sound',(globalThis.CorporiumI18n?.f("3b85cea4b7e020",()=>[])??'静音'),media.muted));
-async function windowChange(){span=Number($('tl-span').value);await load();}
+async function windowChange(){[from,span]=TimelineGeometry.viewport(from,Number($('tl-span').value),data.extent);schedulePan(false);}
 $('tl-span').onchange=safeTL(windowChange);$('tl-window-back').onclick=safeTL(async()=>{setSelection(0,0);seek(Math.max(0,head-2000));if(head<from||head>from+span)from=head;await load();});$('tl-window-next').onclick=safeTL(async()=>{setSelection(0,0);seek(Math.min(data.media?.metadata.duration_ms??data.extent[1],head+2000));if(head<from||head>from+span)from=head;await load();});$('tl-follow').onclick=safeTL(async()=>{from=Math.floor(head/span)*span;await load();});
 const oldWorkspace=setWorkspace;setWorkspace=async function(name){if(workspace==='timeline'&&name!=='timeline'){await noDraft();if(draftInterval)clearSentence();remember();media.pause();}await oldWorkspace(name);panel.hidden=name!=='timeline';tab.setAttribute('aria-pressed',String(name==='timeline'));if(name==='timeline'){if(!window.CorporiumViews?.current('timeline'))await reloadView();else{drawWave();paintSelection();}}};tab.onclick=safeTL(()=>setWorkspace('timeline'));
 async function reloadView(){missingNotified.clear();await textOptions($('tl-text').value);await list();if(pendingEntry&&!selectedInterval&&!draftInterval&&!timelineHasSentenceDraft())await renderPendingEditor(pendingEntry);}
@@ -300,8 +325,10 @@ const oldUndo=undoCommand;undoCommand=async function(kind){if(workspace==='timel
 document.addEventListener('keydown',safeTL(async e=>{if(workspace!=='timeline'||e.target.closest('input,textarea,select,[contenteditable]')||document.querySelector('dialog[open]'))return;if(e.code==='Space'){e.preventDefault();if(!e.repeat)$('tl-play').click();}if(e.key==='i'&&$('tl-set-in'))$('tl-set-in').click();if(e.key==='o'&&$('tl-set-out'))$('tl-set-out').click();}));
 window.addEventListener('beforeunload',e=>{if(dirtyInterval&&!draftInterval){e.preventDefault();e.returnValue='';}});
 function syncPan(){if(!data)return;const a=Math.min(data.extent[0],from),z=Math.max(data.extent[1],from+span);$('tl-pan').min=a;$('tl-pan').max=Math.max(a,z-span);$('tl-pan').value=from;$('tl-pan').disabled=z-a<=span;$('tl-pan-label').textContent=waveTime(from)+'—'+waveTime(from+span);$('tl-zoom-out').disabled=span>=Math.max(1,data.extent[1]-data.extent[0]||60000);$('tl-zoom-in').disabled=span<=1;}
-let panFrame=0;
-function schedulePan(){request++;if(!panFrame)panFrame=requestAnimationFrame(()=>{panFrame=0;renderTracks();drawWave();remember();void loadWave();});}
+let panFrame=0,viewportBusy=false,waveOnFrame=false;
+// Keep input cheap, paint only the latest viewport, and let playback retain its
+// own frame loop. Already complete interval data needs no background task reload.
+function schedulePan(fetchWave=true){request++;viewportBusy=true;waveOnFrame||=fetchWave;clearTimeout(wheelTimer);wheelTimer=setTimeout(()=>{viewportBusy=false;void loadWave();},130);if(!panFrame)panFrame=requestAnimationFrame(()=>{panFrame=0;syncSpan();renderViewport();drawWave();remember();if(waveOnFrame){waveOnFrame=false;void loadWave();}});}
 $('tl-pan').oninput=safeTL(()=>{from=Number($('tl-pan').value);schedulePan();});
 function setSelection(a,z){boundedPlayer.stop();timeSelection=z>a?[Math.round(a),Math.round(z)]:null;paintSelection();}
 function paintSelection(){const label=$('tl-selection-label');label.textContent=timeSelection?(globalThis.CorporiumI18n?.f("872ed6acfc4755",()=>[time(timeSelection[0]),time(timeSelection[1]),sec(timeSelection[1]-timeSelection[0])])??'选中 '+time(timeSelection[0])+'—'+time(timeSelection[1])+' · '+sec(timeSelection[1]-timeSelection[0])+' 秒'):'';
@@ -331,7 +358,7 @@ new ResizeObserver(applyLayout).observe(panel.querySelector('.tl-layout'));
 function syncSpan(){let opt=$('tl-custom-span');if(![10000,30000,60000,300000,1800000].includes(span)){if(!opt){opt=new Option('','');opt.id='tl-custom-span';$('tl-span').append(opt);}opt.value=span;opt.textContent=span<1000?(globalThis.CorporiumI18n?.f("6a2a03853fae3f",()=>[span])??span+' 毫秒'):(globalThis.CorporiumI18n?.f("2bbca1ce768e41",()=>[(span/1000).toFixed(span<10000?2:1)])??(span/1000).toFixed(span<10000?2:1)+' 秒');}$('tl-span').value=span;}
 panel.querySelector('.tl-scroll-axes').addEventListener('wheel',e=>{const axes=e.currentTarget;if(e.ctrlKey||(e.shiftKey&&e.target.closest('.tl-wave,.tl-lane'))||axes.scrollHeight<=axes.clientHeight+1)return;e.preventDefault();axes.scrollTop+=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?axes.clientHeight:1);},{passive:false});
 let wheelTimer;
-for(const [id,delta] of [['tl-zoom-out',100],['tl-zoom-in',-100]])$(id).onclick=safeTL(()=>{[from,span]=TimelineGeometry.zoom(from,span,.5,delta,data.extent);request++;syncSpan();renderTracks();drawWave();clearTimeout(wheelTimer);wheelTimer=setTimeout(safeTL(load),130);});
+for(const [id,delta] of [['tl-zoom-out',100],['tl-zoom-in',-100]])$(id).onclick=safeTL(()=>{[from,span]=TimelineGeometry.zoom(from,span,.5,delta,data.extent);schedulePan(false);});
 panel.addEventListener('wheel',e=>{
  if((!e.ctrlKey&&!e.shiftKey)||!data)return;const axis=e.target.closest('.tl-wave,.tl-lane');if(!axis)return;
  e.preventDefault();const area=axis.getBoundingClientRect();if(area.width<=0)return;
@@ -342,7 +369,7 @@ panel.addEventListener('wheel',e=>{
   if(next!==from){from=next;clearTimeout(wheelTimer);schedulePan();}return;
  }
  const ratio=Math.max(0,Math.min(1,(e.clientX-area.left)/area.width)),delta=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?100:1);
- [from,span]=TimelineGeometry.zoom(from,span,ratio,delta,data.extent);request++;syncSpan();renderTracks();drawWave();clearTimeout(wheelTimer);wheelTimer=setTimeout(safeTL(load),130);
+ [from,span]=TimelineGeometry.zoom(from,span,ratio,delta,data.extent);schedulePan(false);
 },{passive:false});
 let resizing=null;
 panel.addEventListener('pointerdown',e=>{const handle=e.target.closest('[data-tl-resize]');if(!handle||e.button!==0)return;e.preventDefault();const kind=handle.dataset.tlResize,track=handle.dataset.resizeTrack;resizing={handle,kind,track,x:e.clientX,y:e.clientY,start:kind==='sidebar'?videoPanel.getBoundingClientRect().width:kind==='lower'?lower.clientHeight:kind==='upper'?panel.querySelector('.tl-layout').clientHeight:kind==='wave'?$('tl-wave').clientHeight:trackHeight(track)};handle.setPointerCapture(e.pointerId);});
@@ -417,5 +444,4 @@ $('tl-manage').onclick=safeTL(showManager);
 $('tl-create-form').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await noDraft();const r=await call('create',{name:$('tl-create-name').value});sid=r.id;selectedInterval=pendingEntry=null;assetId=null;head=from=0;$('tl-create-name').value='';await refreshUndo();document.dispatchEvent(new Event('corporium-alignment-changed'));await list();$('timeline-manager').close();}catch(error){$('tl-manager-error').textContent=error.message;}finally{b.disabled=false;}};
 applyLayout();
 
-new MutationObserver(drawWave).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 })();

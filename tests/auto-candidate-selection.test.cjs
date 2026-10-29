@@ -23,3 +23,18 @@ test('unique morpheme defaults include undisplayed rows but competing choices re
  assert.ok(!s.selected.has('a'));assert.ok(!s.selected.has('b'));assert.ok(!s.selected.has('word'));assert.equal(s.state().ambiguous,1);
  s.toggle('m-74',false);assert.equal(s.selected.size,74);s.toggle('b',true);assert.ok(s.selected.has('b'));s.toggleAll(false);assert.equal(s.selected.size,0);
 });
+test('competing candidates explain why the unambiguous bulk action excludes them',()=>{
+ const s=context.createAutoCandidateSelection([row('a','same'),row('b','same'),row('safe')]);s.toggleAll(true);
+ assert.deepEqual([...s.selected],['safe']);assert.match(context.autoCandidateNotice(s,'a'),/候选 1 \/ 2.*请选一项/);assert.match(context.autoCandidateNotice(s,'b'),/候选 2 \/ 2/);
+ s.toggle('a',true);s.toggle('b',true);assert.deepEqual([...s.selected],['safe','b']);assert.equal(s.state().ambiguous,0);
+});
+test('shared segments are distinguished from alternative targets at one occurrence',()=>{
+ const s=context.createAutoCandidateSelection([{...row('group'),conflicts:['part']},{...row('part'),conflicts:['group']},row('safe')]);s.toggleAll(true);
+ assert.deepEqual([...s.selected],['safe']);assert.match(context.autoCandidateNotice(s,'group'),/共用语素片段/);assert.doesNotMatch(context.autoCandidateNotice(s,'group'),/候选 1 \/ 2/);
+ s.toggle('group',true);s.toggle('part',true);assert.ok(!s.selected.has('group'));assert.ok(s.selected.has('part'));
+});
+test('choice notices support English and stay absent on non-conflicting or stale candidates',()=>{
+ const s=context.createAutoCandidateSelection([row('a','same'),row('b','same'),row('safe')]);context.CorporiumI18n={ui:(_zh,en)=>en};
+ assert.match(context.autoCandidateNotice(s,'a'),/Same occurrence.*option 1 \/ 2.*choose one/);
+ assert.equal(context.autoCandidateNotice(s,'safe'),'');assert.equal(context.autoCandidateNotice(s,'missing'),'');delete context.CorporiumI18n;
+});

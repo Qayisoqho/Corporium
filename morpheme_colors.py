@@ -101,6 +101,26 @@ def attach(db,body,kind,rid,lid,prepared=None):
             w['morph_colors'].append(dict(key=unit['key'],tone=tone(unit,link),linked=link is not None,form=ranges(unit.get('fragments',[]),fm),gloss=ranges(unit.get('gloss_fragments',[]),gm)))
         w['dictionary_linked']=w['dictionary_linked'] or bool(w['morph_colors']) and all(c['linked'] for c in w['morph_colors'])
     attach_reduplication(body)
+    for w in words:
+        if w['dictionary_linked'] or not w.get('redup_colors'):continue
+        sources=[span for c in w['redup_colors'] for span in c['form']]
+        required=[c for c in w['morph_colors'] if not covered(c['form'],sources)]
+        # A confirmed reduplicant needs no separate dictionary entry. Require
+        # an actual linked remainder: source overlays alone create no links.
+        w['dictionary_linked']=bool(required) and all(c['linked'] for c in required)
+
+
+def covered(fragments,sources):
+    """Every part must lie inside confirmed source ranges, including infixes."""
+    if not fragments:return False
+    for start,end in fragments:
+        at=start
+        for left,right in sorted(sources):
+            if left>at:break
+            if right>at:at=right
+            if at>=end:break
+        if at<end:return False
+    return True
 
 
 def attach_reduplication(body):

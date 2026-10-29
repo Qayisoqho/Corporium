@@ -1,1 +1,27 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>Corporium</title><style>body{background:#f7f4e9;color:#253c56;font:16px/1.7 'Segoe UI','Microsoft YaHei',sans-serif;margin:70px auto;max-width:850px;padding:24px}h1{font:52px Georgia,serif}button{font:inherit;padding:10px 16px;border:1px solid #d5d1c6;background:#fffdf7;color:inherit;border-radius:7px;cursor:pointer;margin:5px}#desktop-recent button{display:block;max-width:100%;text-align:left;overflow-wrap:anywhere}#desktop-error{color:#a14535;white-space:pre-wrap}small{color:#68727b}</style></head><body><h1>Corporium</h1><p>打开一个项目，或选择空文件夹建立新项目。</p><p><button data-project-action="new">新建项目</button><button data-project-action="open">打开项目</button><button data-project-action="restore">从完整备份恢复到新项目</button></p><p><small>现有网页版资料：选择包含 data 和 font 的语料库文件夹。项目可以包含多种语言。首次打开会先备份数据库。</small></p><h2>最近项目</h2><div id="desktop-recent"></div><p id="desktop-error" role="alert"></p><p><a href="/licenses">关于与许可</a></p></body></html>
+<!doctype html>
+<html lang="zh-CN" data-theme="docoid"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Corporium</title>
+<script>try{const t=localStorage.getItem('ordos-theme');if(['docoid','dawoid','ivory','night','forest'].includes(t))document.documentElement.dataset.theme=t}catch{}</script>
+<link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/workbench.css">
+<style>
+body{background:var(--paper);color:var(--ink);font:16px/1.7 'Segoe UI','Microsoft YaHei',sans-serif}
+.startup-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px 28px;padding:14px max(24px,calc((100vw - 850px)/2));background:var(--green);color:var(--button-ink,#fff)}
+html .startup-header h1{font:30px Georgia,serif;margin:0;color:inherit}
+.startup-header .startup-interface-language{margin:0;font-size:14px;flex-wrap:wrap}
+.startup-header select{color:var(--ink);background:var(--paper);max-width:100%;padding:4px 8px}
+html .startup-content h2{font-family:inherit}
+body>main{margin:0 auto;max-width:898px;padding:40px 24px}
+.startup-actions{display:flex;flex-wrap:wrap;gap:10px}
+.startup-actions button{margin:0}
+#desktop-recent button{display:block;max-width:100%;text-align:left;overflow-wrap:anywhere;margin:8px 0}
+#desktop-error{color:var(--danger,#a32626);white-space:pre-wrap}
+a{color:var(--green)}
+@media(max-width:600px){.startup-header{padding:14px 20px}body>main{padding:24px 20px}}
+</style></head><body>
+<div class="startup-header"><h1>Corporium</h1><div id="startup-language"></div></div>
+<main class="startup-content">
+<p>打开一个项目，或选择空文件夹建立新项目。</p>
+<p class="startup-actions"><button class="primary" data-project-action="new">新建项目</button><button data-project-action="open">打开项目</button><button data-project-action="restore">从完整备份恢复到新项目</button></p>
+<p><small>现有网页版资料：选择包含 data 和 font 的语料库文件夹。项目可以包含多种语言。首次打开会先备份数据库。</small></p>
+<h2>最近项目</h2><div id="desktop-recent"></div><p id="desktop-error" role="alert"></p>
+<p><a href="/licenses">关于与许可</a></p>
+</main></body></html>

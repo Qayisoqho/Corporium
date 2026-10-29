@@ -57,7 +57,7 @@ class LegalNoticesTests(unittest.TestCase):
 
     def test_release_version_metadata_agrees(self):
         root=Path(__file__).resolve().parents[1]
-        self.assertEqual(desktop.VERSION,'0.9.01026.4')
+        self.assertEqual(desktop.VERSION,'0.9.01030')
         self.assertEqual(legal_notices.catalog()['about']['version'],desktop.VERSION)
         self.assertEqual(app_info.about()['developer'],'Erči S\u030ca.')
         self.assertEqual(app_info.about()['project_url'],'https://github.com/Qayisoqho/Corporium')
@@ -67,7 +67,7 @@ class LegalNoticesTests(unittest.TestCase):
         self.assertIn('Corporium-'+desktop.VERSION+'-Windows-x64-Setup',iss)
         version=(root/'packaging/version.txt').read_text(encoding='utf-8')
         self.assertIn("'ProductVersion','"+desktop.VERSION+"'",version)
-        self.assertIn('filevers=(0,9,1026,4)',version)
+        self.assertIn('filevers=(0,9,1030,0)',version)
         self.assertIn('AppId={{D06731DF-0CEC-448C-A02A-77BB3684C3F0}',iss)
 
 

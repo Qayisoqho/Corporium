@@ -7,6 +7,53 @@ from datetime import datetime, timezone
 import backup_policy
 
 
+def copy_entry(db,source,target_id,position,evidence=None):
+    """Fork sentence evidence without changing the source text or ordering."""
+    eid=str(uuid.uuid4())
+    db.execute('INSERT INTO entries(id,text_id,position,body,revision) VALUES(?,?,?,?,1)',(eid,target_id,position,source['body']))
+    import collaborators
+    collaborators.copy_sentence(db,source['id'],eid)
+    # Copy active and retired evidence alike, with fresh globally unique identities.
+    units=[dict(r) for r in db.execute('SELECT * FROM corpus_units WHERE entry_id=?',(source['id'],))]
+    mapping={u['id']:str(uuid.uuid4()) for u in units}
+    def remap(value):
+        if isinstance(value,list):return [remap(v) for v in value]
+        if isinstance(value,dict):return {k:mapping.get(v,v) if k in ('unit_id','parent_id','annotation_id') and isinstance(v,str) else remap(v) for k,v in value.items()}
+        return value
+    import reduplication
+    db.execute('UPDATE entries SET body=? WHERE id=?',(json.dumps(reduplication.fork(remap(json.loads(source['body']))),ensure_ascii=False),eid))
+    for u in long_tasks.steps(units):
+        db.execute('INSERT INTO corpus_units(id,entry_id,kind,parent_id,position,form,gloss,active,revision) VALUES(?,?,?,?,?,?,?,?,1)',(mapping[u['id']],eid,u['kind'],mapping.get(u['parent_id']),u['position'],u['form'],u['gloss'],u['active']))
+    # Bindings locate their owning word by its new identity. Establish all
+    # words first: source rows may enumerate a morpheme before its parent.
+    for u in long_tasks.steps(units):
+        segment=db.execute('SELECT body FROM unit_segments WHERE id=?',(u['id'],)).fetchone()
+        if segment:db.execute('INSERT INTO unit_segments VALUES(?,?)',(mapping[u['id']],json.dumps(remap(json.loads(segment['body'])),ensure_ascii=False)))
+        link=db.execute('SELECT * FROM lexical_links WHERE unit_id=?',(u['id'],)).fetchone()
+        if link:
+            link_id=str(uuid.uuid4())
+            db.execute('INSERT INTO lexical_links(id,unit_id,lexeme_id,usage_id,sense_id,notes,language_id,revision) VALUES(?,?,?,?,?,?,?,1)',(link_id,mapping[u['id']],link['lexeme_id'],link['usage_id'],link['sense_id'],link['notes'],link['language_id']))
+            import gloss_inheritance
+            prior=db.execute('SELECT unit_key FROM gloss_bindings WHERE id=?',(link['id'],)).fetchone()
+            if prior:gloss_inheritance.copy_binding(db,link['id'],link_id,'corpus',eid,mapping[u['parent_id'] or u['id']],prior['unit_key'])
+            import link_review
+            link_review.copy(db,link['id'],link_id)
+            component=db.execute('SELECT body FROM component_links WHERE id=?',(link['id'],)).fetchone()
+            if component:db.execute('INSERT INTO component_links VALUES(?,?)',(link_id,component[0]))
+            analysis=db.execute('SELECT * FROM morphology_analyses WHERE id=?',(link['id'],)).fetchone()
+            if analysis:db.execute('INSERT INTO morphology_analyses VALUES(?,?,?)',(link_id,analysis['form_id'],analysis['features']))
+    for cell in long_tasks.steps(list(db.execute("SELECT * FROM annotation_cells WHERE owner_kind='corpus' AND record_id=?",(source['id'],)))):
+        uid=cell['unit_id']
+        if uid!='@sentence':uid=mapping.setdefault(uid,str(uuid.uuid4()))
+        db.execute('INSERT INTO annotation_cells VALUES(?,?,?,?,?,?,1)',(str(uuid.uuid4()),'corpus',eid,uid,cell['layer_id'],cell['value']))
+    import code_switching
+    for span in code_switching.rows(db,'corpus',source['id']):
+        for unit_id in json.loads(span['word_ids']):mapping.setdefault(unit_id,str(uuid.uuid4()))
+    spans=code_switching.copy_spans(db,'corpus',source['id'],'corpus',eid,mapping)
+    if evidence is not None:evidence.update(spans)
+    return eid
+
+
 def organize(db, action, body, backup_dir):
     if not db.in_transaction: db.execute('BEGIN IMMEDIATE')
     def text(tid):
@@ -59,6 +106,10 @@ def organize(db, action, body, backup_dir):
             db.execute('DELETE FROM text_info WHERE text_id=?',(body['id'],))
         return {'ok':True,'backup':saved}
 
+    if action=='copy-text':
+        import text_copy
+        return text_copy.copy(db,body)
+
     if action=='duplicate-entry':
         source=db.execute('SELECT * FROM entries WHERE id=?',(body.get('id'),)).fetchone()
         if not source or source['text_id']!=body.get('text_id') or source['revision']!=body.get('revision'):
@@ -73,47 +124,7 @@ def organize(db, action, body, backup_dir):
             if anchor is None:raise ValueError('目标句子已不存在，请重新选择')
             at=anchor+int(where=='after')
         else:raise ValueError('请选择插入位置')
-        eid=str(uuid.uuid4())
-        db.execute('INSERT INTO entries(id,text_id,position,body,revision) VALUES(?,?,?,?,1)',(eid,source['text_id'],at+1,source['body']))
-        import collaborators
-        collaborators.copy_sentence(db,source['id'],eid)
-        # Copy active and retired evidence alike, with fresh globally unique identities.
-        units=[dict(r) for r in db.execute('SELECT * FROM corpus_units WHERE entry_id=?',(source['id'],))]
-        mapping={u['id']:str(uuid.uuid4()) for u in units}
-        def remap(value):
-            if isinstance(value,list):return [remap(v) for v in value]
-            if isinstance(value,dict):return {k:mapping.get(v,v) if k in ('unit_id','parent_id','annotation_id') and isinstance(v,str) else remap(v) for k,v in value.items()}
-            return value
-        import reduplication
-        db.execute('UPDATE entries SET body=? WHERE id=?',(json.dumps(reduplication.fork(remap(json.loads(source['body']))),ensure_ascii=False),eid))
-        for u in long_tasks.steps(units):
-            db.execute('INSERT INTO corpus_units(id,entry_id,kind,parent_id,position,form,gloss,active,revision) VALUES(?,?,?,?,?,?,?,?,1)',(mapping[u['id']],eid,u['kind'],mapping.get(u['parent_id']),u['position'],u['form'],u['gloss'],u['active']))
-        # Bindings locate their owning word by its new identity. Establish all
-        # words first: source rows may enumerate a morpheme before its parent.
-        for u in long_tasks.steps(units):
-            segment=db.execute('SELECT body FROM unit_segments WHERE id=?',(u['id'],)).fetchone()
-            if segment:db.execute('INSERT INTO unit_segments VALUES(?,?)',(mapping[u['id']],json.dumps(remap(json.loads(segment['body'])),ensure_ascii=False)))
-            link=db.execute('SELECT * FROM lexical_links WHERE unit_id=?',(u['id'],)).fetchone()
-            if link:
-                link_id=str(uuid.uuid4())
-                db.execute('INSERT INTO lexical_links(id,unit_id,lexeme_id,usage_id,sense_id,notes,language_id,revision) VALUES(?,?,?,?,?,?,?,1)',(link_id,mapping[u['id']],link['lexeme_id'],link['usage_id'],link['sense_id'],link['notes'],link['language_id']))
-                import gloss_inheritance
-                prior=db.execute('SELECT unit_key FROM gloss_bindings WHERE id=?',(link['id'],)).fetchone()
-                if prior:gloss_inheritance.copy_binding(db,link['id'],link_id,'corpus',eid,mapping[u['parent_id'] or u['id']],prior['unit_key'])
-                import link_review
-                link_review.copy(db,link['id'],link_id)
-                component=db.execute('SELECT body FROM component_links WHERE id=?',(link['id'],)).fetchone()
-                if component:db.execute('INSERT INTO component_links VALUES(?,?)',(link_id,component[0]))
-                analysis=db.execute('SELECT * FROM morphology_analyses WHERE id=?',(link['id'],)).fetchone()
-                if analysis:db.execute('INSERT INTO morphology_analyses VALUES(?,?,?)',(link_id,analysis['form_id'],analysis['features']))
-        for cell in long_tasks.steps(list(db.execute("SELECT * FROM annotation_cells WHERE owner_kind='corpus' AND record_id=?",(source['id'],)))):
-            uid=cell['unit_id']
-            if uid!='@sentence':uid=mapping.setdefault(uid,str(uuid.uuid4()))
-            db.execute('INSERT INTO annotation_cells VALUES(?,?,?,?,?,?,1)',(str(uuid.uuid4()),'corpus',eid,uid,cell['layer_id'],cell['value']))
-        import code_switching
-        for span in code_switching.rows(db,'corpus',source['id']):
-            for unit_id in json.loads(span['word_ids']):mapping.setdefault(unit_id,str(uuid.uuid4()))
-        code_switching.copy_spans(db,'corpus',source['id'],'corpus',eid,mapping)
+        eid=copy_entry(db,source,source['text_id'],at+1)
         order(source['text_id'],records[:at]+[{'id':eid}]+records[at:])
         return {'ok':True,'id':eid,'text_id':source['text_id'],'position':at+1}
 
@@ -177,10 +188,9 @@ def organize(db, action, body, backup_dir):
         if action=='copy-entries':
             copies=[]
             for r in long_tasks.steps(picked):
-                result=organize(db,'duplicate-entry',dict(id=r['id'],text_id=source['id'],revision=r['revision'],order=[v['id'] for v in rows(source['id'])],where='end'),backup_dir)
-                copied=db.execute('SELECT * FROM entries WHERE id=?',(result['id'],)).fetchone()
+                eid=copy_entry(db,r,target['id'],at+len(copies)+1)
+                copied=db.execute('SELECT * FROM entries WHERE id=?',(eid,)).fetchone()
                 provenance(copied,source);copies.append(copied)
-            order(source['id'],source_rows)
             order(target['id'],target_rows[:at]+copies+target_rows[at:])
             return {'ok':True,'id':target['id'],'position':at+1,'count':len(copies),'backup':saved}
         for r in long_tasks.steps(picked): provenance(r,source)

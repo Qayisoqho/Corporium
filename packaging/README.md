@@ -1,6 +1,8 @@
 # Windows 构建
 
-源码版本：0.9.01026.4。推荐 Windows 10/11 x64、Python 3.12。
+源码版本：0.9.01030。推荐 Windows 10/11 x64、Python 3.12。
+
+本次0.9.01030同号重建已纳入项目选择页Docoid／顶部中英语言选择，以及重叠词格完成下划线修正。开发与公开副本各76项相关后端、509项完整前端通过；冻结程序自检及中英无项目首屏、首次／恢复项目启动通过。当前安装包SHA-256：`CBD0114EC04691E4F08048B13522EBF7C35E2B265126F0BD623D8A7728F4C2A1`。完整范围见[验证说明](../docs/VERIFICATION.md)。
 
 ## 准备
 
@@ -20,7 +22,7 @@ powershell -ExecutionPolicy Bypass -File packaging/build-windows.ps1 -Python pyt
 
 脚本创建独立的 `.desktop-venv`，安装固定版本依赖，验证内置示例，收集当前构建环境的第三方许可，再生成程序和安装包。已安装依赖时可以加 `-SkipDependencies`。
 
-程序输出在 `release/app-0.9.01026.4/Corporium/`，安装包在 `release/Corporium-0.9.01026.4-Windows-x64-Setup.exe`。这些目录由构建产生，已被忽略，不应作为源码提交。安装向导允许选择位置；项目数据由用户另行选择。
+程序输出在 `release/app-0.9.01030/Corporium/`，安装包在 `release/Corporium-0.9.01030-Windows-x64-Setup.exe`。这些目录由构建产生，已被忽略，不应作为源码提交。安装向导允许选择位置；项目数据由用户另行选择。
 
 `prepare_example.py` 只验证附带的虚构示例包，不连接个人数据库。`Corporium.spec` 仅收集程序资源、四款 Junicode 字体、许可和示例，不会收集用户项目或媒体。
 
@@ -34,4 +36,6 @@ powershell -ExecutionPolicy Bypass -File packaging/build-windows.ps1 -Python pyt
 
 公开副本只携带已清理来源路径的虚构示例，`prepare_example.py`继续只验证该包，不依赖开发者的测试项目。公开源码验证与某次开发目录的安装包验证是不同证据，详见[当前验证](../docs/VERIFICATION.md)。
 
-2026-10-27同版本修订：自定义层／指定书写类型查找替换；自动关联成功后保留并更新其余候选，放大及窄窗底栏对齐。构建仍覆盖同名产物。
+2026-10-27时的0.9.01026.4同号修订：自定义层／指定书写类型查找替换；自动关联成功后保留并更新其余候选，放大及窄窗底栏对齐。构建仍覆盖同名产物。
+
+2026-10-30发布0.9.01030：收录全部近期源码更新，Windows数值版本0.9.1030.0。新版本输出使用新文件名，保留旧包；本地构建环境与打包程序检查范围见[验证说明](../docs/VERIFICATION.md)。

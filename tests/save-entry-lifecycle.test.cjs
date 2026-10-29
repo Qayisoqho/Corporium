@@ -9,7 +9,7 @@ function lexeme({existing=false,quick=false,fail=false}={}){
  const nodes={},calls=[],sent=[],node=id=>nodes[id]??={value:'',children:[],open:false,textContent:''};
  node('lexeme-editor').open=true;node('lexeme-quick-editor').open=quick;node('lexeme-language').value='ordos';node('lexeme-headword').value='new';
  const c=vm.createContext({$ :node,workspace:'dictionary',editingLexeme:existing?{id:'same',revision:2,headword:'new',body:{}}:null,lexemeDirty:true,dictionarySelection:'old',URLSearchParams,
-  readMorphEntry:()=>({}),readMorphForm:row=>row.fields,readTags:()=>[],pruneNewLexemeRows:()=>{},prepareMorphemeSave:async()=>({}),refreshUndo:async()=>calls.push('history'),
+  readMorphEntry:()=>({}),readMorphForm:row=>row.fields,readTags:()=>[],pruneNewLexemeRows:()=>{},prepareMorphemeSave:async()=>({}),prepareDictionaryLinkChanges:async request=>request,refreshUndo:async()=>calls.push('history'),
   originalApi:async(path,body)=>{if(path.startsWith('homonym-preview'))return {peers:[],token:'confirmed'};calls.push(path);sent.push(body);if(fail)throw Error('保存失败');return {id:existing?'same':'new'};},
   loadDictionary:async()=>{calls.push('reload');assert.equal(node('lexeme-editor').open,false,'a view refresh must not navigate away from an open lexeme draft');},
   setWorkspace:async()=>{assert.equal(c.lexemeDirty,false);assert.equal(node('lexeme-editor').open,false);calls.push('workspace');},
@@ -46,7 +46,7 @@ function inlineSave({kind='corpus',workspace='corpus',isNew=false,fail=false}={}
  return {d,drafts,calls,sent,save:()=>listeners.click({target:{closest:()=>button},preventDefault(){}})};
 }
 for(const workspace of ['corpus','library','dictionary','survey','timeline'])for(const isNew of [false,true])test(`${workspace} ${isNew?'new':'existing'} inline sentence ends draft before callbacks and refresh`,async()=>{
- const h=inlineSave({workspace,isNew,kind:workspace==='library'?'independent':'corpus'});await h.save();assert.equal(h.drafts.size,0);assert.deepEqual(h.calls,['paint',isNew?'sentence-create':'inline-save','remove','saved-callback','history','views']);
+ const h=inlineSave({workspace,isNew,kind:workspace==='library'?'independent':'corpus'});await h.save();assert.equal(h.drafts.size,0);assert.deepEqual(h.calls,['paint',isNew?'sentence-create':'inline-save','saved-callback','remove','history','views']);
 });
 test('failed inline sentence save keeps dirty draft available without navigation or refresh',async()=>{
  const h=inlineSave({fail:true});await h.save();assert.equal(h.drafts.size,1);assert.equal(h.d.dirty,true);assert.equal(h.d.saving,false);assert.equal(h.d.error,'保存失败');assert.deepEqual(h.calls,['paint','inline-save','paint']);
@@ -58,17 +58,17 @@ for(const fail of [false,true])test(`cleared protected and unprotected pairs are
 });
 for(const workspace of ['dictionary','library'])test(`${workspace} independent Tab editor save closes directly without discard`,async()=>{
  const nodes={},calls=[],node=id=>nodes[id]??={value:'',children:[],open:false,textContent:''};node('standalone-editor').open=true;
- const c=vm.createContext({$:node,workspace,standaloneCommit:null,standaloneEditing:{id:'example',revision:1},standaloneLexeme:{id:'lexeme',language_id:'ordos'},standaloneDirty:true,
+ const c=vm.createContext({window:{corporiumSentenceInspector:{afterExampleSave:async source=>{assert.equal(source.kind,'independent');assert.equal(source.id,'example');calls.push('inspector');}}},$:node,workspace,standaloneCommit:null,standaloneEditing:{id:'example',revision:1},standaloneLexeme:{id:'lexeme',language_id:'ordos'},standaloneDirty:true,
   CorporiumPairs:{parse:()=>[{form:'a',gloss:'A'}]},originalApi:async()=>{calls.push('write');return {id:'example'};},refreshUndo:async()=>{},loadDictionary:async()=>{},
   showLexeme:async()=>{assert.equal(c.standaloneDirty,false);assert.equal(node('standalone-editor').open,false);calls.push('view');},refreshExampleViews:async()=>{assert.equal(c.standaloneDirty,false);assert.equal(node('standalone-editor').open,false);calls.push('view');},
   document:{dispatchEvent(){calls.push('event');}},CustomEvent:class{}});
  node('standalone-editor').close=()=>{calls.push('close');node('standalone-editor').open=false;};
  history(c);const source=read('dictionary-manager');vm.runInContext(source.slice(source.indexOf("$('standalone-form').onsubmit="),source.indexOf('async function renderStandalone')),c);
- await node('standalone-form').onsubmit({preventDefault(){}});assert.equal(node('standalone-error').textContent,'');assert.deepEqual(calls,['write','close','view','event']);assert.equal(node('standalone-save').disabled,false);
+ await node('standalone-form').onsubmit({preventDefault(){}});assert.equal(node('standalone-error').textContent,'');assert.deepEqual(calls,['write','close','view','inspector','event']);assert.equal(node('standalone-save').disabled,false);
 });
 test('rejected independent Tab save retains values and dirty protection without closing or refreshing',async()=>{
  const nodes={},node=id=>nodes[id]??={value:'draft',children:[],open:true,textContent:''};
- const c=vm.createContext({$:node,standaloneCommit:null,standaloneEditing:{id:'example',revision:1},standaloneLexeme:{language_id:'ordos'},standaloneDirty:true,
+ const c=vm.createContext({window:{},$:node,standaloneCommit:null,standaloneEditing:{id:'example',revision:1},standaloneLexeme:{language_id:'ordos'},standaloneDirty:true,
   CorporiumPairs:{parse:()=>[{form:'a',gloss:'A'}]},api:async()=>{throw Error('版本冲突');}});
  node('standalone-editor').close=()=>assert.fail('a failed save must not close');
  const source=read('dictionary-manager');vm.runInContext(source.slice(source.indexOf("$('standalone-form').onsubmit="),source.indexOf('async function renderStandalone')),c);
@@ -76,7 +76,7 @@ test('rejected independent Tab save retains values and dirty protection without 
 });
 for(const fail of [false,true])test(`corpus Tab save ${fail?'retains the editor on failure':'closes directly after success'}`,async()=>{
  const nodes={},calls=[],node=id=>nodes[id]??={open:true,textContent:''};node('editor').close=()=>{calls.push('close');node('editor').open=false;};
- const c=vm.createContext({$:node,current:{id:'entry',revision:2},readEditor:()=>({translation:'draft'}),api:async(path,body)=>{assert.equal(path,'save');assert.equal(body.translation,'draft');calls.push('write');if(fail)throw Error('保存失败');return {};},search:async()=>{assert.equal(node('editor').open,false);calls.push('refresh');},corporiumStatus:()=>calls.push('status')});
+ const c=vm.createContext({window:{},$:node,current:{id:'entry',revision:2},readEditor:()=>({translation:'draft'}),api:async(path,body)=>{assert.equal(path,'save');assert.equal(body.translation,'draft');calls.push('write');if(fail)throw Error('保存失败');return {};},search:async()=>{assert.equal(node('editor').open,false);calls.push('refresh');},corporiumStatus:()=>calls.push('status')});
  vm.runInContext(read('app').split('\n').find(line=>line.startsWith("$('save').onclick=")),c);await node('save').onclick();
  assert.deepEqual(calls,fail?['write']:['write','close','refresh','status']);assert.equal(node('editor').open,fail);assert.equal(node('save').disabled,false);if(fail)assert.equal(node('edit-error').textContent,'保存失败');
 });

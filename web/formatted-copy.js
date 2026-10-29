@@ -1,7 +1,7 @@
 /* Occurrence-based selection: source records stay untouched. */
 (()=>{
  'use strict';
- const core=window.CorporiumFormattedCopyFormat,records=new Map(),groupKeys=new WeakMap(),boxes=new WeakMap(),gutters=new WeakMap();
+ const core=window.CorporiumFormattedCopyFormat,records=new Map(),groupKeys=new WeakMap(),boxes=new WeakMap(),borrowed=new Map();
  let sequence=0,active=false,busy=false,selected=new Set(),pageKeys='',owner=null,frame=0,controls=[];
  function stamp(html,body,kind,id,label=''){
   if(!['corpus','independent'].includes(kind)||String(id).startsWith('new:'))return html;
@@ -74,25 +74,33 @@
    if(c.count.textContent!==count)c.count.textContent=count;
   }
  }
- function finish(){active=false;selected.clear();pageKeys='';owner=null;document.documentElement.classList.remove('formatted-copy-mode');document.querySelectorAll('.formatted-copy-pick,.formatted-copy-gutter,.formatted-copy-group-pick').forEach(el=>el.remove());document.querySelectorAll('.formatted-copy-has-gutter').forEach(el=>el.classList.remove('formatted-copy-has-gutter'));updateControls();}
+ function finish(){
+  active=false;selected.clear();pageKeys='';owner=null;document.documentElement.classList.remove('formatted-copy-mode');
+  for(const [box,{card,listener}] of borrowed){box.removeEventListener('change',listener);box.classList.remove('formatted-copy-pick');delete box.dataset.copyOwner;boxes.delete(card);}
+  borrowed.clear();window.CorporiumSentenceSelection?.lock(false);
+  document.querySelectorAll('.formatted-copy-choice,.formatted-copy-pick,.formatted-copy-group-pick').forEach(el=>el.remove());updateControls();
+ }
+ function syncShared(){if(!active)return;for(const [box,{card}] of borrowed){box.checked?selected.add(card.dataset.formattedSource):selected.delete(card.dataset.formattedSource);}updateControls();}
+ document.addEventListener('corporium-sentence-selection',syncShared);
  function addBox(card,index){
   if(boxes.get(card)?.isConnected)return;
+  const entry=card.closest('.example-group-member,.entry,.lex-example'),shared=entry?.querySelector(':scope>.entry-head [data-pick]');
+  if(shared){const listener=()=>{syncShared();};borrowed.set(shared,{card,listener});shared.addEventListener('change',listener);shared.classList.add('formatted-copy-pick');shared.dataset.copyOwner=card.dataset.formattedSource;boxes.set(card,shared);if(shared.checked)selected.add(card.dataset.formattedSource);return;}
   const box=document.createElement('input');box.type='checkbox';box.className='formatted-copy-pick';box.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("0d3a04f4c383d0",()=>[labelFor(card,index)])??'复制例句 '+labelFor(card,index)));box.title=(globalThis.CorporiumI18n?.f("d578cda27a1f32",()=>[])??'选择带格式复制');box.checked=selected.has(card.dataset.formattedSource);
   box.onchange=()=>{if(busy)return;box.checked?selected.add(card.dataset.formattedSource):selected.delete(card.dataset.formattedSource);paint();};
-  boxes.set(card,box);box.dataset.copyOwner=card.dataset.formattedSource;const mark=sourceMark(card);
-  if(mark){box.dataset.copyOwner=card.dataset.formattedSource;mark.append(box);}
-  else{const host=card.closest('.entry,.lex-example,.analysis-hit')||card,gutter=document.createElement('span');gutter.className='sentence-number formatted-copy-gutter';const label=document.createElement('span');label.textContent=labelFor(card,index);gutter.append(label,box);host.append(gutter);host.classList.add('formatted-copy-has-gutter');gutters.set(card,gutter);}
+  boxes.set(card,box);box.dataset.copyOwner=card.dataset.formattedSource;
+  const label=document.createElement('label');label.className='formatted-copy-choice';label.append(box);
+  const head=entry?.querySelector(':scope>.entry-head,:scope>.dialogue-row-head');
+  (head||card.querySelector('.inline-tools')||card).prepend(label);
  }
  function paint(list=cards(owner)){
   list.forEach(addBox);
+  window.CorporiumSentenceSelection?.lock(busy);
   document.querySelectorAll('.formatted-copy-pick').forEach(box=>{const key=box.dataset.copyOwner||box.closest('[data-formatted-source]')?.dataset.formattedSource;box.checked=selected.has(key);box.disabled=busy;});
   const groups=new Set(list.map(groupFor).filter(Boolean));
   for(const group of groups){let box=group.querySelector(':scope>.entry-head .formatted-copy-group-pick');if(!box){box=document.createElement('input');box.type='checkbox';box.className='formatted-copy-group-pick';box.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("fa1b9f88fbe90d",()=>[])??'复制整组例句'));box.title=(globalThis.CorporiumI18n?.f("03a49d88b809b7",()=>[])??'选择整组');const head=group.querySelector(':scope>.entry-head'),heading=head?.querySelector('summary,strong')||head?.firstElementChild;if(heading)heading.prepend(box);else continue;box.onchange=()=>{if(busy)return;for(const card of cards(owner).filter(c=>groupFor(c)===group)){box.checked?selected.add(card.dataset.formattedSource):selected.delete(card.dataset.formattedSource);}paint();};}
    const members=list.filter(c=>groupFor(c)===group),n=members.filter(c=>selected.has(c.dataset.formattedSource)).length;box.checked=n===members.length;box.indeterminate=n>0&&n<members.length;box.setAttribute('aria-checked',box.indeterminate?'mixed':String(box.checked));box.disabled=busy;
   }
-  const positions=[];
-  for(const card of list){const gutter=gutters.get(card),anchor=card.querySelector('.judgment-anchor,.ipa,.words,.translation');if(gutter&&anchor){const a=anchor.getBoundingClientRect(),h=gutter.parentElement.getBoundingClientRect();positions.push({gutter,top:Math.max(0,a.top-h.top)+'px',left:Math.max(2,a.left-h.left-30)+'px'});}}
-  for(const {gutter,top,left} of positions){if(gutter.style.top!==top)gutter.style.top=top;if(gutter.style.left!==left)gutter.style.left=left;}
   updateControls();
  }
  async function clickCopy(root){

@@ -54,7 +54,6 @@ def normalize(v):
     for m in rows(v.get('memberships',[])):
         if not has_content(m):continue
         out={**fields(m,'class_id usage_id title notes'),'id':identity(m,seen),'parts':[]}
-        if not out['class_id']:raise ValueError('请选择形态类')
         for p in rows(m.get('parts',[])):
             out['parts'].append({**fields(p,'label form variant_id notes'),'id':identity(p,seen),'writings':writings(p),'features':features(p)})
         result['memberships'].append(out)
@@ -111,9 +110,9 @@ def validate(db,entries):
             if types.get(w['type_id'])!=lid:raise ValueError('形态分析引用的书写类型不存在或语言不一致，请先调整引用')
         for m in data['memberships']:
             cls=classes.get(m['class_id'])
-            if not cls or cls['language_id']!=lid:raise ValueError('形态类不存在或不属于本语言，请先调整引用')
+            if m['class_id'] and (not cls or cls['language_id']!=lid):raise ValueError('形态类不存在或不属于本语言，请先调整引用')
             key=(m['class_id'],m['usage_id'])
-            if key in members:raise ValueError('同一词类用法不能重复关联相同形态类')
+            if m['class_id'] and key in members:raise ValueError('同一词类用法不能重复关联相同形态类')
             members.add(key);lexicon.selection(b,m['usage_id'],None)
             for p in m['parts']:
                 morphology.form_selection(b,p['variant_id']);morphology.check_features(db,lid,p['features'])
@@ -150,7 +149,7 @@ def remap(data,owner,xmap,submap,classmap,typemap,tagmap):
         for w in p.get('writings',[]):w['type_id']=typemap[w['type_id']]
     try:
         for m in data.get('memberships',[]):
-            m['class_id']=classmap[m['class_id']];m['usage_id']=sub(owner,m.get('usage_id'))
+            m['class_id']=classmap[m['class_id']] if m['class_id'] else '';m['usage_id']=sub(owner,m.get('usage_id'))
             for p in m.get('parts',[]):p['variant_id']=sub(owner,p.get('variant_id'));common(p)
         for a in data.get('analyses',[]):
             for c in a.get('components',[]):

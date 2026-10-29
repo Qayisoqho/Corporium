@@ -56,11 +56,38 @@ def signature(config,choice):
         selected.append(row)
     return digest(selected)
 
+def matching_signature(config,choice):
+    selected=[]
+    for axis in AXES:
+        row=next((r for r in config[axis] if r['id']==choice.get(axis)),None)
+        if row is None:return None
+        selected.append(dict(id=row['id'],matches=sorted(set(map(norm,row['matches'])))))
+    return digest(selected)
+
+def choice_matches(reading,config,choice):
+    rows={axis:next((r for r in config[axis] if r['id']==choice.get(axis)),None) for axis in AXES}
+    if not all(rows.values()):return False
+    reading=norm(reading);finals=set(rows['finals']['matches'])
+    for tail in rows['tones']['matches']:
+        if tail and not reading.endswith(tail):continue
+        core=reading[:-len(tail)] if tail else reading
+        if any(core.startswith(prefix) and core[len(prefix):] in finals for prefix in rows['initials']['matches']):return True
+    return False
+
 def classify(reading,config):
     reading=norm(reading);saved=config['assignments'].get(reading)
     if saved:
         valid=signature(config,saved)==saved.get('signature') and saved.get('signature') is not None
-        return dict(state='confirmed' if valid else 'stale',choice={axis:saved.get(axis) for axis in AXES},reason='' if valid else '音系项目已修改或删除，请重新核对',candidates=[])
+        if valid:return dict(state='confirmed',choice={axis:saved.get(axis) for axis in AXES},reason='',candidates=[])
+    result=match_reading(reading,config)
+    if saved:
+        result['previous_choice']={axis:saved.get(axis) for axis in AXES}
+        if result['state']=='unmatched':
+            result.update(state='stale',choice=result['previous_choice'],reason='音系项目已修改或删除，请重新核对')
+        elif result['state']=='candidate':result['reason']='按当前音系清单重新匹配，结果唯一，可批量确认'
+    return result
+
+def match_reading(reading,config):
     finals={}
     for row in config['finals']:
         for alias in row['matches']:finals.setdefault(alias,[]).append(row['id'])
@@ -84,9 +111,16 @@ def mutate(db,lid,body):
     if not db.in_transaction:db.execute('BEGIN IMMEDIATE')
     current=get(db,lid)
     if body.get('token')!=current['token']:raise ValueError('音系设置或归类已变化，请重新打开后再保存')
-    data={k:current[k] for k in (*AXES,'assignments')}
+    data={**{k:current[k] for k in AXES},'assignments':dict(current['assignments'])}
     if body.get('action')=='settings':
         data.update(inventory(body))
+        # Preserve explicit choices while their selected items still describe
+        # this reading; label/alias-order edits also keep manual exceptions.
+        for reading,saved in current['assignments'].items():
+            old_sig=signature(current,saved);new_sig=signature(data,saved)
+            if old_sig is not None and old_sig==saved.get('signature') and new_sig is not None:
+                if matching_signature(current,saved)==matching_signature(data,saved) or choice_matches(reading,data,saved):
+                    data['assignments'][reading]={**saved,'signature':new_sig}
     elif body.get('action')=='classify':
         reading=body.get('reading')
         if not isinstance(reading,str) or not norm(reading):raise ValueError('请选择有效读音')

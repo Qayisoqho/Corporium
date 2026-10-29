@@ -13,11 +13,21 @@ function registeredTags(lid){
 function grammarDefinitions(lid){registeredTags(lid);return grammarDisplayCache.get(lid).definitions;}
 function hasRegisteredTag(s,lid,explicit=false){const names=registeredTags(lid);return names.has(s.toLowerCase())&&(explicit||!['a','all','art','pass'].includes(s.toLowerCase())||s===s.toUpperCase()||grammarDisplayCache.get(lid).spellings.has(s));}
 function isRegisteredTag(s,lid){const m=s.match(/^([123])([A-Za-z]+)$/);return hasRegisteredTag(s,lid)||!!(m&&hasRegisteredTag(m[2],lid));}
+function glossAtomParts(text){
+ const scripts=[];let marker='\ue000';while(text.includes(marker))marker+='\ue000';
+ const masked=text.replace(/#(?:sub|super|sup)\[[^\[\]]*\]/g,s=>{scripts.push(s);return marker+(scripts.length-1)+marker;});
+ return masked.split(/([\s.\-=:+~/;\\,!?，。；：！？\[\](){}<>«»“”"']+)/).map(p=>p.replace(new RegExp(marker+'(\\d+)'+marker,'g'),(_,n)=>scripts[Number(n)]));
+}
 function richGloss(s,lid=activeLanguage,grammatical=false){
  const known=registeredTags(lid);
  function token(t,bracketed){if(!t)return '';if(hasRegisteredTag(t,lid,bracketed))return grammarLabel(t,lid);const m=t.match(/^([123])([A-Za-z]+)$/);return m&&hasRegisteredTag(m[2],lid,bracketed)?m.slice(1).map(p=>hasRegisteredTag(p,lid,bracketed)?grammarLabel(p,lid):esc(p)).join(''):esc(t);}
- const plain=(t,bracketed=false)=>t.split(/([\s.\-=:+~/;_\\,!?，。；：！？\[\](){}<>«»“”"']+)/).map((p,i)=>i%2?p.split('>').map(esc).join((globalThis.CorporiumI18n?.f("1c10f9928c8ba6",()=>[])??'<span class="gloss-relation" title="语义与论元关系：左侧 → 右侧">&gt;</span>')):token(p,bracketed)).join('');
+ const plain=(t,bracketed=false)=>t.split(/([\s.\-=:+~/;\\,!?，。；：！？\[\](){}<>«»“”"']+)/).map((p,i)=>i%2?p.split('>').map(esc).join((globalThis.CorporiumI18n?.f("1c10f9928c8ba6",()=>[])??'<span class="gloss-relation" title="语义与论元关系：左侧 → 右侧">&gt;</span>')):token(p,bracketed)).join('');
  function fragment(t,bracketed=false){
+  if(t.includes('_'))return glossAtomParts(t).map(p=>{
+   if(!p.includes('_'))return fragment(p,bracketed);
+   if(hasRegisteredTag(p,lid,bracketed))return grammarLabel(p,lid);
+   return p.split(/(#(?:sub|super|sup)\[[^\[\]]*\])/g).map(v=>/^#(?:sub|super|sup)\[/.test(v)?(v.startsWith('#sub[')?'<sub>':'<sup>')+esc(v.slice(v.indexOf('[')+1,-1))+(v.startsWith('#sub[')?'</sub>':'</sup>'):esc(v)).join('');
+  }).join('');
   return t.split(/([A-Za-z0-9]+(?:#(?:sub|super|sup)\[[^\[\]]*\])+|#(?:sub|super|sup)\[[^\[\]]*\])/g).map(p=>{
    if(!/#(?:sub|super|sup)\[/.test(p))return plain(p,bracketed);
    if(known.has(p.toLowerCase()))return grammarLabel(p,lid);
@@ -37,7 +47,7 @@ function richGloss(s,lid=activeLanguage,grammatical=false){
 }
 function glossEditParts(text,gloss=true){
  const parts=[],ranges=[...text.matchAll(/<[^<]*>/g)].map(m=>[m.index,m.index+m[0].length]);let start=0,depth=0;
- for(let i=0;i<text.length;i++){const c=text[i];if(c==='[')depth++;else if(c===']')depth=Math.max(0,depth-1);else if(!depth&&!ranges.some(([a,b])=>a<=i&&i<b)&&(gloss?'~-.＝=:+/>;_\\':'~-＝=+').includes(c)){parts.push(text.slice(start,i),c);start=i+1;}}
+ for(let i=0;i<text.length;i++){const c=text[i];if(c==='[')depth++;else if(c===']')depth=Math.max(0,depth-1);else if(!depth&&!ranges.some(([a,b])=>a<=i&&i<b)&&(gloss?'~-.＝=:+/>;\\':'~-＝=+').includes(c)){parts.push(text.slice(start,i),c);start=i+1;}}
  parts.push(text.slice(start));return parts;
 }
 

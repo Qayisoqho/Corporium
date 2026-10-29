@@ -18,7 +18,7 @@ def compact_gloss(text):
     for i,char in enumerate(text):
         if char=='[':depth+=1
         elif char==']':depth=max(0,depth-1)
-        elif not depth and not any(a<=i<b for a,b in angles) and char in '-.＝=:+/>;_\\':
+        elif not depth and not any(a<=i<b for a,b in angles) and char in '-.＝=:+/>;\\':
             parts.extend((text[start:i],char));start=i+1
     parts.append(text[start:])
     result=[];pending='';filled=False
@@ -32,11 +32,30 @@ def compact_gloss(text):
 
 def compact_empty_pairs(form,gloss):
     """Remove empty paired morpheme cells without removing a nonempty form."""
+    if not re.sub(r'[\s\-=+~<>＝]','',form) and not re.sub(r'[\s\-=+~<>＝.]','',gloss):return '',''
     fs=segmentation.split_parts(form);gs=segmentation.split_parts(gloss)
     if len(fs)!=len(gs) or [p[2] for p in fs]!=[p[2] for p in gs]:return form,gloss
     keep=[i for i,(f,g) in enumerate(zip(fs,gs)) if f[0].strip() or g[0].strip()]
     def join(parts):return ''.join((parts[i-1][2] if n and i else '')+parts[i][0] for n,i in enumerate(keep))
     return join(fs),join(gs)
+
+
+def normalize_edited_pair(form,gloss):
+    """Clean empty edit cells, then recheck the actual morpheme boundaries.
+
+    Dot-separated labels stay within one morpheme. An unmatched empty form cell
+    can be removed only if that restores the same boundary sequence as the gloss;
+    nonempty forms and genuinely different analyses are never rewritten to fit.
+    """
+    form,gloss=compact_empty_pairs(form,gloss)
+    gloss=compact_gloss(gloss)
+    signature=lambda value:[p[2] for p in segmentation.split_parts(value)]
+    if signature(form)!=signature(gloss) and '\\' not in form:
+        parts=segmentation.split_parts(form);keep=[i for i,p in enumerate(parts) if p[0].strip()]
+        if keep:
+            candidate=''.join((parts[i-1][2] if n else '')+parts[i][0] for n,i in enumerate(keep))
+            if signature(candidate)==signature(gloss):form=candidate
+    return compact_empty_pairs(form,gloss)
 
 
 def compact_edited_pairs(words,previous=()):
@@ -46,7 +65,7 @@ def compact_edited_pairs(words,previous=()):
         form,gloss=word['form'],word['gloss']
         if not isinstance(form,str) or not isinstance(gloss,str):raise ValueError('语素和标注须为文本')
         if (form,gloss) not in known:
-            form,gloss=compact_empty_pairs(form,gloss);gloss=compact_gloss(gloss)
+            form,gloss=normalize_edited_pair(form,gloss)
         if form.strip() or gloss.strip():
             positions[i]=len(result);result.append({**word,'form':form,'gloss':gloss})
     return result,positions

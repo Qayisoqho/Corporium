@@ -66,14 +66,20 @@
       return {text: text(r.text), script: r.script, bold: r.bold===undefined?undefined:!!r.bold, italic: r.italic===undefined?undefined:!!r.italic, smallCaps: !!r.smallCaps};
     });
     if (!glossary || typeof glossary !== 'object' || Array.isArray(glossary)) throw Error((globalThis.CorporiumI18n?.f("44317ed4312364",()=>[])??'语法标签定义须为对象'));
+    value=text(value);
     const known = new Set(Object.keys(glossary).map(k => k.toLowerCase()));
     const spelling = new Set(Object.keys(glossary));
     const registered = (s, explicit) => known.has(s.toLowerCase()) && (explicit || !['a','all','art','pass'].includes(s.toLowerCase()) || s === s.toUpperCase() || spelling.has(s));
     const out = []; let bracket = grammatical;
-    for (const r of scripts(value)) {
-      for (const token of r.text.split(/([\s.\-=:+~/;_\\,!?，。；：！？\[\](){}<>«»“”"']+)/)) {
+    const saved=[];let marker='\ue000';while(value.includes(marker))marker+='\ue000';
+    const masked=value.replace(/#(?:sub|super|sup)\[[^\[\]]*\]/g,s=>{saved.push(s);return marker+(saved.length-1)+marker;});
+    const atoms=masked.split(/([\s.\-=:+~/;\\,!?，。；：！？\[\](){}<>«»“”"']+)/).map(p=>p.replace(new RegExp(marker+'(\\d+)'+marker,'g'),(_,n)=>saved[Number(n)]));
+    for(const atom of atoms){
+    if(atom.includes('_')){out.push(...scripts(atom).map(r=>({...r,smallCaps:registered(atom,bracket)})));continue;}
+    for (const r of scripts(atom)) {
+      for (const token of r.text.split(/([\s.\-=:+~/;\\,!?，。；：！？\[\](){}<>«»“”"']+)/)) {
         if (!token) continue;
-        if (/^[\s.\-=:+~/;_\\,!?，。；：！？\[\](){}<>«»“”"']+$/u.test(token)) {
+        if (/^[\s.\-=:+~/;\\,!?，。；：！？\[\](){}<>«»“”"']+$/u.test(token)) {
           for (const c of token) {if (c === '[' || c === '<') bracket = true; if (c === ']' || c === '>') bracket = grammatical;}
           out.push({...r, text: token}); continue;
         }
@@ -82,6 +88,7 @@
         else if (person && registered(person[2], bracket)) out.push({...r, text: person[1]}, {...r, text: person[2], smallCaps: true});
         else out.push({...r, text: token});
       }
+    }
     }
     return out;
   }

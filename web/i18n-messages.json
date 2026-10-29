@@ -5481,9 +5481,9 @@
     "莱比锡标注规则": "Leipzig Glossing Rules",
     "标签与检查": "Labels & checks",
     "标注检查": "Checks",
-    "附加标签": "Extra labels",
+    "附加标签": "Additional tags",
     "词条": "Entry",
-    "词典词条": "Entry",
+    "词典词条": "Dictionary entries",
     "条目类型": "Entry type",
     "基本条目": "Base entry",
     "词形": "Word form",
@@ -5589,7 +5589,7 @@
     "中缀": "Infix",
     "中缀宿主": "Infix host",
     "环缀": "Circumfix",
-    "连接成分": "Linker",
+    "连接成分": "Linking element",
     "多部分语素": "Multipart morpheme",
     "其他多部分语素": "Other multipart",
     "多部分词根": "Multipart root",
@@ -6718,7 +6718,6 @@
     "跳转页码": "Page to open",
     "语料上方分页": "Top results pagination",
     "类管理": "Classes",
-    "词类、子类、形式类型、形态类、使用标签类型和语法标签分类按语言保存。重命名同步更新引用；删除前须先解除引用和子类。": "POS, subclasses, form types, morphological classes, usage-label types, and grammatical-label categories are stored per language. Renaming updates references. Remove references and subclasses before deleting a class.",
     "语法标签分类": "Grammatical-label categories",
     "＋ 新建类": "＋ New class",
     "新建类": "New class",
@@ -8197,7 +8196,7 @@
     "请先保存或取消句子编辑": "Save or cancel sentence editing first",
     "请先新建另一个目标文本": "Create another target text first",
     "已选 ⟦0⟧ 条句子": "Selected sentences: ⟦0⟧",
-    "确认复制": "Copy",
+    "确认复制": "Confirm copy",
     "已⟦0⟧ ⟦1⟧ 条句子。": "⟦0⟧ ⟦1⟧ sentences.",
     "⟦0⟧ → ⟦1⟧，共 ⟦2⟧ 条。": "⟦0⟧ → ⟦1⟧; total: ⟦2⟧.",
     "已按指定顺序合并 ⟦0⟧ 条句子。": "Merged ⟦0⟧ sentences in the chosen order.",
@@ -8223,7 +8222,6 @@
     "变形表「⟦0⟧」的「⟦1⟧」词形已被清空。请补填词形，或先从表格中移除此形式。": "The form in paradigm “⟦0⟧”, row “⟦1⟧”, was cleared. Enter a form or remove it from the table first.",
     "继承＋⟦0⟧": "Inherited + ⟦0⟧",
     "无附加标签": "No extra labels",
-    "变形表 · Paradigm": "Paradigm",
     "可选。简短标注可独立填写，或继承基本义项并附加标签。表格使用的词形在保存时自动登记为变体；要彻底移除形式，请从表格中一并移除。未填写与无此形式分别保留。": "Optional. Enter a custom gloss or inherit a base sense with extra labels. Forms used in the table register as variants on save. Remove forms from the table too when deleting them completely. Blank and nonexistent forms remain distinct.",
     "管理本语言模板": "Manage templates for this language",
     "＋ 添加变形表／模板": "＋ Add paradigm/template",
@@ -10482,7 +10480,116 @@
     "WAV 录音 (*.wav)": "WAV audio (*.wav)",
     "请选择另一个位置下载，录音原件保持不变": "Choose another download location to keep the recording original unchanged.",
     "标注层排序必须包含本语言的全部层，且不能重复": "Include every layer in this language exactly once.",
-    "调整标注层顺序": "Reorder annotation layers"
+    "调整标注层顺序": "Reorder annotation layers",
+    "复制词典条目": "Duplicate dictionary entry",
+    "条目不属于当前语言或类型": "The entry belongs to another language or has a different type",
+    "条目已变化，请刷新后复制": "The entry has changed. Refresh it before duplicating",
+    "请确认建立独立副本": "Confirm creation of an independent duplicate",
+    "确认当前语言全部唯一匹配的读音？包含按修改后音系重新匹配的唯一候选；歧义、无法匹配及临时代用形式不会纳入。可撤销。": "Confirm all unique pronunciation matches in this language, including unique candidates matched again after phonology changes? Ambiguous, unmatched, and temporary forms are excluded. You can undo this.",
+    "修改名称或调整顺序保留已确认归类；修改匹配写法后仍符合原归类的读音继续保留，其余重新匹配，唯一候选可批量确认。": "Renaming or reordering preserves confirmed classifications. After matching notations change, classifications that still fit are kept; the rest are matched again, and unique candidates can be confirmed in batch.",
+    "按当前音系清单重新匹配，结果唯一，可批量确认": "Matched again using the current sound inventory; the unique result can be confirmed in batch.",
+    "词次、词形与语素统计": "Token, word-form and morpheme statistics",
+    "统计词次与词形": "Count tokens and word forms",
+    "区分词形大小写": "Case-sensitive word forms",
+    "不同词形数": "Distinct word forms",
+    "统计概况": "Overview",
+    "词形频率": "Word-form frequencies",
+    "语素频率": "Morpheme frequencies",
+    "词根频率": "Root frequencies",
+    "词干频率": "Stem frequencies",
+    "词缀频率": "Affix frequencies",
+    "词汇统计视图": "Vocabulary statistics views",
+    "词频排序": "Frequency sorting",
+    "按次数从多到少": "Most frequent first",
+    "按形式排序": "Sort by form",
+    "返回词频表": "Back to frequency list",
+    "出现次数": "Occurrences",
+    "涉及词次": "Word tokens containing this item",
+    "占比": "Percentage",
+    "有有效语素关联的词次": "Word tokens with valid morpheme links",
+    "有已确认词根的词次": "Word tokens with confirmed roots",
+    "类型未定": "Unspecified type",
+    "附着词": "Clitic",
+    "以词格计词次，完整词形去重。保留声调、附加符号和词素边界，仅统一 Unicode 等价写法。同一记录的多处引用只计一次；自然文本与诱导材料请按来源分别选择。": "Count tokens by word cell and deduplicate complete word forms. Preserve tones, diacritics and morpheme boundaries; normalize Unicode equivalents only. Multiple citations of one record count once. Select natural texts and elicited materials separately by source.",
+    "不同词形总数按整个范围去重，不能把各篇的不同词形数直接相加。": "Distinct forms are deduplicated across the entire scope; per-text type counts cannot simply be added.",
+    "完整词形分别计数；点击形式或次数查看原句。导出 JSON 包含本次全部词频和例证位置。": "Count complete word forms separately. Click a form or count to inspect its source examples. JSON export includes all frequencies and example positions in this run.",
+    "仅计入当前有效关联的语素条目，按已指定类型筛选，不自动删除词缀。语素出现次数与涉及词次分别计算；同一词中的重复语素可出现多次，例句按词格展示。类型未定项保留在全部语素中。": "Count currently valid morpheme links and filter by assigned type, without automatically stripping affixes. Morpheme occurrences and containing word tokens are counted separately. Repeated morphemes may occur more than once in a word; examples are shown by word cell. Unspecified types remain in the full morpheme list.",
+    "词汇统计视图无效": "Invalid vocabulary statistics view",
+    "词汇统计排序无效": "Invalid vocabulary statistics sort order",
+    "词频项目已不存在于当前结果中": "The frequency item is not present in this result",
+    "词频页码无效": "Invalid frequency page number",
+    "筛选词形、语素或释义": "Filter word forms, morphemes or glosses",
+    "筛选词频": "Filter frequencies",
+    "词频筛选内容无效": "Invalid frequency filter",
+    "统计对象": "Count entries from",
+    "分类标准": "Group by",
+    "语素条目": "Morpheme entries",
+    "筛选要统计的条目": "Filter the entries to count",
+    "条目包含内容": "Entry contains",
+    "正在读取统计分类…": "Loading entry categories…",
+    "原分类已不存在，请重新选择": "The original category is unavailable; please select again",
+    "统计分类尚未读取完成": "Entry categories have not finished loading",
+    "分类值": "Category value",
+    "请选择分类值": "Select a value",
+    "自定义条目统计": "Custom entry statistics",
+    "运行统计": "Run statistics",
+    "符合条件条目": "Entries matching conditions",
+    "语料中条目": "Entries attested in scope",
+    "分组／条目": "Group / entry",
+    "条目数": "Distinct entries",
+    "按条目分别统计": "Each entry separately",
+    "未分类／未填写": "Unclassified / empty",
+    "条件只筛选条目自身资料，例句不参与条目筛选。分类未填写的项另列；一个条目属于多个组时，各组次数可能重叠。": "Conditions filter the entry’s own information; examples are excluded. Empty classifications form a separate group. An entry may belong to multiple groups, so group counts can overlap.",
+    "只计入符合条目条件的有效关联；整词与相同单语素关联去重。占比以筛选后的关联出现次数为分母；同一条目属于多个组时可重复归组，各组不能直接相加。统计概况和词形频率仍展示整个语料范围。": "Count valid links to entries matching the conditions. Deduplicate identical whole-word and single-morpheme links. Percentages use the selected link occurrences; entries may occur in multiple groups, whose counts cannot simply be added. Overview and word-form frequencies still show the entire material scope.",
+    "统计对象无效": "Invalid entry statistics target",
+    "条目统计条件无效": "Invalid entry statistics conditions",
+    "统计分类字段已删除或不属于当前语言，请重新选择": "The grouping field was deleted or belongs to another language; please select again",
+    "此结果没有自定义条目统计，请重新运行": "This result has no custom entry statistics; please run it again",
+    "范围词次": "Scope tokens",
+    "范围词形数": "Scope word forms",
+    "范围句数": "Scope sentences",
+    "创建时间": "Created at",
+    "修改时间": "Modified at",
+    "各类按语言保存，可拖动行首把手排序。重命名同步更新引用；删除时解除条目绑定，保留条目内容，可撤销。": "Classes are stored per language. Drag the handle to reorder. Renaming updates references; deleting detaches entries and preserves their contents. You can undo these changes.",
+    "点号分隔，如 LOC.PL": "Separate with dots, e.g. LOC.PL",
+    "已登记的语法标签": "Registered grammatical tags",
+    "选择标签以附加": "Choose a tag to append",
+    "显示附加标签": "Show additional tags",
+    "拖动排序分类": "Drag to reorder classes",
+    "拖动排序；Alt＋上下方向键移动": "Drag to reorder; Alt + Up/Down to move",
+    "未关联形态类": "No morphological class assigned",
+    "附加标签显示设置无效": "Invalid additional-tag display setting",
+    "分类顺序已变化，请刷新后重试": "The class order has changed. Refresh and try again",
+    "分类顺序无效": "Invalid class order",
+    "分类类型无效": "Invalid class type",
+    "选择父类可调整层级；拖动行首把手调整同级顺序。": "Choose a parent to change the hierarchy. Drag the handle to reorder siblings.",
+    "调整分类顺序": "Reorder classes",
+    "调整语义类顺序": "Reorder semantic classes",
+    "调整语义分类顺序": "Reorder semantic classes",
+    "复制文本": "Duplicate text",
+    "来源文本": "Source text",
+    "选择来源文本": "Select a source text",
+    "句子数量": "Sentence count",
+    "（副本）": " (copy)",
+    "复制全部句子、标注、文本信息和发言人。词典关联保留；音频沿用原媒体，对齐另建副本。新旧文本可分别修改，整次复制可一步撤销。": "Copy all sentences, annotations, text information and speakers. Dictionary links are retained. Audio uses the existing media with separate alignment copies. Both texts can be edited independently; undo the entire copy in one step.",
+    "已复制文本，可一步撤销。": "Text duplicated. Undo the entire copy in one step.",
+    "项目内容已变化，请重新打开复制文本窗口": "The project has changed. Reopen Duplicate text.",
+    "请选择当前语言的一篇文本": "Select a text in the current language.",
+    "文本副本已保存，但页面刷新失败，请重新打开文本。": "The text copy was saved, but the view could not refresh. Reopen the text.",
+    "编辑草稿": "Editor draft",
+    "以下模板项在词条中已有内容，仍要删除吗？": "These template items contain entry data. Delete them anyway?",
+    "确认后同步删除这些项，并解除相关意义的例句关联；词形变体和例句正文保留，整个操作可撤销。": "Confirm to delete these items and detach example links to the removed meanings. Form variants and sentence text are retained. Undo the entire change in one step.",
+    "模板及已使用的变形表已同步。": "The template and its existing tables are synchronized.",
+    "模板或相关词条已变化，请重新预览后确认": "The template or related entries have changed. Preview again before confirming.",
+    "删除的模板项含有词条内容，请先预览并确认删除": "The removed template items contain entry data. Preview and confirm the deletion first.",
+    "将解除的关联": "Links to detach",
+    "语料关联": "Corpus links",
+    "独立例句关联": "Independent example links",
+    "涉及句子": "Affected sentences",
+    "删除或调整这些义项、用法或形式后，部分例句关联将失效。仍要保存吗？": "Removing or changing these senses, usages or forms will invalidate some example links. Save anyway?",
+    "确认后仅解除失效关联，保留例句当前词形和标注；其他关联不变，整次修改可一步撤销。": "Confirm to detach only invalid links. Keep each sentence’s current forms and glosses and all other links. Undo the entire change in one step.",
+    "词条或例句关联已变化，请重新预览后确认": "The entry or its example links have changed. Preview and confirm again.",
+    "要移除的义项、用法或形式仍被例句直接引用，请先预览并确认解除关联后保存；稳定身份不会按编号自动转移。": "The removed senses, usages or forms are still linked to examples. Preview and confirm detaching them before saving. Stable identities are never reassigned by display number."
   },
   "backend": {
     "请选择当前语言的书写类型": "Choose a writing type in the current language.",
@@ -11758,7 +11865,7 @@
     "附着成分": "Clitic",
     "中缀": "Infix",
     "环缀": "Circumfix",
-    "连接成分": "Linker",
+    "连接成分": "Linking element",
     "其他多部分语素": "Other multipart",
     "词干": "Stem",
     "多词表达": "Expression",
@@ -12002,7 +12109,79 @@
     "WAV 录音 (*.wav)": "WAV audio (*.wav)",
     "请选择另一个位置下载，录音原件保持不变": "Choose another download location to keep the recording original unchanged.",
     "标注层排序必须包含本语言的全部层，且不能重复": "Include every layer in this language exactly once.",
-    "调整标注层顺序": "Reorder annotation layers"
+    "调整标注层顺序": "Reorder annotation layers",
+    "复制词典条目": "Duplicate dictionary entry",
+    "条目不属于当前语言或类型": "The entry belongs to another language or has a different type",
+    "条目已变化，请刷新后复制": "The entry has changed. Refresh it before duplicating",
+    "请确认建立独立副本": "Confirm creation of an independent duplicate",
+    "确认当前语言全部唯一匹配的读音？包含按修改后音系重新匹配的唯一候选；歧义、无法匹配及临时代用形式不会纳入。可撤销。": "Confirm all unique pronunciation matches in this language, including unique candidates matched again after phonology changes? Ambiguous, unmatched, and temporary forms are excluded. You can undo this.",
+    "修改名称或调整顺序保留已确认归类；修改匹配写法后仍符合原归类的读音继续保留，其余重新匹配，唯一候选可批量确认。": "Renaming or reordering preserves confirmed classifications. After matching notations change, classifications that still fit are kept; the rest are matched again, and unique candidates can be confirmed in batch.",
+    "按当前音系清单重新匹配，结果唯一，可批量确认": "Matched again using the current sound inventory; the unique result can be confirmed in batch.",
+    "词次、词形与语素统计": "Token, word-form and morpheme statistics",
+    "统计词次与词形": "Count tokens and word forms",
+    "区分词形大小写": "Case-sensitive word forms",
+    "不同词形数": "Distinct word forms",
+    "统计概况": "Overview",
+    "词形频率": "Word-form frequencies",
+    "语素频率": "Morpheme frequencies",
+    "词根频率": "Root frequencies",
+    "词干频率": "Stem frequencies",
+    "词缀频率": "Affix frequencies",
+    "词汇统计视图": "Vocabulary statistics views",
+    "词频排序": "Frequency sorting",
+    "按次数从多到少": "Most frequent first",
+    "按形式排序": "Sort by form",
+    "返回词频表": "Back to frequency list",
+    "出现次数": "Occurrences",
+    "涉及词次": "Word tokens containing this item",
+    "占比": "Percentage",
+    "有有效语素关联的词次": "Word tokens with valid morpheme links",
+    "有已确认词根的词次": "Word tokens with confirmed roots",
+    "类型未定": "Unspecified type",
+    "多部分语素": "Multipart morpheme",
+    "附着词": "Clitic",
+    "以词格计词次，完整词形去重。保留声调、附加符号和词素边界，仅统一 Unicode 等价写法。同一记录的多处引用只计一次；自然文本与诱导材料请按来源分别选择。": "Count tokens by word cell and deduplicate complete word forms. Preserve tones, diacritics and morpheme boundaries; normalize Unicode equivalents only. Multiple citations of one record count once. Select natural texts and elicited materials separately by source.",
+    "不同词形总数按整个范围去重，不能把各篇的不同词形数直接相加。": "Distinct forms are deduplicated across the entire scope; per-text type counts cannot simply be added.",
+    "完整词形分别计数；点击形式或次数查看原句。导出 JSON 包含本次全部词频和例证位置。": "Count complete word forms separately. Click a form or count to inspect its source examples. JSON export includes all frequencies and example positions in this run.",
+    "仅计入当前有效关联的语素条目，按已指定类型筛选，不自动删除词缀。语素出现次数与涉及词次分别计算；同一词中的重复语素可出现多次，例句按词格展示。类型未定项保留在全部语素中。": "Count currently valid morpheme links and filter by assigned type, without automatically stripping affixes. Morpheme occurrences and containing word tokens are counted separately. Repeated morphemes may occur more than once in a word; examples are shown by word cell. Unspecified types remain in the full morpheme list.",
+    "词汇统计视图无效": "Invalid vocabulary statistics view",
+    "词汇统计排序无效": "Invalid vocabulary statistics sort order",
+    "词频项目已不存在于当前结果中": "The frequency item is not present in this result",
+    "词频页码无效": "Invalid frequency page number",
+    "筛选词形、语素或释义": "Filter word forms, morphemes or glosses",
+    "筛选词频": "Filter frequencies",
+    "词频筛选内容无效": "Invalid frequency filter",
+    "统计对象": "Count entries from",
+    "分类标准": "Group by",
+    "语素条目": "Morpheme entries",
+    "词典词条": "Dictionary entries",
+    "筛选要统计的条目": "Filter the entries to count",
+    "条目包含内容": "Entry contains",
+    "正在读取统计分类…": "Loading entry categories…",
+    "原分类已不存在，请重新选择": "The original category is unavailable; please select again",
+    "统计分类尚未读取完成": "Entry categories have not finished loading",
+    "分类值": "Category value",
+    "请选择分类值": "Select a value",
+    "自定义条目统计": "Custom entry statistics",
+    "运行统计": "Run statistics",
+    "符合条件条目": "Entries matching conditions",
+    "语料中条目": "Entries attested in scope",
+    "分组／条目": "Group / entry",
+    "条目数": "Distinct entries",
+    "按条目分别统计": "Each entry separately",
+    "未分类／未填写": "Unclassified / empty",
+    "条件只筛选条目自身资料，例句不参与条目筛选。分类未填写的项另列；一个条目属于多个组时，各组次数可能重叠。": "Conditions filter the entry’s own information; examples are excluded. Empty classifications form a separate group. An entry may belong to multiple groups, so group counts can overlap.",
+    "只计入符合条目条件的有效关联；整词与相同单语素关联去重。占比以筛选后的关联出现次数为分母；同一条目属于多个组时可重复归组，各组不能直接相加。统计概况和词形频率仍展示整个语料范围。": "Count valid links to entries matching the conditions. Deduplicate identical whole-word and single-morpheme links. Percentages use the selected link occurrences; entries may occur in multiple groups, whose counts cannot simply be added. Overview and word-form frequencies still show the entire material scope.",
+    "统计对象无效": "Invalid entry statistics target",
+    "条目统计条件无效": "Invalid entry statistics conditions",
+    "统计分类字段已删除或不属于当前语言，请重新选择": "The grouping field was deleted or belongs to another language; please select again",
+    "此结果没有自定义条目统计，请重新运行": "This result has no custom entry statistics; please run it again",
+    "范围词次": "Scope tokens",
+    "范围词形数": "Scope word forms",
+    "范围句数": "Scope sentences",
+    "字段": "Field",
+    "创建时间": "Created at",
+    "修改时间": "Modified at"
   },
   "messages": {
     "9ad6d8c888c8c3": {
@@ -12766,8 +12945,8 @@
       "en": "Classes"
     },
     "8f2e7b4f762035": {
-      "zh": "<h2>类管理</h2><p>词类、子类、形式类型、形态类、使用标签类型和语法标签分类按语言保存。重命名同步更新引用；删除前须先解除引用和子类。</p><label>语言<select id=\"class-language\"></select></label><label>类别<select id=\"class-kind\"><option value=\"pos\">词类与子类</option><option value=\"grammar\">语法标签分类</option><option value=\"form\">形式类型</option><option value=\"morph\">形态类</option><option value=\"usage_tag\">使用标签类型</option></select></label><div id=\"class-list\"></div><button id=\"class-new\">＋ 新建类</button><form id=\"class-form\"><h3 id=\"class-title\">新建类</h3><label>名称<input id=\"class-name\" required></label><label>父类<select id=\"class-parent\"></select></label><label>备注<textarea id=\"class-notes\" rows=\"2\"></textarea></label><p id=\"class-error\" role=\"alert\"></p><button class=\"primary\" type=\"submit\">保存类</button></form><h3>语法标签定义</h3><p>如 2poss 等标签仍在标签库中统一定义，并在词条及用例的语法特征选择区复用。</p><button id=\"class-tags-open\">打开语法标签库</button>",
-      "en": "<h2>Classes</h2><p>POS, subclasses, form types, morphological classes, usage-label types, and grammatical-label categories are stored per language. Renaming updates references. Remove references and subclasses before deleting a class.</p><label>Language<select id=\"class-language\"></select></label><label>Category<select id=\"class-kind\"><option value=\"pos\">POS &amp; subclasses</option><option value=\"grammar\">Grammatical-label categories</option><option value=\"form\">Form type</option><option value=\"morph\">Morphological class</option><option value=\"usage_tag\">Label type</option></select></label><div id=\"class-list\"></div><button id=\"class-new\">＋ New class</button><form id=\"class-form\"><h3 id=\"class-title\">New class</h3><label>Name<input id=\"class-name\" required></label><label>Parent class<select id=\"class-parent\"></select></label><label>Notes<textarea id=\"class-notes\" rows=\"2\"></textarea></label><p id=\"class-error\" role=\"alert\"></p><button class=\"primary\" type=\"submit\">Save class</button></form><h3>Grammatical-label definitions</h3><p>Define labels such as 2poss in the label inventory. They are shared by grammatical-feature selectors in entries and occurrences.</p><button id=\"class-tags-open\">Open label inventory</button>"
+      "zh": "<h2>类管理</h2><p>各类按语言保存，可拖动行首把手排序。重命名同步更新引用；删除时解除条目绑定，保留条目内容，可撤销。</p><label>语言<select id=\"class-language\"></select></label><label>类别<select id=\"class-kind\"><option value=\"pos\">词类与子类</option><option value=\"grammar\">语法标签分类</option><option value=\"form\">形式类型</option><option value=\"morph\">形态类</option><option value=\"usage_tag\">使用标签类型</option></select></label><div id=\"class-list\"></div><button id=\"class-new\">＋ 新建类</button><form id=\"class-form\"><h3 id=\"class-title\">新建类</h3><label>名称<input id=\"class-name\" required></label><label>父类<select id=\"class-parent\"></select></label><label>备注<textarea id=\"class-notes\" rows=\"2\"></textarea></label><p id=\"class-error\" role=\"alert\"></p><button class=\"primary\" type=\"submit\">保存类</button></form><h3>语法标签定义</h3><p>如 2poss 等标签仍在标签库中统一定义，并在词条及用例的语法特征选择区复用。</p><button id=\"class-tags-open\">打开语法标签库</button>",
+      "en": "<h2>Classes</h2><p>Classes are stored per language. Drag the handle to reorder. Renaming updates references; deleting detaches entries and preserves their contents. You can undo these changes.</p><label>Language<select id=\"class-language\"></select></label><label>Category<select id=\"class-kind\"><option value=\"pos\">POS &amp; subclasses</option><option value=\"grammar\">Grammatical-label categories</option><option value=\"form\">Form type</option><option value=\"morph\">Morphological class</option><option value=\"usage_tag\">Label type</option></select></label><div id=\"class-list\"></div><button id=\"class-new\">＋ New class</button><form id=\"class-form\"><h3 id=\"class-title\">New class</h3><label>Name<input id=\"class-name\" required></label><label>Parent class<select id=\"class-parent\"></select></label><label>Notes<textarea id=\"class-notes\" rows=\"2\"></textarea></label><p id=\"class-error\" role=\"alert\"></p><button class=\"primary\" type=\"submit\">Save class</button></form><h3>Grammatical-label definitions</h3><p>Define labels such as 2poss in the label inventory. They are shared by grammatical-feature selectors in entries and occurrences.</p><button id=\"class-tags-open\">Open label inventory</button>"
     },
     "377bf415213fa7": {
       "zh": "尚未指定",
@@ -12798,8 +12977,8 @@
       "en": "<div class=\"class-row ⟦0⟧\"><strong>⟦1⟧</strong><small>⟦2⟧</small><button data-class-edit=\"⟦3⟧\">Edit</button><button data-class-delete=\"⟦4⟧\">Delete</button></div>"
     },
     "ff2020009c2980": {
-      "zh": "删除类「⟦0⟧」？此操作可撤销。",
-      "en": "Delete class “⟦0⟧”? You can undo this."
+      "zh": "删除类「⟦0⟧」及其子类，并解除条目绑定？条目内容保留，可撤销。",
+      "en": "Delete class “⟦0⟧” and its subclasses and detach entries? Entry contents are retained. You can undo this."
     },
     "a577b2ea8da2b1": {
       "zh": "已保存",
@@ -13602,8 +13781,8 @@
       "en": "Select entries first"
     },
     "7497b64d7b90fd": {
-      "zh": "<h2>管理语义分类</h2><p>分类属于当前语言。选择父类可调整层级；同级顺序数值小的在前。</p><label>已有分类<select id=\"semantic-existing\"></select></label><button id=\"semantic-new\">＋ 新建分类</button><form id=\"semantic-form\"><label>名称<input id=\"semantic-name\" required></label><label>父类<select id=\"semantic-parent\"></select></label><label>同级顺序<input id=\"semantic-position\" type=\"number\" step=\"1\" value=\"0\" required></label><button type=\"submit\">保存分类</button></form><label>删除时如何处理子类<select id=\"semantic-delete-mode\"><option value=\"promote\">子类提升到上一层</option><option value=\"subtree\">同时删除全部子类</option></select></label><button id=\"semantic-delete\" class=\"danger\">删除当前分类</button><p id=\"semantic-error\" role=\"alert\"></p>",
-      "en": "<h2>Manage semantic classes</h2><p>Classes belong to the current language. Choose a parent to change the hierarchy. Lower sibling-order numbers appear first.</p><label>Existing classes<select id=\"semantic-existing\"></select></label><button id=\"semantic-new\">＋ New class</button><form id=\"semantic-form\"><label>Name<input id=\"semantic-name\" required></label><label>Parent class<select id=\"semantic-parent\"></select></label><label>Sibling order<input id=\"semantic-position\" type=\"number\" step=\"1\" value=\"0\" required></label><button type=\"submit\">Save class</button></form><label>On deletion, handle subclasses by<select id=\"semantic-delete-mode\"><option value=\"promote\">Move subclasses up one level</option><option value=\"subtree\">Delete all subclasses</option></select></label><button id=\"semantic-delete\" class=\"danger\">Delete current class</button><p id=\"semantic-error\" role=\"alert\"></p>"
+      "zh": "<h2>管理语义分类</h2><p>选择父类可调整层级；拖动行首把手调整同级顺序。</p><label>已有分类<select id=\"semantic-existing\"></select></label><button id=\"semantic-new\">＋ 新建分类</button><form id=\"semantic-form\"><label>名称<input id=\"semantic-name\" required></label><label>父类<select id=\"semantic-parent\"></select></label><label>同级顺序<input id=\"semantic-position\" type=\"number\" step=\"1\" value=\"0\" required></label><button type=\"submit\">保存分类</button></form><label>删除时如何处理子类<select id=\"semantic-delete-mode\"><option value=\"promote\">子类提升到上一层</option><option value=\"subtree\">同时删除全部子类</option></select></label><button id=\"semantic-delete\" class=\"danger\">删除当前分类</button><p id=\"semantic-error\" role=\"alert\"></p>",
+      "en": "<h2>Manage semantic classes</h2><p>Choose a parent to change the hierarchy; drag the handle to reorder siblings.</p><label>Existing classes<select id=\"semantic-existing\"></select></label><button id=\"semantic-new\">＋ New class</button><form id=\"semantic-form\"><label>Name<input id=\"semantic-name\" required></label><label>Parent class<select id=\"semantic-parent\"></select></label><label>Sibling order<input id=\"semantic-position\" type=\"number\" step=\"1\" value=\"0\" required></label><button type=\"submit\">Save class</button></form><label>On deletion, handle subclasses by<select id=\"semantic-delete-mode\"><option value=\"promote\">Move subclasses up one level</option><option value=\"subtree\">Delete all subclasses</option></select></label><button id=\"semantic-delete\" class=\"danger\">Delete current class</button><p id=\"semantic-error\" role=\"alert\"></p>"
     },
     "a12dd6bdc917e4": {
       "zh": "<h3>管理排序方案</h3><label>已有方案<select id=\"order-existing\"></select></label><button id=\"order-new\">＋ 新建方案</button><form id=\"order-form\"><label>名称<input id=\"order-name\" required></label><label>字母顺序<textarea id=\"order-alphabet\" rows=\"7\" spellcheck=\"false\" placeholder=\"b g a&#10;或 a b c ch d\"></textarea></label><small>以空格或换行分隔。支持 ch 等多字符单位，优先最长匹配。未列字符排在已列字符之后；共同前缀中短词在前。</small><label><input id=\"order-case\" type=\"checkbox\"> 区分大小写</label><button type=\"submit\">保存方案</button><button type=\"button\" id=\"order-preview\">预览实际词条顺序</button></form><div class=\"dictionary-org-actions\"><button id=\"order-copy\">复制当前方案</button><button id=\"order-delete\" class=\"danger\">删除当前方案</button></div><p id=\"order-error\" role=\"alert\"></p><p id=\"order-preview-info\"></p><ol id=\"order-preview-list\"></ol>",
@@ -13614,8 +13793,8 @@
       "en": "<option value=\"semantic\">Semantic class</option>"
     },
     "44323db1ba8c8d": {
-      "zh": "词类及子类、语义类、形态类、形式类型、使用标签类型和语法标签分类按语言管理。",
-      "en": "POS, subclasses, semantic classes, morphological classes, form types, usage-label types, and grammatical-label categories are managed per language."
+      "zh": "各类按语言保存，可拖动行首把手排序。重命名同步更新引用；删除时解除条目绑定，保留条目内容，可撤销。",
+      "en": "Classes are stored per language. Drag the handle to reorder. Renaming updates references; deleting detaches entries and preserves their contents. You can undo these changes."
     },
     "a98e2c8a3325c3": {
       "zh": "新建分类",
@@ -15998,12 +16177,12 @@
       "en": "<div class=\"hp-resize\" role=\"separator\" tabindex=\"0\" aria-label=\"Resize morpheme panel\" aria-orientation=\"vertical\" aria-valuemin=\"280\" aria-valuemax=\"620\"></div><header><h2>Morphemes &amp; source entries</h2><button type=\"button\" aria-label=\"Close morpheme panel\">×</button></header><div id=\"hp-inspector-content\"></div>"
     },
     "0dfbe10d18726f": {
-      "zh": "确认当前语言全部唯一匹配的读音？歧义和待核对项不会纳入。可撤销。",
-      "en": "Confirm all unique pronunciation matches in this language? Ambiguous matches and items to review are excluded. You can undo this."
+      "zh": "确认当前语言全部唯一匹配的读音？包含按修改后音系重新匹配的唯一候选；歧义、无法匹配及临时代用形式不会纳入。可撤销。",
+      "en": "Confirm all unique pronunciation matches in this language, including unique candidates matched again after phonology changes? Ambiguous, unmatched, and temporary forms are excluded. You can undo this."
     },
     "09b902679e774c": {
-      "zh": "<h2>音系与排序</h2><p>每种语言独立保存；按清单从上到下排列。匹配写法每行一个，∅ 表示空串（零声母或无调标记）。声调从读音末尾匹配，不自动转换调值或附加符号。</p><div id=\"hp-inventories\"></div><details><summary>复制或粘贴音系清单</summary><p>副本仅包含清单，不包含本语言已确认的读音归类。</p><textarea id=\"hp-copy\" rows=\"5\" aria-label=\"音系清单副本\"></textarea><button type=\"button\" id=\"hp-copy-out\">生成可复制文本</button><button type=\"button\" id=\"hp-copy-in\">载入文本到编辑区</button></details><p>修改或删除已使用的项目会使相关归类变为待核对；仅调整顺序不影响确认状态。</p><p id=\"hp-settings-error\" role=\"alert\"></p><button type=\"button\" class=\"primary\" id=\"hp-settings-save\">保存音系设置</button>",
-      "en": "<h2>Phonology &amp; order</h2><p>Stored separately per language and ordered top to bottom. Enter one matching notation per line; ∅ means an empty string (zero initial or no tone mark). Tones match the pronunciation's ending; tone values and diacritics are not converted.</p><div id=\"hp-inventories\"></div><details><summary>Copy or paste a sound inventory</summary><p>Copies include the inventory only, without this language's confirmed pronunciation classifications.</p><textarea id=\"hp-copy\" rows=\"5\" aria-label=\"Sound inventory copy\"></textarea><button type=\"button\" id=\"hp-copy-out\">Generate text to copy</button><button type=\"button\" id=\"hp-copy-in\">Load text into editor</button></details><p>Changing or deleting used items flags related classifications for review. Reordering alone preserves confirmation.</p><p id=\"hp-settings-error\" role=\"alert\"></p><button type=\"button\" class=\"primary\" id=\"hp-settings-save\">Save phonology settings</button>"
+      "zh": "<h2>音系与排序</h2><p>每种语言独立保存；按清单从上到下排列。匹配写法每行一个，∅ 表示空串（零声母或无调标记）。声调从读音末尾匹配，不自动转换调值或附加符号。</p><div id=\"hp-inventories\"></div><details><summary>复制或粘贴音系清单</summary><p>副本仅包含清单，不包含本语言已确认的读音归类。</p><textarea id=\"hp-copy\" rows=\"5\" aria-label=\"音系清单副本\"></textarea><button type=\"button\" id=\"hp-copy-out\">生成可复制文本</button><button type=\"button\" id=\"hp-copy-in\">载入文本到编辑区</button></details><p>修改名称或调整顺序保留已确认归类；修改匹配写法后仍符合原归类的读音继续保留，其余重新匹配，唯一候选可批量确认。</p><p id=\"hp-settings-error\" role=\"alert\"></p><button type=\"button\" class=\"primary\" id=\"hp-settings-save\">保存音系设置</button>",
+      "en": "<h2>Phonology &amp; order</h2><p>Stored separately per language and ordered top to bottom. Enter one matching notation per line; ∅ means an empty string (zero initial or no tone mark). Tones match the pronunciation's ending; tone values and diacritics are not converted.</p><div id=\"hp-inventories\"></div><details><summary>Copy or paste a sound inventory</summary><p>Copies include the inventory only, without this language's confirmed pronunciation classifications.</p><textarea id=\"hp-copy\" rows=\"5\" aria-label=\"Sound inventory copy\"></textarea><button type=\"button\" id=\"hp-copy-out\">Generate text to copy</button><button type=\"button\" id=\"hp-copy-in\">Load text into editor</button></details><p>Renaming or reordering preserves confirmed classifications. After matching notations change, classifications that still fit are kept; the rest are matched again, and unique candidates can be confirmed in batch.</p><p id=\"hp-settings-error\" role=\"alert\"></p><button type=\"button\" class=\"primary\" id=\"hp-settings-save\">Save phonology settings</button>"
     },
     "8867bb8bd47d33": {
       "zh": "<h2>读音归类</h2><p class=\"ipa\" id=\"hp-reading\"></p><p>此归类适用于当前语言中具有该完整读音的语素，不改变原读音或语素身份。</p><div id=\"hp-candidates\"></div><div id=\"hp-choice\" class=\"metadata-grid\"></div><p id=\"hp-classify-note\"></p><p id=\"hp-classify-error\" role=\"alert\"></p><div class=\"homophone-links\"><button type=\"button\" class=\"primary\" id=\"hp-confirm\">确认归类</button><button type=\"button\" id=\"hp-reset\">撤销此读音的人工归类</button></div>",
@@ -16098,8 +16277,8 @@
       "en": "Analysis type"
     },
     "a382cbf0efce9d": {
-      "zh": "<button data-analysis-type=\"query\" aria-pressed=\"true\">检索与分布</button><button data-analysis-type=\"counts\" aria-pressed=\"false\">词数与句数统计</button><button data-analysis-type=\"homophones\" aria-pressed=\"false\">同音语素表</button>",
-      "en": "<button data-analysis-type=\"query\" aria-pressed=\"true\">Search &amp; distribution</button><button data-analysis-type=\"counts\" aria-pressed=\"false\">Counts</button><button data-analysis-type=\"homophones\" aria-pressed=\"false\">Homophones</button>"
+      "zh": "<button data-analysis-type=\"query\" aria-pressed=\"true\">检索与分布</button><button data-analysis-type=\"counts\" aria-pressed=\"false\">词次、词形与语素统计</button><button data-analysis-type=\"homophones\" aria-pressed=\"false\">同音语素表</button>",
+      "en": "<button data-analysis-type=\"query\" aria-pressed=\"true\">Search &amp; distribution</button><button data-analysis-type=\"counts\" aria-pressed=\"false\">Vocabulary statistics</button><button data-analysis-type=\"homophones\" aria-pressed=\"false\">Homophones</button>"
     },
     "20d8da72fd74d9": {
       "zh": "<form id=\"homophone-form\"><div class=\"homophone-options\"><label>展示书写类型<select id=\"homophone-writing\"><option value=\"\">全部书写类型</option></select></label><label>检索<input id=\"homophone-query\" placeholder=\"读音、书写、释义或来源词条\"></label><label><input type=\"checkbox\" id=\"homophone-fallback\">未填读音时临时使用语素形式</label><label><input type=\"checkbox\" id=\"homophone-multiple\">仅显示含多个语素的读音</label><button class=\"primary\" id=\"homophone-run\">生成同音语素表</button></div><p class=\"analysis-help\">完整读音可按自定义音系归类；声韵调表只显示已确认项。同一语素在同一读音下只列一次；未整理组分分别保留。临时使用形式不会改写读音字段。</p></form><p id=\"homophone-status\" role=\"status\"></p><p id=\"homophone-error\" role=\"alert\"></p><nav id=\"homophone-pages\"></nav><div id=\"homophone-results\"></div><details id=\"homophone-review\"><summary>待整理内容</summary><nav id=\"homophone-review-pages\"></nav><div id=\"homophone-review-results\"></div></details><nav id=\"homophone-bottom-pages\" hidden></nav>",
@@ -16734,8 +16913,8 @@
       "en": "Auto-link entries"
     },
     "7681b55489796b": {
-      "zh": "<h2>自动关联词典</h2><p>词形须完全一致；标注须完整匹配义项简短释义与条目、词类用法、具体形式的固有特征。普通尾部标签按标签库识别（含别名），允许调整顺序，不能缺少或多出特征。匹配整词和切分后的语素；不重复关联未切分的单个语素。</p><p>已登记的形式变体参与匹配；自定义书写形式不参与。复杂关系、括号和语素边界保留结构，不推断其与固有特征的组合。已有的关联会保留；多个条目或意义同时匹配时，留待手动选择。</p><label>搜索范围<select id=\"auto-link-scope\"></select></label><fieldset id=\"auto-mark-options\"><legend>忽略词形标记的候选（需勾选确认）</legend><label><input type=\"checkbox\" value=\"-\" checked> -</label> <label><input type=\"checkbox\" value=\"=\" checked> =</label> <label><input type=\"checkbox\" value=\".\" checked> .</label><label>忽略位置<select id=\"auto-mark-position\"><option value=\"edges\">仅首尾</option><option value=\"all\">包含内部</option></select></label><small>比较去掉所选标记后的完整单位，不查找任意子串。完全匹配排前；同标注的忽略标记候选仍会列出，多目标需选择。</small></fieldset><button id=\"auto-link-preview\">预览匹配</button><p id=\"auto-link-summary\" role=\"status\"></p><div id=\"auto-link-results\"></div><p id=\"auto-link-error\" role=\"alert\"></p><button id=\"auto-link-apply\" class=\"primary\" disabled>关联全部唯一匹配</button><span id=\"auto-candidate-actions\" hidden><label><input type=\"checkbox\" id=\"auto-candidate-all\"> 全选</label><button id=\"auto-candidate-apply\" disabled>确认关联所选候选</button><small id=\"auto-candidate-selection\" role=\"status\"></small></span>",
-      "en": "<h2>Auto-link entries</h2><p>Forms must match exactly. Glosses must include the sense gloss and all inherent entry, POS-group, and form features. Trailing labels, including aliases, may be reordered but not omitted or added. Matches whole words and segmented morphemes without duplicating links to an unsegmented single morpheme.</p><p>Registered variants participate; custom written forms do not. Complex relations, brackets, and morpheme boundaries retain their structure. Feature combinations are not inferred. Existing links are retained; multiple matching entries or meanings require manual selection.</p><label>Search scope<select id=\"auto-link-scope\"></select></label><fieldset id=\"auto-mark-options\"><legend>Candidates ignoring form markers (confirm selection)</legend><label><input type=\"checkbox\" value=\"-\" checked> -</label> <label><input type=\"checkbox\" value=\"=\" checked> =</label> <label><input type=\"checkbox\" value=\".\" checked> .</label><label>Ignore markers at<select id=\"auto-mark-position\"><option value=\"edges\">Edges only</option><option value=\"all\">Include interior</option></select></label><small>Compares complete units after removing selected markers, not arbitrary substrings. Exact matches appear first. Same-gloss candidates ignoring markers are also shown; choose among multiple targets.</small></fieldset><button id=\"auto-link-preview\">Preview matches</button><p id=\"auto-link-summary\" role=\"status\"></p><div id=\"auto-link-results\"></div><p id=\"auto-link-error\" role=\"alert\"></p><button id=\"auto-link-apply\" class=\"primary\" disabled>Link all unique matches</button><span id=\"auto-candidate-actions\" hidden><label><input type=\"checkbox\" id=\"auto-candidate-all\"> Select all</label><button id=\"auto-candidate-apply\" disabled>Confirm selected candidates</button><small id=\"auto-candidate-selection\" role=\"status\"></small></span>"
+      "zh": "<h2>自动关联词典</h2><p>词形须完全一致；标注须完整匹配义项简短释义与条目、词类用法、具体形式的固有特征。普通尾部标签按标签库识别（含别名），允许调整顺序，不能缺少或多出特征。匹配整词和切分后的语素；不重复关联未切分的单个语素。</p><p>已登记的形式变体参与匹配；自定义书写形式不参与。复杂关系、括号和语素边界保留结构，不推断其与固有特征的组合。已有的关联会保留；多个条目或意义同时匹配时，留待手动选择。</p><label>搜索范围<select id=\"auto-link-scope\"></select></label><fieldset id=\"auto-mark-options\"><legend>忽略词形标记的候选（需勾选确认）</legend><label><input type=\"checkbox\" value=\"-\" checked> -</label> <label><input type=\"checkbox\" value=\"=\" checked> =</label> <label><input type=\"checkbox\" value=\".\" checked> .</label><label>忽略位置<select id=\"auto-mark-position\"><option value=\"edges\">仅首尾</option><option value=\"all\">包含内部</option></select></label><small>比较去掉所选标记后的完整单位，不查找任意子串。完全匹配排前；同标注的忽略标记候选仍会列出，多目标需选择。</small></fieldset><button id=\"auto-link-preview\">预览匹配</button><p id=\"auto-link-summary\" role=\"status\"></p><div id=\"auto-link-results\"></div><p id=\"auto-link-error\" role=\"alert\"></p><button id=\"auto-link-apply\" class=\"primary\" disabled>关联全部唯一匹配</button><span id=\"auto-candidate-actions\" hidden><label><input type=\"checkbox\" id=\"auto-candidate-all\"> 选择全部无歧义项</label><button id=\"auto-candidate-apply\" disabled>确认关联所选候选</button><small id=\"auto-candidate-selection\" role=\"status\"></small></span>",
+      "en": "<h2>Auto-link entries</h2><p>Forms must match exactly. Glosses must include the sense gloss and all inherent entry, POS-group, and form features. Trailing labels, including aliases, may be reordered but not omitted or added. Matches whole words and segmented morphemes without duplicating links to an unsegmented single morpheme.</p><p>Registered variants participate; custom written forms do not. Complex relations, brackets, and morpheme boundaries retain their structure. Feature combinations are not inferred. Existing links are retained; multiple matching entries or meanings require manual selection.</p><label>Search scope<select id=\"auto-link-scope\"></select></label><fieldset id=\"auto-mark-options\"><legend>Candidates ignoring form markers (confirm selection)</legend><label><input type=\"checkbox\" value=\"-\" checked> -</label> <label><input type=\"checkbox\" value=\"=\" checked> =</label> <label><input type=\"checkbox\" value=\".\" checked> .</label><label>Ignore markers at<select id=\"auto-mark-position\"><option value=\"edges\">Edges only</option><option value=\"all\">Include interior</option></select></label><small>Compares complete units after removing selected markers, not arbitrary substrings. Exact matches appear first. Same-gloss candidates ignoring markers are also shown; choose among multiple targets.</small></fieldset><button id=\"auto-link-preview\">Preview matches</button><p id=\"auto-link-summary\" role=\"status\"></p><div id=\"auto-link-results\"></div><p id=\"auto-link-error\" role=\"alert\"></p><button id=\"auto-link-apply\" class=\"primary\" disabled>Link all unique matches</button><span id=\"auto-candidate-actions\" hidden><label><input type=\"checkbox\" id=\"auto-candidate-all\"> Select all unambiguous</label><button id=\"auto-candidate-apply\" disabled>Confirm selected candidates</button><small id=\"auto-candidate-selection\" role=\"status\"></small></span>"
     },
     "eb4ff1c1c1de7f": {
       "zh": "请先选择一个语言，再自动关联词典。",
@@ -16794,12 +16973,12 @@
       "en": "Selected: ⟦0⟧⟦1⟧"
     },
     "16726a9a47c593": {
-      "zh": " · ⟦0⟧ 处有多个目标，需手动选择",
-      "en": " · Multiple targets at ⟦0⟧ positions; select manually"
+      "zh": " · ⟦0⟧ 处有多个目标，未自动勾选；请选一项",
+      "en": " · Choose one target per occurrence; awaiting a choice: ⟦0⟧ (not auto-selected)"
     },
     "7141b4bb62fc3e": {
-      "zh": "勾选全部无歧义候选（包括尚未展开的候选）；有多个目标时保留手动选择",
-      "en": "Select all unambiguous candidates, including collapsed ones; keep manual choices where several targets exist"
+      "zh": "勾选全部无歧义且无冲突的候选，包括尚未展开项；多目标或共用片段须手选，取消勾选会清空选择",
+      "en": "Select every unambiguous, non-conflicting candidate, including those not yet shown. Choose targets or shared segments manually. Unchecking clears the selection."
     },
     "29468538b235ff": {
       "zh": "<input type=\"checkbox\" data-auto-candidate=\"⟦0⟧\" data-unit=\"⟦1⟧\"><span>⟦2⟧<br><small>⟦3⟧ · 第 ⟦4⟧ 句 · ⟦5⟧</small><p>目标：⟦6⟧ / ⟦7⟧：⟦8⟧⟦9⟧⟦10⟧</p><p>⟦11⟧</p></span>",
@@ -18918,7 +19097,7 @@
       "en": "No extra labels"
     },
     "8a656c7c79d93f": {
-      "zh": "<h3>变形表 · Paradigm</h3><p><small>可选。简短标注可独立填写，或继承基本义项并附加标签。表格使用的词形在保存时自动登记为变体；要彻底移除形式，请从表格中一并移除。未填写与无此形式分别保留。</small></p><p id=\"paradigm-status\" role=\"status\"></p><div id=\"paradigm-tables\"></div><div class=\"paradigm-toolbar\"><select id=\"paradigm-template\" aria-label=\"选择变形表模板\"></select><button type=\"button\" id=\"paradigm-add\">＋ 添加变形表</button><button type=\"button\" id=\"paradigm-manage\">管理本语言模板</button></div>",
+      "zh": "<h3>变形表</h3><p><small>可选。简短标注可独立填写，或继承基本义项并附加标签。表格使用的词形在保存时自动登记为变体；要彻底移除形式，请从表格中一并移除。未填写与无此形式分别保留。</small></p><p id=\"paradigm-status\" role=\"status\"></p><div id=\"paradigm-tables\"></div><div class=\"paradigm-toolbar\"><select id=\"paradigm-template\" aria-label=\"选择变形表模板\"></select><button type=\"button\" id=\"paradigm-add\">＋ 添加变形表</button><button type=\"button\" id=\"paradigm-manage\">管理本语言模板</button></div>",
       "en": "<h3>Paradigm</h3><p><small>Optional. Enter a custom gloss or inherit a base sense with extra labels. Forms used in the table register as variants on save. Remove forms from the table too when deleting them completely. Blank and nonexistent forms remain distinct.</small></p><p id=\"paradigm-status\" role=\"status\"></p><div id=\"paradigm-tables\"></div><div class=\"paradigm-toolbar\"><select id=\"paradigm-template\" aria-label=\"Select paradigm template\"></select><button type=\"button\" id=\"paradigm-add\">＋ Add paradigm</button><button type=\"button\" id=\"paradigm-manage\">Manage templates for this language</button></div>"
     },
     "b08a3493e10143": {
@@ -19166,7 +19345,7 @@
       "en": "Inflection"
     },
     "144309ad6ace7b": {
-      "zh": "变形表 · Paradigm",
+      "zh": "变形表",
       "en": "Paradigm"
     },
     "0ebb729643728a": {
@@ -19194,12 +19373,12 @@
       "en": "This POS group still has paradigms. Reassign or remove those tables before deleting the group."
     },
     "242d4f9d98810b": {
-      "zh": "<h2>变形表模板</h2><p>模板保存栏目、行类别与预设附加标签；修改或删除模板不改变词条中已加入的表格。</p><label>语言<select id=\"paradigm-template-language\"></select></label><label>模板<select id=\"paradigm-template-choice\"></select></label><form id=\"paradigm-template-form\"><label>名称<input id=\"paradigm-template-title\" required></label><label>栏目（用 | 分开）<input id=\"paradigm-template-dimensions\" placeholder=\"数 | 格\"></label><label>每行的类别（每行一组，用 | 分开）<textarea id=\"paradigm-template-rows\" rows=\"8\" placeholder=\"单数 | 主格&#10;单数 | 属格&#10;复数 | 主格\"></textarea></label><p id=\"paradigm-template-error\" role=\"alert\"></p><button type=\"submit\" class=\"primary\">保存模板</button><button type=\"button\" id=\"paradigm-template-delete\">删除模板</button></form>",
-      "en": "<h2>Paradigm template</h2><p>Templates save columns, row categories, and preset extra labels. Editing or deleting a template does not change tables already added to entries.</p><label>Language<select id=\"paradigm-template-language\"></select></label><label>Template<select id=\"paradigm-template-choice\"></select></label><form id=\"paradigm-template-form\"><label>Name<input id=\"paradigm-template-title\" required></label><label>Columns (separate with |)<input id=\"paradigm-template-dimensions\" placeholder=\"Number | Case\"></label><label>Row categories (one row per line; separate with |)<textarea id=\"paradigm-template-rows\" rows=\"8\" placeholder=\"Singular | Nominative\nSingular | Genitive\nPlural | Nominative\"></textarea></label><p id=\"paradigm-template-error\" role=\"alert\"></p><button type=\"submit\" class=\"primary\">Save template</button><button type=\"button\" id=\"paradigm-template-delete\">Delete template</button></form>"
+      "zh": "<h2>变形表模板</h2><p>模板修改会同步到已使用该模板的词条。删除已有内容的行或模板时须确认；词形变体与例句正文保留，相关意义的关联解除，可撤销。</p><label>语言<select id=\"paradigm-template-language\"></select></label><label>模板<select id=\"paradigm-template-choice\"></select></label><form id=\"paradigm-template-form\"><label>名称<input id=\"paradigm-template-title\" required></label><label>栏目（用 | 分开）<input id=\"paradigm-template-dimensions\" placeholder=\"数 | 格\"></label><label>每行的类别（每行一组，用 | 分开）<textarea id=\"paradigm-template-rows\" rows=\"8\" placeholder=\"单数 | 主格&#10;单数 | 属格&#10;复数 | 主格\"></textarea></label><p id=\"paradigm-template-error\" role=\"alert\"></p><button type=\"submit\" class=\"primary\">保存模板</button><button type=\"button\" id=\"paradigm-template-delete\">删除模板</button></form>",
+      "en": "<h2>Paradigm template</h2><p>Template changes synchronize with entries that use them. Deleting populated rows or templates requires confirmation. Form variants and sentence text are retained; links to removed meanings are detached. Undo is available.</p><label>Language<select id=\"paradigm-template-language\"></select></label><label>Template<select id=\"paradigm-template-choice\"></select></label><form id=\"paradigm-template-form\"><label>Name<input id=\"paradigm-template-title\" required></label><label>Columns (separate with |)<input id=\"paradigm-template-dimensions\" placeholder=\"Number | Case\"></label><label>Row categories (one row per line; separate with |)<textarea id=\"paradigm-template-rows\" rows=\"8\" placeholder=\"Singular | Nominative\nSingular | Genitive\nPlural | Nominative\"></textarea></label><p id=\"paradigm-template-error\" role=\"alert\"></p><button type=\"submit\" class=\"primary\">Save template</button><button type=\"button\" id=\"paradigm-template-delete\">Delete template</button></form>"
     },
     "b1ecc274d1e5c8": {
-      "zh": "<small>每行预设附加标签（可留空；加入词条后独立保存）</small>",
-      "en": "<small>Preset extra labels per row (optional; entry copies are independent)</small>"
+      "zh": "<small>每行预设附加标签（可留空；词条中单独修改的值保留）</small>",
+      "en": "<small>Preset labels for each row (optional; entry-specific changes are retained)</small>"
     },
     "6b428b1fe50634": {
       "zh": "<span>⟦0⟧</span><input aria-label=\"模板预设附加标签\" placeholder=\"如 NOM\"><select aria-label=\"选择已有语法标签\"></select>",

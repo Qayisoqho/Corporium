@@ -1,5 +1,5 @@
 """Application identity shared by the desktop shell and About page."""
-VERSION = '0.9.01026.4'
+VERSION = '0.9.01030'
 NAME = 'Corporium'
 DEVELOPER = 'Erči Ša.'
 PROJECT_URL = 'https://github.com/Qayisoqho/Corporium'

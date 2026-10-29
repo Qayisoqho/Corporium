@@ -468,7 +468,7 @@ html[data-home=false] #example-library .entry.has-sentence-actions .sentence-act
 html[data-home=false] :is(#corpus-workspace,#dictionary-workspace,#example-library,#survey-workspace,#grammar-workspace,#timeline-workspace,#analysis-workspace) .editable-example .sentence-actions>button{padding:3px 7px;background:transparent;border:1px solid var(--line);color:var(--ink)}
 html[data-home=false] .editable-example>.object-media-controls{float:none;display:flex;justify-content:flex-end;width:100%;min-width:0;margin:4px 0 8px;gap:6px;clear:both}
 html[data-home=false] .editable-example>.object-media-controls :is(select,.object-media-speakers){min-width:0;max-width:100%;overflow-wrap:anywhere}
-@media(max-width:600px){html[data-home=false] :is(.entry,.lex-example).has-sentence-actions .entry-head{padding-right:0;padding-top:36px}}
+@media(max-width:800px){html[data-home=false] :is(.entry,.lex-example).has-sentence-actions .entry-head{padding-right:0;padding-top:calc(2rem + 8px)}html[data-home=false] #corpus-workspace #results .has-sentence-actions>.sentence-number,html[data-home=false] :is(.entry,.lex-example).has-sentence-actions>.sentence-number{top:calc(2rem + 24px)}}
 
 /* Shared morpheme registry, using the current theme's surfaces and controls. */
 .morpheme-tabs{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
@@ -628,7 +628,7 @@ html[data-home=false] #dictionary-detail .lex-example-bottom>.lex-example-footer
 html[data-home=false] .editable-example .object-media-speakers{font-family:var(--ui-font),'Microsoft YaHei',sans-serif;font-size:.75rem;line-height:20px}
 /* Form buttons keep the sentence's reading size instead of command typography. */
 html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .editable-example{font-size:.9375rem}
-html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .editable-example .word .form{font-size:calc(1.125rem * var(--form-scale,1))}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .editable-example .word .form{font-size:calc(var(--example-font-size,1.125rem) * var(--form-scale,1))}
 .hp-sound-choice,#hp-reading,#hp-pending-list button.ipa,#hp-inspector .ipa{font-family:IPAPANNEW,serif!important}
 
 /* Long tasks share theme colors; the native modal keeps the work area inert. */
@@ -684,6 +684,7 @@ html[data-home=false] .editable-example .inline-words>.compact-symbol{padding-in
 html[data-home=false] .editable-example .inline-words>.compact-symbol input.inline-piece{padding-inline:2px!important;width:100%!important}
 html[data-home=false]:has(.editable-example [data-inline-save]) #add{visibility:hidden}
 .inspection-origin{outline:1px dashed color-mix(in srgb,var(--ink) 78%,var(--muted));outline-offset:3px;border-radius:3px;background:color-mix(in srgb,var(--green) 5%,transparent)}
+.auto-candidate-note{display:block;margin:0 0 4px;color:var(--muted);font-weight:600}
 html[data-home=false] .editable-example .words:not(.inline-words)>.word:not(.punctuation-unit,.phonological-boundary){cursor:pointer}
 
 /* One compact row per text. Only overflowing titles animate, while hovered. */
@@ -1062,17 +1063,17 @@ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .editable-example
 #language-dialog .language-typography-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,.8fr);gap:0 12px;align-items:end}
 #language-dialog .language-typography-grid label{min-width:0}#language-dialog .language-typography-grid select{width:100%;min-width:0}
 @media(max-width:600px){#language-dialog .language-typography-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}#language-dialog .language-typography-grid label:nth-child(3n+1){grid-column:1/-1}}
-.language-body .word:not(.analysis-context-word) .form{font-size:calc(1.125rem * var(--form-scale,1))}
+.language-body .word:not(.analysis-context-word) .form{font-size:calc(var(--example-font-size,1.125rem) * var(--form-scale,1))}
 .language-body .gloss{font-style:var(--gloss-style,normal)}
-.language-body .word:not(.analysis-context-word) .gloss{font-size:calc(1rem * var(--gloss-scale,1))}
-.language-body .translation,.language-body [data-inline-field=translation],#editor #translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(.9375rem * var(--translation-scale,1))}
+.language-body .word:not(.analysis-context-word) .gloss{font-size:calc(var(--example-font-size,1.125rem) * var(--gloss-scale,1))}
+.language-body .translation,.language-body [data-inline-field=translation],#editor #translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--translation-scale,1))}
 html[data-home=false] .editable-example .words:not(.inline-words)>.word.hit{padding-inline:0}
-#home-example-original{font-style:var(--form-style,italic);font-weight:var(--form-weight,400);font-size:calc(clamp(1.05rem,2vw,1.25rem) * var(--form-scale,1) * var(--home-example-scale))}
-#home-example-original.home-ipa{font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400);font-size:calc(clamp(1.05rem,2vw,1.25rem) * var(--ipa-scale,1) * var(--home-example-scale))}
-#home-example-translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(1rem * var(--translation-scale,1) * var(--home-example-scale))}
+#home-example-original{font-style:var(--form-style,italic);font-weight:var(--form-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--form-scale,1) * var(--home-example-scale))}
+#home-example-original.home-ipa{font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--ipa-scale,1) * var(--home-example-scale))}
+#home-example-translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--translation-scale,1) * var(--home-example-scale))}
 
-#standalone-editor #standalone-ipa{font-family:var(--ipa-font,IPAPANNEW);font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400);font-size:calc(1.1875rem * var(--ipa-scale,1))}
-#standalone-editor #standalone-translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(.9375rem * var(--translation-scale,1))}
+#standalone-editor #standalone-ipa{font-family:var(--ipa-font,IPAPANNEW);font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--ipa-scale,1))}
+#standalone-editor #standalone-translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--translation-scale,1))}
 
 #editor #ipa{font-family:var(--ipa-font,IPAPANNEW);font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400)}
 
@@ -1164,3 +1165,13 @@ html[data-home=false] .editable-example .words:not(.inline-words)>.word.hit{padd
 #redup-dialog{width:620px;max-width:calc(100vw - 32px)}
 .redup-pair{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px}.redup-pair select{width:100%;min-width:0}.redup-row,.redup-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.redup-row{padding:5px 0}.redup-row>span{flex:1;min-width:120px}.redup-actions{margin:8px 0}.redup-actions label{display:flex;align-items:center;gap:6px;margin:0}.redup-summary,.redup-candidate{font-size:.8em;opacity:.85}.redup-summary button{font:inherit;padding:1px 5px}#redup-notes{width:100%}#redup-help{display:block;margin-top:6px}
 .redup-actions label{white-space:nowrap}.redup-actions label select{width:auto;min-width:100px}
+
+.class-row .class-drag-handle{flex:none;width:24px;min-width:24px;padding:2px!important;cursor:grab;align-self:center;background:transparent}.class-drop-before{box-shadow:0 -2px var(--green)}#semantic-class-list .class-row>button[data-semantic-edit]{flex:1;text-align:left;background:transparent;border:0;padding:4px 2px}
+
+.sense-addition-controls{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:4px 0 10px}.sense-addition-controls>label{flex:1 1 170px}.sense-addition-controls .sense-addition-toggle{display:flex;align-items:center;gap:5px;flex:0 1 auto;white-space:nowrap;padding:8px 0}.sense-addition-toggle input{width:auto}.sense-addition-preview{flex:1 1 100%;font-size:.85em;overflow-wrap:anywhere}.morpheme-core-fields:has(>.sense-addition-controls){flex-wrap:wrap}.morpheme-core-fields>.sense-addition-controls{flex:1 1 100%;grid-column:1/-1}
+
+.quick-sense-addition{grid-column:1/-1;min-width:0}.quick-sense-addition summary{font-size:.8em}.quick-sense-addition .sense-addition-controls{margin:4px 0}
+.sense-addition-controls>label{min-width:0;max-width:100%}.sense-addition-controls :is(input,select){min-width:0;max-width:100%}.sense-addition-controls .sense-addition-toggle{white-space:normal}.sense-addition-toggle input{flex:none}
+
+/* Example rows share an absolute root-rem base; each language supplies its own ratios. */
+:root{--example-font-size:1.125rem}

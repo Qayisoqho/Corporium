@@ -26,7 +26,7 @@ import analysis_payload
 import grammaticality
 
 TABLES=('analysis_state','analysis_runs','analysis_saved','analysis_groups','analysis_evidence')
-VERSION=12
+VERSION=14
 FIELDS=('reduplication','form','morpheme','tag','lexeme','pos','ipa','translation','notes','grammaticality')
 SENTENCE_FIELDS=('ipa','translation','notes','grammaticality')
 DIMENSIONS=('value','form','tag','lexeme','pos','text','sentence_speaker','speakers','place','date','genre','folder','grammaticality')
@@ -123,7 +123,12 @@ def text(value,limit=2000):
 
 def normalize(b):
     if not isinstance(b,dict):raise ValueError('查询格式无效')
-    if b.get('kind')=='counts':return dict(kind='counts',scope=corpus_statistics.normalize(b.get('scope',{})),engine=VERSION)
+    if b.get('kind')=='counts':
+        case=b.get('case',True)
+        if type(case) is not bool:raise ValueError('搜索匹配设置无效')
+        import vocabulary_selection
+        selection=vocabulary_selection.normalize(b.get('vocabulary'))
+        return dict(kind='counts',scope=corpus_statistics.normalize(b.get('scope',{})),case=case,engine=VERSION,**({'vocabulary':selection} if selection else {}))
     scope=b.get('scope',{})
     if not isinstance(scope,dict):raise ValueError('语料范围无效')
     normalized_scope={k:text(scope.get(k,'')) for k in ('text_id','folder_id','speakers','place','date','genre','sentence_language','code_mode','code_id')}
@@ -317,8 +322,11 @@ def run(db,lid,b):
     if cached:payload,summary=cached['payload'],cached['summary']
     else:
         if q.get('kind')=='counts':
-            stats=corpus_statistics.calculate(db,lid,q['scope'])
-            result=dict(hits=[],statistics=stats);summary=encode(dict(kind='counts',**{k:v for k,v in stats.items() if k!='rows'}))
+            import vocabulary_selection
+            selection=vocabulary_selection.Selection(db,lid,q['vocabulary'],q['case']) if q.get('vocabulary') else None
+            stats=corpus_statistics.calculate(db,lid,q['scope'],case=q.get('case',True),selection=selection)
+            result=dict(hits=stats.pop('_hits'),vocabulary=stats.pop('_vocabulary'),statistics=stats)
+            summary=encode(dict(kind='counts',**{k:v for k,v in stats.items() if k!='rows'}))
         else:
             result=calculate(db,lid,q);summary=encode(summarize(result))
         payload=pack(result)
@@ -407,7 +415,15 @@ def result_page(db,lid,b):
     stale=v!=version(db)
     common=dict(id=row['id'],query=q,summary=summary,version=v,stale=stale,snapshot=frozen,created=row['created'])
     if stale and not frozen:return {**common,'items':[],'total':0,'page':1,'pages':1,'frequencies':[]}
-    if q.get('kind')=='counts':return {**common,'statistics':unpack(row['payload'])['statistics'],'items':[],'page':1,'pages':1}
+    if q.get('kind')=='counts':
+        result=analysis_payload.read(row['payload'],only={'statistics','vocabulary','hits'})
+        if 'vocabulary' not in result:return {**common,'statistics':result['statistics'],'items':[],'page':1,'pages':1}
+        import vocabulary_statistics
+        profile,indices=vocabulary_statistics.page(result,b)
+        selected=[{**result['hits'][i],'index':i} for i in indices]
+        records=analysis_payload.read(row['payload'],only={'records'},record_ids={h['entry_id'] for h in selected}).get('records',{}) if frozen and selected else materialize(db,selected)
+        profile['items']=[{**h,'record':source_record(records.get(h['entry_id']))} for h in selected]
+        return {**common,'statistics':result['statistics'],'vocabulary':profile,'items':[],'page':1,'pages':1}
     if b.get('sort') in ('left','right') and frozen:
         import tempfile
         with tempfile.TemporaryFile() as spool:return read_page(db,row,q,b,common,spool)
@@ -545,7 +561,7 @@ def export_result(db,lid,b):
     if not frozen and v!=version(db):raise ValueError('语料已更新，请重新运行后导出，或导出已保存快照')
     records=result.get('records') or materialize(db,result['hits'])
     for card in records.values():source_record(card)
-    return dict(format='corporium-analysis-v1',created=row['created'],engine=VERSION,query=q,summary=summary,data_version=v,hits=result['hits'],records=records,statistics=result.get('statistics'),languages=result.get('languages') or [dict(r) for r in db.execute('SELECT * FROM languages')])
+    return dict(format='corporium-analysis-v1',created=row['created'],engine=VERSION,query=q,summary=summary,data_version=v,hits=result['hits'],records=records,statistics=result.get('statistics'),languages=result.get('languages') or [dict(r) for r in db.execute('SELECT * FROM languages')],**({'vocabulary':result['vocabulary']} if 'vocabulary' in result else {}))
 
 
 def export_file(db,dbpath,lid,b):
@@ -581,9 +597,10 @@ def export_file(db,dbpath,lid,b):
                     from itertools import chain
                     first=next(values,None);have_records=first is not None
                     if have_records:write_records(chain([first],values))
-                elif section in ('statistics','languages'):extra[section]=values
+                elif section in ('statistics','languages','vocabulary'):extra[section]=values
             if not have_hits:raise ValueError('分析结果缺少命中记录')
             if not have_records:write_records(materialized_items(db,[dict(entry_id=rid) for rid in ids],reuse_words=True))
+            if 'vocabulary' in extra:stream.write('  "vocabulary": '+encoder.encode(extra['vocabulary'])+',\n')
             stream.write('  "statistics": '+encoder.encode(extra.get('statistics'))+',\n  "languages": '+encoder.encode(extra.get('languages') or [dict(r) for r in db.execute('SELECT * FROM languages')])+'\n}\n')
         long_tasks.checkpoint(None,'分析导出文件已生成')
         size=path.stat().st_size

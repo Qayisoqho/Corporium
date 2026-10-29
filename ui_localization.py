@@ -113,9 +113,9 @@ def present(value,path,locale):
     if path=='/licenses/catalog':
         result={**result,'about':{**result.get('about',{})},'items':[{**item,'title':message(item['title'],locale)} for item in result.get('items',[])]}
         if isinstance(result['about'].get('description'),str):result['about']['description']=message(result['about']['description'],locale)
-    if path in {'/api/dictionary-search-options','/api/morpheme-search-options'} and isinstance(result.get('fields'),list):
+    if path in {'/api/dictionary-search-options','/api/morpheme-search-options','/api/vocabulary-options'} and isinstance(result.get('fields'),list):
         from dictionary_search import LABELS
-        known=set(LABELS)|{'affix_function','affix_position'}
+        known=set(LABELS)|{'affix_function','affix_position','created_at','updated_at'}
         def field(item):
             ident=item.get('id','');name=item.get('name','')
             if not isinstance(ident,str) or not isinstance(name,str):return item
@@ -127,6 +127,8 @@ def present(value,path,locale):
                 return {**item,'name':' › '.join(message(part,locale) for part in name.split(' › '))}
             return item
         result={**result,'fields':[field(item) for item in result['fields']]}
+        if path=='/api/vocabulary-options':
+            result={**result,'groups':[{**item,'name':message(item['name'],locale)} if item['id']=='entry' or item['id'].startswith('class:') else field(item) for item in result['groups']]}
     return result
 
 def bootstrap_html(source,desktop_language=None):

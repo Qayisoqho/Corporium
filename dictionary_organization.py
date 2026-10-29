@@ -90,6 +90,14 @@ def filter_sort(db,lid,rows,category='',order=''):
     return rows
 
 def mutate(db,lid,action,b):
+    import class_changes
+    previous=class_changes.before(db,b,lid)
+    return class_changes.finish(db,b,_mutate(db,lid,action,b),previous)
+
+def _mutate(db,lid,action,b):
+    if action=='class-order':
+        import class_changes
+        return class_changes.order(db,'semantic_classes',lid,b)
     if lid=='all':raise ValueError('请先选择一种语言')
     if action.startswith('layout-'):
         import dictionary_layout

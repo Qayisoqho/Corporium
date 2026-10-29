@@ -10,11 +10,11 @@
 [Setup]
 AppId={{D06731DF-0CEC-448C-A02A-77BB3684C3F0}
 AppName=Corporium
-AppVersion=0.9.01026.4
-VersionInfoVersion=0.9.1026.4
-VersionInfoTextVersion=0.9.01026.4
-VersionInfoProductVersion=0.9.1026.4
-VersionInfoProductTextVersion=0.9.01026.4
+AppVersion=0.9.01030
+VersionInfoVersion=0.9.1030.0
+VersionInfoTextVersion=0.9.01030
+VersionInfoProductVersion=0.9.1030.0
+VersionInfoProductTextVersion=0.9.01030
 AppPublisher=Corporium
 DefaultDirName={localappdata}\Programs\Corporium
 DisableDirPage=no
@@ -24,7 +24,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 OutputDir=..\release
-OutputBaseFilename=Corporium-0.9.01026.4-Windows-x64-Setup
+OutputBaseFilename=Corporium-0.9.01030-Windows-x64-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

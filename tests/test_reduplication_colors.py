@@ -58,6 +58,60 @@ class ReduplicationColorReadTests(unittest.TestCase):
     for helper in ('setUp','tearDown','call','seed','entries','get','undo','draft','example','save'):
         locals()[helper]=getattr(test_reduplication.ReduplicationTests,helper)
 
+    def seed(self,content):
+        before={e['id'] for e in self.entries()}
+        self.assertEqual(self.call('/api/import',dict(title='Reduplication',content=content))[0],200)
+        return next(e for e in self.entries() if e['id'] not in before)
+
+    def link(self,e,kind,key,form):
+        if not hasattr(self,'link_targets'):self.link_targets={}
+        x=self.link_targets.get(form)
+        if not x:
+            code,x=self.call('/api/lexeme-save',dict(headword=form,body=dict(entry_type='root')));self.assertEqual(code,200,x)
+            self.link_targets[form]=x
+        d=self.get(e,kind)
+        code,result=self.call('/api/segmentation-link',dict(kind=kind,id=e['id'],revision=d['revision'],word=0,key=key,lexeme_id=x['id'],lexeme_revision=x['revision']))
+        self.assertEqual(code,200,result)
+        return self.get(e,kind)['body']['words'][0]
+
+    def test_linked_remainder_completes_word_and_relation_delete_undo_refreshes_it(self):
+        import grammar_survey
+        for kind in ('corpus','independent'):
+            e=self.example(kind);self.save(e,kind)
+            w=self.link(e,kind,'r:1:host','jepasu')
+            self.assertTrue(w['dictionary_linked']);self.assertEqual([c['linked'] for c in w['morph_colors']],[False,True])
+            with server.connect(audit=False) as db:
+                reference=grammar_survey.reference(db,kind,e['id'],'ordos')
+                self.assertTrue(reference['body']['words'][0]['dictionary_linked'])
+            d=self.get(e,kind)
+            code,result=self.call('/api/segmentation-save',dict(kind=kind,id=e['id'],revision=d['revision'],action='redup-delete',relation_id=d['body']['reduplications'][0]['id']))
+            self.assertEqual(code,200,result);self.assertFalse(self.get(e,kind)['body']['words'][0]['dictionary_linked'])
+            self.assertEqual(self.undo()[0],200);self.assertTrue(self.get(e,kind)['body']['words'][0]['dictionary_linked'])
+
+    def test_candidate_or_stale_relation_does_not_exempt_an_unlinked_component(self):
+        for kind in ('corpus','independent'):
+            e=self.example(kind)
+            self.assertFalse(self.link(e,kind,'r:1:host','jepasu')['dictionary_linked'])
+            self.save(e,kind);self.assertTrue(self.get(e,kind)['body']['words'][0]['dictionary_linked'])
+            draft=self.draft(kind,e);draft['body']['words'][0]['form']='ja~jepasu'
+            self.assertEqual(self.call('/api/inline-save',draft)[0],200)
+            w=self.get(e,kind)['body']['words'][0]
+            self.assertFalse(w['dictionary_linked']);self.assertNotIn('redup_colors',w)
+
+    def test_non_reduplicant_affix_and_infix_still_need_their_own_links(self):
+        for kind in ('corpus','independent'):
+            for form,gloss,key,affix in [('je~jepasu-na','RED~go-PL','r:2:host','na'),('je<k>je~jepasu','RED<CAUS>~go','r:0:infix:0','k')]:
+                e=self.example(kind,form,gloss);self.save(e,kind)
+                self.assertFalse(self.link(e,kind,'r:1:host','jepasu')['dictionary_linked'])
+                self.assertTrue(self.link(e,kind,key,affix)['dictionary_linked'])
+
+    def test_coverage_requires_every_fragment_and_never_exempts_blank_ranges(self):
+        self.assertTrue(colors.covered([[0,2],[5,7]],[[0,2],[5,7]]))
+        self.assertTrue(colors.covered([[0,4]],[[0,2],[2,4]]))
+        self.assertFalse(colors.covered([[0,7]],[[0,2],[5,7]]))
+        self.assertFalse(colors.covered([[0,2],[5,7]],[[0,2]]))
+        self.assertFalse(colors.covered([],[[0,2]]))
+
     def test_sources_references_analysis_and_reads_do_not_write(self):
         import grammar_survey
         for kind in ('corpus','independent'):

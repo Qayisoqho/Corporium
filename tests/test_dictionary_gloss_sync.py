@@ -67,7 +67,7 @@ class DictionaryGlossSyncTests(unittest.TestCase):
 
     def test_features_before_or_after_meaning_and_script_markup_survive(self):
         from dictionary_gloss_sync import replace_short
-        for before,old,new,expected in [('SG.GEN','GEN','POSS','SG.POSS'),('SG_GEN','GEN','POSS','SG_POSS'),('#sup[GEN].SG','GEN','POSS','#sup[POSS].SG'),('GEN.SG','GEN','','SG'),('[GEN]','GEN','',''),('PL.SG.GEN','GEN.SG','POSS','PL.POSS'),('家-GEN','家','房屋','房屋-GEN')]:
+        for before,old,new,expected in [('SG.GEN','GEN','POSS','SG.POSS'),('SG_GEN','GEN','POSS','POSS'),('SG_GEN.PL','SG_GEN','POSS','POSS.PL'),('#sup[GEN].SG','GEN','POSS','#sup[POSS].SG'),('GEN.SG','GEN','','SG'),('[GEN]','GEN','',''),('PL.SG.GEN','GEN.SG','POSS','PL.POSS'),('家-GEN','家','房屋','房屋-GEN')]:
             with self.subTest(before=before):self.assertEqual(replace_short(before,old,new),expected)
 
     def test_native_morpheme_main_and_extra_meaning_have_separate_identities(self):

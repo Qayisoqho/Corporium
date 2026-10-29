@@ -5,7 +5,7 @@ import undo_codec
 from collections import defaultdict
 
 MARKER='script-tag-source-recovery-v1'
-SCRIPT=re.compile(r'[A-Za-z0-9]+(?:#(?:sub|sup|super)\[[A-Za-z0-9]+\])+')
+SCRIPT=re.compile(r'[A-Za-z0-9_]+(?:#(?:sub|sup|super)\[[A-Za-z0-9]+\])+')
 
 def needed(db):
     return not db.execute("SELECT 1 FROM sqlite_master WHERE name='editorial_migrations'").fetchone() or not db.execute('SELECT 1 FROM editorial_migrations WHERE id=?',(MARKER,)).fetchone()
@@ -19,7 +19,8 @@ def recover(db,force=False):
         for r in db.execute(sql):
             body=json.loads(r['body']);lid=body.get('language_id') or r['language_id']
             for word in body.get('words',[]):
-                for symbol in SCRIPT.findall(word.get('gloss','')):
+                for symbol in grammar.tokens(word.get('gloss',''),lid,{},lower=True,candidates=True):
+                    if not SCRIPT.fullmatch(symbol):continue
                     flat=re.sub(r'#(?:sub|sup|super)\[([^]]*)\]',r'\1',symbol)
                     spellings[lid,flat.casefold()].add(symbol)
     rows=grammar.listing(db);occupied=grammar.index(rows);changed=set();renamed={}

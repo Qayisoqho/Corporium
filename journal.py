@@ -25,6 +25,7 @@ LABELS = dict(zip(('/api/'+s for s in ('import','new-text','save','add','delete-
                   ('导入文本','新建文本','编辑句子','添加句子','删除句子','删除文本','移动句子','合并文本','修改文本信息','保存文件夹','删除文件夹','调整文件夹顺序')))
 LABELS.update({'/api/morpheme-'+a:n for a,n in [('save','保存语素'),('assign','整理组分语素'),('merge','归并语素'),('delete','删除语素'),('unassign','解除组分语素关联')]})
 LABELS['/api/object-media-save']='管理图片与录音'
+LABELS['/api/dictionary-copy']='复制词典条目'
 LABELS['/api/recorder-keep']='关联现场录音'
 LABELS['/api/homophone-phonology-save']='编辑同音语素表音系与归类'
 LABELS['/api/synonym-save']='编辑义项同义关系'
@@ -51,6 +52,7 @@ LABELS['/api/sentence-create']='新建句子'
 LABELS['/api/excel-import']='导入 Excel 文本'
 LABELS['/api/docx-import']='导入 Word 文本'
 LABELS['/api/organize-text']='移动或排序文本'
+LABELS['/api/copy-text']='复制文本'
 LABELS['/api/copy-entries']='跨文本复制句子'
 LABELS['/api/segmentation-save']='编辑语素组合与中缀分析'
 LABELS['/api/segmentation-link']='关联形态分析与词典'
@@ -270,3 +272,6 @@ LABELS.update({'/api/grammaticality-type-save':'设置合法性类型','/api/gra
 LABELS['/api/quick-edit-settings']='词条快捷编辑设置'
 
 LABELS['/api/survey-evidence-groups']='引用独立例句组'
+
+LABELS['/api/class-order']='调整分类顺序'
+LABELS['/api/dict-org-class-order']='调整语义分类顺序'

@@ -35,7 +35,7 @@ test('autosave refreshes only the history controls without starting a dictionary
 });
 test('background jobs wait for pending note saves before locking project writes',async()=>{
  const tasks=fs.readFileSync(require.resolve('../web/long-tasks.js'),'utf8'),calls=[];let release;
- const s={active:false,window:{corporiumFlushNotes:()=>new Promise(r=>release=r)},$:()=>({removeAttribute(){}}),progress:{showModal(){calls.push('modal');},close(){}},taskApi:async name=>{calls.push(name);return name==='task-start'?{id:'job'}:name.startsWith('task-status')?{state:'done',result:'ok'}:{};}};
+ const s={active:false,progressHolds:0,window:{corporiumFlushNotes:()=>new Promise(r=>release=r)},$:()=>({removeAttribute(){}}),progress:{showModal(){calls.push('modal');},close(){}},taskApi:async name=>{calls.push(name);return name==='task-start'?{id:'job'}:name.startsWith('task-status')?{state:'done',result:'ok'}:{};}};
  vm.createContext(s);vm.runInContext(tasks.slice(tasks.indexOf('async function execute('),tasks.indexOf(' function run(')),s);
  const result=s.execute('backup',{},'备份');await Promise.resolve();assert.deepEqual(calls,[]);assert.equal(s.active,false);release();assert.equal(await result,'ok');assert.deepEqual(calls.slice(0,2),['modal','task-start']);assert.equal(s.active,false);
 });

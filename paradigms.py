@@ -1,10 +1,12 @@
 """Optional inflection tables. Forms share variant IDs; meanings have stable IDs.
 
-Templates are language metadata snapshots, never live links that overwrite entries.
+Template structure stays linked; forms and meanings remain entry-owned evidence.
 Form meanings use their owning usage and their own sense identity in gloss_meanings.
 """
 import uuid
 import re
+import unicodedata
+import sense_gloss
 
 
 def addition(value):
@@ -14,7 +16,7 @@ def addition(value):
     atoms=[p.strip() for p in value.split('.')]
     for atom in atoms:
         plain=re.sub(r'#(?:sub|super|sup)\[[A-Za-z0-9]+\]','',atom)
-        if not plain or re.search(r'[\s.\-=:+/;_\\,!?，。；：！？\[\](){}<>#]',plain):
+        if not plain or re.search(r'[\s.\-=:+/;\\,!?，。；：！？\[\](){}<>#]',plain):
             raise ValueError('附加标签请用点号分隔；带连接符或复杂结构的标注请使用独立标注')
     return '.'.join(dict.fromkeys(atoms))
 
@@ -25,7 +27,7 @@ def compose(base,extra):
     if not extra:return base
     # Superscript/subscript decorations are part of an atom, not scope brackets.
     plain=re.sub(r'#(?:sub|super|sup)\[[A-Za-z0-9]+\]','',base)
-    if re.search(r'[\s\-=+<>\[\](){}:;/_\\#]',plain):
+    if re.search(r'[\s\-=+<>\[\](){}:;/\\#]',plain):
         raise ValueError('基本义项的标注含复杂结构，无法直接附加标签；请使用独立标注')
     parts=base.split('.')
     if any(not p for p in parts):raise ValueError('基本义项的标注含空片段，请先修正或使用独立标注')
@@ -39,15 +41,19 @@ def effective_gloss(body,table,meaning):
     if meaning.get('gloss_mode','independent')!='inherit':return meaning.get('short_gloss','')
     base=next((s for u in body.get('usages',[]) if u['id']==table['usage_id'] for s in u['senses'] if s['id']==meaning.get('base_sense_id')),None)
     if base is None:raise ValueError('继承标注对应的基本义项已不存在，请先调整变形表')
-    return compose(base.get('short_gloss',''),meaning.get('gloss_addition',''))
+    return compose(sense_gloss.effective(base),meaning.get('gloss_addition',''))
 
 
-def project(body):
+def project(body,ordinary=True):
     """Search/replace projection. Never persist expanded labels in inherited cells."""
-    if not body.get('paradigms'):return body
-    return {**body,'paradigms':[{**t,'rows':[{**r,'realizations':[{**f,'meanings':[
+    projected={**body}
+    if ordinary:
+        if 'gloss' in body:projected['gloss']=sense_gloss.effective(body,'gloss')
+        if 'senses' in body:projected['senses']=[{**s,'gloss':sense_gloss.effective(s,'gloss')} for s in body['senses']]
+        if 'usages' in body:projected['usages']=[{**u,'senses':[{**s,'short_gloss':sense_gloss.effective(s)} for s in u.get('senses',[])]} for u in body['usages']]
+    return {**projected,'paradigms':[{**t,'rows':[{**r,'realizations':[{**f,'meanings':[
         {**m,'short_gloss':effective_gloss(body,t,m)} for m in f['meanings']
-    ]} for f in r['realizations']]} for r in t['rows']]} for t in body['paradigms']]}
+    ]} for f in r['realizations']]} for r in t['rows']]} for t in body.get('paradigms',[])]}
 
 
 def text(value):
@@ -111,6 +117,7 @@ def normalize(body,result):
             if default not in senses:raise ValueError('变形表的默认基本义项不存在或不属于本用法')
             table['default_base_sense_id']=default
         for original,row in zip(source.get('rows',[]),table['rows']):
+            if original.get('template_row_id'):row['template_row_id']=text(original['template_row_id'])
             for item in rows(original.get('realizations',[])):
                 fid=text(item.get('form_id',''))
                 if fid not in forms:
@@ -149,7 +156,7 @@ def usages(body):
     for table,row,form,meaning in meanings(body):
         added.setdefault(table['usage_id'],[]).append({**meaning,'short_gloss':effective_gloss(body,table,meaning),'features':[],'tags':[],
             'paradigm_form_id':form['form_id'],'paradigm_label':table['title']+' / '+' · '.join(row['labels'])})
-    return [{**u,'senses':[*u['senses'],*added.get(u['id'],[])]} if u['id'] in added else u for u in body.get('usages',[])]
+    return [{**u,'senses':[*[{**s,'short_gloss':sense_gloss.effective(s)} for s in u['senses']],*added.get(u['id'],[])]} for u in body.get('usages',[])]
 
 
 def candidates(body):
@@ -161,6 +168,26 @@ def candidates(body):
         for s in u['senses']:
             for form in ([forms[s['paradigm_form_id']]] if 'paradigm_form_id' in s else ordinary):
                 yield u,s,form
+
+
+def matching_candidates(body,headword,gloss_key):
+    """Prefer the base sense when a table merely repeats its primary form.
+
+    This is a matching projection, not an identity migration: manual references
+    to table meanings and genuinely distinct base senses keep their stable IDs.
+    """
+    primary=unicodedata.normalize('NFC',headword)
+    def key(u,s,form=None):
+        features=[*body.get('features',[]),*u.get('features',[]),*s.get('features',[]),*(form.get('features',[]) if form else [])]
+        return gloss_key(s.get('short_gloss',''),features)
+    base={u['id']:{s['id']:key(u,{**s,'short_gloss':sense_gloss.effective(s)}) for s in u['senses']} for u in body.get('usages',[])}
+    for u,s,form in candidates(body):
+        if form and s.get('paradigm_form_id') and unicodedata.normalize('NFC',form['form'])==primary:
+            meanings=base.get(u['id'],{})
+            matches=[sid for sid,value in meanings.items() if value==key(u,s,form)]
+            declared=s.get('base_sense_id')
+            if (declared in matches if declared else len(matches)==1):continue
+        yield u,s,form
 
 
 def validate_selection(body,uid,sid,fid):
@@ -178,6 +205,7 @@ def remap(body,owner,submap):
         table['template_id']=''
         for value in [table,*table['rows']]:value['id']=str(uuid.uuid4())
         for row in table['rows']:
+            row.pop('template_row_id',None)
             for form in row['realizations']:
                 form['id']=str(uuid.uuid4());form['form_id']=submap[(owner,form['form_id'])]
                 for meaning in form['meanings']:

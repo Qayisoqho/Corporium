@@ -146,6 +146,7 @@ def init():
         with closing(sqlite3.connect(DB)) as old:
             missing_languages=not old.execute("SELECT 1 FROM sqlite_master WHERE name='languages'").fetchone()
             missing_dictionary=not old.execute("SELECT 1 FROM sqlite_master WHERE name='morphology_analyses'").fetchone() or not old.execute("SELECT 1 FROM sqlite_master WHERE name='morph_class_templates'").fetchone()
+            missing_class_order=categories.needed(old)
             missing_sentence_layers='anchor' not in {r[1] for r in old.execute('PRAGMA table_info(annotation_layers)')} or not old.execute("SELECT 1 FROM sqlite_master WHERE name='category_classes'").fetchone()
             missing_track_tree=old.execute("SELECT 1 FROM sqlite_master WHERE name='timeline_tracks'").fetchone() and 'parent_id' not in {r[1] for r in old.execute('PRAGMA table_info(timeline_tracks)')}
             missing_track_color=old.execute("SELECT 1 FROM sqlite_master WHERE name='timeline_tracks'").fetchone() and 'color' not in {r[1] for r in old.execute('PRAGMA table_info(timeline_tracks)')}
@@ -160,7 +161,7 @@ def init():
             missing_organization=not old.execute("SELECT 1 FROM sqlite_master WHERE name='semantic_classes'").fetchone()
             missing_collaborators=not old.execute("SELECT 1 FROM sqlite_master WHERE name='collaborator_assignments'").fetchone()
             missing_inheritance=not old.execute("SELECT 1 FROM sqlite_master WHERE name='gloss_migrations'").fetchone()
-            if missing_example_numbers or missing_example_groups or grammaticality.corpus_rows_needed(old) or storage_optimization.needed(old) or missing_inheritance or script_tags.needed(old) or manual_status.needed(old) or missing_code_spans or missing_object_media or missing_organization or missing_survey or missing_notes or missing_collaborators or missing_languages or missing_dictionary or missing_sentence_layers or missing_track_tree or missing_track_color or missing_session_order or missing_text_order or old.execute('PRAGMA user_version').fetchone()[0]<4 or not old.execute("SELECT 1 FROM sqlite_master WHERE name='corpus_units'").fetchone():
+            if missing_class_order or missing_example_numbers or missing_example_groups or grammaticality.corpus_rows_needed(old) or storage_optimization.needed(old) or missing_inheritance or script_tags.needed(old) or manual_status.needed(old) or missing_code_spans or missing_object_media or missing_organization or missing_survey or missing_notes or missing_collaborators or missing_languages or missing_dictionary or missing_sentence_layers or missing_track_tree or missing_track_color or missing_session_order or missing_text_order or old.execute('PRAGMA user_version').fetchone()[0]<4 or not old.execute("SELECT 1 FROM sqlite_master WHERE name='corpus_units'").fetchone():
                 backup_policy.sqlite_snapshot(DB.parent/'backups',old,'languages' if missing_languages else 'lexicon')
     with connect() as db:
         db.executescript('''CREATE TABLE IF NOT EXISTS texts(id TEXT PRIMARY KEY,title TEXT,source TEXT,original TEXT,digest TEXT UNIQUE,errors TEXT);
@@ -265,7 +266,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path=='/licenses/document':return self.send(legal_notices.document(q.get('id','')))
         if url.path=='/licenses/developer-font':
             return self.send((ROOT/'font'/'Junicode'/'Junicode.ttf').read_bytes(),mime='font/ttf')
-        if url.path in {'/licenses','/license-notices.js','/license-notices.css','/style.css'}:
+        if url.path in {'/licenses','/license-notices.js','/license-notices.css','/style.css','/workbench.css'}:
             name='licenses.html' if url.path=='/licenses' else url.path[1:]
             mime='text/html' if url.path=='/licenses' else 'text/css' if url.path.endswith('.css') else 'text/javascript'
             return self.send((ROOT/'web'/name).read_bytes(),mime=mime+'; charset=utf-8')
@@ -376,6 +377,9 @@ class Handler(BaseHTTPRequestHandler):
             if url.path=='/api/homonym-preview':return self.send(lexicon.homonyms.plan(db,q.get('lexical_language',lid),q.get('form',''),q.get('exclude','')))
             if url.path=='/api/lexemes':
                 return self.send(lexicon.list_lexemes(db,q.get('lexical_language',lid),q.get('q',''),q.get('page',1),q.get('page_size',30),category=q.get('semantic_class',''),order=q.get('sort_order',''),search=q.get('search'),summary=q.get('summary')=='1',targets=q.get('targets')=='all',counts=q.get('counts')!='0'))
+            if url.path=='/api/vocabulary-options':
+                import vocabulary_selection
+                return self.send(vocabulary_selection.catalog(db,lid,q.get('target','morpheme')))
             if url.path=='/api/morpheme-search-options':
                 import morpheme_search
                 return self.send(morpheme_search.catalog(db,lid))
@@ -396,6 +400,7 @@ class Handler(BaseHTTPRequestHandler):
                 if lid not in ('all',d['language_id']):raise ValueError('例句不属于当前语言')
                 code_switching.attach(db,d['body'],'independent',d['id'],d)
                 return self.send(d)
+            if url.path=='/api/sentence-search-fields':return self.send(annotations.search_catalog(db,lid))
             if url.path=='/api/example-library':return self.send(annotations.search(db,q))
             if url.path=='/api/punctuation-settings':return self.send(punctuation.settings(db,lid))
             if url.path=='/api/layers':return self.send(annotations.layers(db,q.get('lexical_language',lid)))
@@ -415,6 +420,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(lexicon.auto_link_plan(db,lid,q.get('text_id',''),q.get('ignore_symbols','-=.'),q.get('ignore_position','edges')))
             if url.path=='/api/lexeme':
                 return self.send(lexicon.get_lexeme(db,q['id']))
+            if url.path=='/api/dictionary-reference-state':
+                import dictionary_targets
+                return self.send(dictionary_targets.reference_state(db,q['id'],lid))
             if url.path=='/api/lexeme-examples':
                 return self.send(lexicon.examples(db,q['id'],q.get('page',1),q.get('kind','all'),q.get('form_id','all')))
             if url.path=='/api/unit-dictionary':
@@ -425,6 +433,9 @@ class Handler(BaseHTTPRequestHandler):
                 state=journal.state(db,q.get('language','ordos'))
                 state['workspace_revision']=journal.workspace_revision(db)
                 return self.send(state)
+            if url.path == '/api/text-copy-preview':
+                import text_copy
+                return self.send(text_copy.preview(db,q.get('id'),lid))
             if url.path == '/api/texts':
                 rows = db.execute("SELECT t.id,t.title,t.source,t.errors,t.language_id,l.name language_name,i.folder_id,COALESCE(i.metadata,'{}') metadata,COALESCE(i.revision,0) info_revision,COUNT(e.id) count FROM texts t JOIN languages l ON l.id=t.language_id LEFT JOIN entries e ON e.text_id=t.id LEFT JOIN text_info i ON i.text_id=t.id WHERE (?='all' OR t.language_id=?) GROUP BY t.id ORDER BY COALESCE(json_extract(i.metadata,'$._sidebar_order'),t.rowid),t.rowid",(lid,lid)).fetchall()
                 return self.send([dict(r) for r in rows])
@@ -475,6 +486,10 @@ class Handler(BaseHTTPRequestHandler):
         files.update({'/reduplication.js':'reduplication.js','/text-tools.js':'text-tools.js','/word-structure.js':'word-structure.js','/punctuation.js':'punctuation.js','/workspace-layout.js':'workspace-layout.js','/typography.js':'typography.js','/morphology.js':'morphology.js','/segmentation.js':'segmentation.js','/multipart-forms.js':'multipart-forms.js','/multipart-forms.css':'multipart-forms.css','/favicon.ico':'favicon.ico'})
         files['/layer-order.js']='layer-order.js'
         files['/analysis-workspace.js']='analysis-workspace.js'
+        files['/vocabulary-statistics.js']='vocabulary-statistics.js'
+        files['/vocabulary-controls.js']='vocabulary-controls.js'
+        files['/class-order.js']='class-order.js'
+        files['/sense-gloss.js']='sense-gloss.js'
         files['/gloss-sources.js']='gloss-sources.js'
         files['/grammar-candidates.js']='grammar-candidates.js'
         files['/grammaticality.js']='grammaticality.js'
@@ -483,6 +498,7 @@ class Handler(BaseHTTPRequestHandler):
         files['/language-deletion.js']='language-deletion.js'
         files['/word-transfer.js']='word-transfer.js'
         files['/sentence-create.js']='sentence-create.js'
+        files['/text-copy.js']='text-copy.js'
         files['/sentence-search.js']='sentence-search.js'
         files['/dialogue.js']='dialogue.js'
         files['/dialogue.css']='dialogue.css'
@@ -749,7 +765,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path in ('/api/segmentation-save','/api/segmentation-link'):
                 with connect() as db:result=(segmentation.save if self.path.endswith('-save') else segmentation.link)(db,body,lid)
                 return self.send(result)
-            if self.path in ('/api/class-save','/api/class-delete'):
+            if self.path in ('/api/class-save','/api/class-delete','/api/class-order'):
                 with connect() as db:result=categories.mutate(db,self.path.removeprefix('/api/'),body,lid)
                 return self.send(result)
             if self.path in ('/api/grammar-save','/api/grammar-delete'):
@@ -787,6 +803,9 @@ class Handler(BaseHTTPRequestHandler):
                 with connect() as db:
                     result=dictionary_data.mutate(db,self.path.removeprefix('/api/'),body,lid)
                 return self.send(result)
+            if self.path=='/api/dictionary-copy':
+                with connect() as db:result=lexicon.duplicate(db,lid,body)
+                return self.send(result)
             if self.path in ('/api/lexeme-to-morpheme-preview','/api/lexeme-to-morpheme'):
                 import morpheme_conversion
                 with connect() as db:result=(morpheme_conversion.preview if self.path.endswith('-preview') else morpheme_conversion.convert)(db,lid,body)
@@ -802,6 +821,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(result)
             if self.path=='/api/synonym-save':
                 with connect() as db:result=synonyms.mutate(db,lid,body)
+                return self.send(result)
+            if self.path=='/api/dictionary-save-impact':
+                import dictionary_link_changes
+                with connect(audit=False) as db:result=dictionary_link_changes.preview(db,lid,body)
                 return self.send(result)
             if self.path=='/api/morpheme-save-preview':
                 with connect() as db:result=morpheme_registry.save_plan(db,lid,body.get('id'),lexicon.normalize(body.get('body',{})),body.get('assignments'))
@@ -826,7 +849,11 @@ class Handler(BaseHTTPRequestHandler):
                 with connect() as db:
                     result=metadata.update(db,self.path.removeprefix('/api/'),body)
                 return self.send(result)
-            if self.path in ('/api/duplicate-entry','/api/delete-entry','/api/delete-text','/api/move','/api/copy-entries','/api/merge','/api/split','/api/reorder-entry'):
+            if self.path=='/api/paradigm-template-preview':
+                import paradigm_templates
+                with connect(audit=False) as db:result=paradigm_templates.preview(db,body)
+                return self.send(result)
+            if self.path in ('/api/copy-text','/api/duplicate-entry','/api/delete-entry','/api/delete-text','/api/move','/api/copy-entries','/api/merge','/api/split','/api/reorder-entry'):
                 with connect() as db:
                     result=organize(db,self.path.removeprefix('/api/'),body,DB.parent/'backups')
                 return self.send(result)

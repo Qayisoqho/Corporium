@@ -38,7 +38,7 @@
   try{
    await originalApi('gloss-source-save',{kind:draft.kind,id:draft.id,revision:draft.revision,binding_id:item.source.id,binding_revision:item.source.revision,gloss_revision:draft.body.gloss_revision,mode:field('mode').value,value:field('value').value,_language:draft.owner_language});
    dirty=false;dialog.close();await refreshUndo();await refreshExampleViews();
-   if(typeof segmentDraft!=='undefined'&&$('segmentation-dialog')?.open)await refreshSegmentation();
+   await window.corporiumSentenceInspector?.afterExampleSave?.({kind:draft.kind,id:draft.id});
   }catch(error){field('error').textContent=error.message;}finally{busy=false;field('save').disabled=false;}
  };
  dialog.addEventListener('cancel',event=>{if(busy){event.preventDefault();return;}guardDialogDiscard(event,dirty,(globalThis.CorporiumI18n?.f("d11da31a7db6ff",()=>[])??'放弃尚未保存的本句标注？'));});

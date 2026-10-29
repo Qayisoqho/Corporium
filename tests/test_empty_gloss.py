@@ -14,10 +14,10 @@ class EmptyGlossTests(unittest.TestCase):
     draft=test_inline_slots.SlotTests.draft
 
     def test_empty_tags_preserve_morpheme_boundaries_and_decorated_content(self):
-        cases={'GEN.':'GEN','GEN_':'GEN','.SG':'SG','GEN..SG':'GEN.SG','GEN._SG':'GEN.SG',
-               '根-GEN._=PL_':'根-GEN=PL','GEN.-':'GEN','-GEN_':'GEN','GEN.-_SG':'GEN-SG',
-               'GEN#sub[SG].':'GEN#sub[SG]','根<GEN.SG>.':'根<GEN.SG>','[GEN.SG]_':'[GEN.SG]',
-               'GEN_ _':'GEN','._':'','A-B=':'A-B'}
+        cases={'GEN.':'GEN','GEN_':'GEN_','.SG':'SG','GEN..SG':'GEN.SG','GEN._SG':'GEN._SG',
+               '根-GEN._=PL_':'根-GEN._=PL_','GEN.-':'GEN','-GEN_':'GEN_','GEN.-_SG':'GEN-_SG',
+               'GEN#sub[SG].':'GEN#sub[SG]','根<GEN.SG>.':'根<GEN.SG>','[GEN.SG]_':'[GEN.SG]_',
+               'GEN_ _':'GEN_ _','._':'_','A-B=':'A-B'}
         for value,expected in cases.items():
             with self.subTest(value=value):self.assertEqual(corpus.compact_gloss(value),expected)
 
@@ -30,14 +30,15 @@ class EmptyGlossTests(unittest.TestCase):
                 with self.subTest(kind=kind,slots=slots):
                     d=self.draft(kind,record);before=copy.deepcopy(d);uid=d['slot_ids'][0]
                     d['body']['words'][0]['gloss']='GEN.' if slots else 'GEN_'
+                    expected='GEN' if slots else 'GEN_'
                     if not slots:d.pop('slot_ids')
                     code,result=self.call('/api/inline-save',d);self.assertEqual(code,200,result)
-                    saved=self.draft(kind,record);self.assertEqual(saved['body']['words'][0]['gloss'],'GEN')
+                    saved=self.draft(kind,record);self.assertEqual(saved['body']['words'][0]['gloss'],expected)
                     self.assertEqual(saved['slot_ids'][0],uid)
                     self.assertEqual(self.undo()[0],200)
                     self.assertEqual(self.draft(kind,record)['body']['words'][0]['gloss'],before['body']['words'][0]['gloss'])
                     self.assertEqual(self.undo('redo')[0],200)
-                    self.assertEqual(self.draft(kind,record)['body']['words'][0]['gloss'],'GEN')
+                    self.assertEqual(self.draft(kind,record)['body']['words'][0]['gloss'],expected)
                     self.assertEqual(self.undo()[0],200)
 
 

@@ -1,6 +1,6 @@
 // Compact views write through to the original draft controls; stable identities stay intact.
 function createQuickEditRows(active,requiredTypes){
- const components=new Map(),tables=new Map(),usages=new Map(),extraTypes=new Set();let refreshing=false,drag=null;
+ const components=new Map(),tables=new Map(),usages=new Map(),senseAdditions=new Map(),extraTypes=new Set();let refreshing=false,drag=null;
  const changed=()=>{lexemeDirty=true;};
  function command(text,title,action){const b=document.createElement('button');b.type='button';b.textContent=text;b.title=title;b.setAttribute('aria-label',title);b.onclick=action;return b;}
  function field(label,cls=''){const input=document.createElement('input');input.className='quick-row-input '+cls;input.setAttribute('aria-label',label);input.title=label;return input;}
@@ -69,6 +69,7 @@ function createQuickEditRows(active,requiredTypes){
    if(list.quickPos===sourcePos&&list.quickOptions===sourcePos.innerHTML&&list.quickPosition===ui&&list.children.length===sources.length&&sources.every((sense,i)=>list.children[i].quickSource===sense)){
     for(const r of list.children){setValue(r.querySelector('.quick-sense-pos'),sourcePos.value);if(r.quickSource)setValue(r.querySelector('.quick-sense-gloss'),r.quickSource.querySelector('.sense-short').value);}continue;
    }
+   for(const [sense,marker] of senseAdditions)if(sense.closest('.usage-editor')===usage){marker.replaceWith(list.querySelector('[data-addition-for="'+sense.dataset.id+'"] .sense-addition-controls'));senseAdditions.delete(sense);}
    list.quickPos=sourcePos;list.quickOptions=sourcePos.innerHTML;list.quickPosition=ui;list.replaceChildren();
    for(const [i,sense] of (senses.length?senses:[null]).entries()){
     const row=document.createElement('div');row.className='quick-sense-row quick-sort-row';row.quickSource=sense;
@@ -78,11 +79,13 @@ function createQuickEditRows(active,requiredTypes){
     const tools=document.createElement('div');tools.className='quick-sense-tools';tools.append(command('+',(globalThis.CorporiumI18n?.f("32eed1e4aa03a2",()=>[])??'添加本词类义项'),()=>{usage.querySelector('.add-sense').click();refresh();}),command('×',(globalThis.CorporiumI18n?.f("9c31628eb2d937",()=>[label.textContent])??'移除义项 '+label.textContent),()=>{if(sense)sense.querySelector('.remove-sense').click();refresh();}));
     if(i===0)tools.append(command((globalThis.CorporiumI18n?.f("0fd8d03fc3acc8",()=>[])??'类×'),(globalThis.CorporiumI18n?.f("f6659441858fe2",()=>[])??'移除此词类用法'),()=>{usage.querySelector('.remove-usage').click();refresh();}));
     row.append(sense?grip(row,sense,refreshUsages,(globalThis.CorporiumI18n?.f("d9516ef87beadb",()=>[label.textContent])??'义项 '+label.textContent)):document.createElement('span'),label,pos,gloss,tools);list.append(row);
+    const additions=sense?.querySelector('.sense-addition-controls');if(additions){const marker=document.createComment('full gloss addition controls'),details=document.createElement('details'),summary=document.createElement('summary');summary.textContent=globalThis.CorporiumI18n?.phrase('附加标签')??'附加标签';details.className='quick-sense-addition';details.dataset.additionFor=sense.dataset.id;additions.before(marker);senseAdditions.set(sense,marker);details.append(summary,additions);row.append(details);}
+
    }
   }
  }
  function refresh(){if(!active()||refreshing)return;refreshing=true;try{refreshComponents();refreshUsages();}finally{refreshing=false;}}
- function clear(){cancelDrag();for(const [row,v] of components)removeComponentView(row,v);for(const t of tables.values()){if(t.marker.parentNode)t.marker.replaceWith(t.list);t.wrap.remove();t.add.remove();}tables.clear();extraTypes.clear();for(const [usage,list] of usages){usage.classList.remove('quick-usage-row');list.remove();}usages.clear();}
+ function clear(){cancelDrag();for(const [sense,marker] of senseAdditions){const controls=[...usages.values()].flatMap(list=>[...list.querySelectorAll('[data-addition-for]')]).find(d=>d.dataset.additionFor===sense.dataset.id)?.querySelector('.sense-addition-controls');if(controls)marker.replaceWith(controls);}senseAdditions.clear();for(const [row,v] of components)removeComponentView(row,v);for(const t of tables.values()){if(t.marker.parentNode)t.marker.replaceWith(t.list);t.wrap.remove();t.add.remove();}tables.clear();extraTypes.clear();for(const [usage,list] of usages){usage.classList.remove('quick-usage-row');list.remove();}usages.clear();}
  const set=wsSetRegistryRecord,release=wsReleaseRegistry,search=wsSearchRegistry,fill=wsFill;
  wsSetRegistryRecord=function(...args){set(...args);refresh();};wsReleaseRegistry=function(...args){release(...args);refresh();};
  wsSearchRegistry=async function(...args){try{return await search(...args);}finally{refresh();}};

@@ -45,7 +45,6 @@ def normalize(body,result):
     else:result['relation']=None
     for source,target in zip(body.get('variants',[]),result['variants']):
         kind=text(source.get('kind','other')).strip()
-        if not kind:raise ValueError('请选择形式类型')
         target.update(kind=categories.FORM_NAMES.get(kind,kind),variation=choice(source.get('variation','unknown'),VARIATIONS,'变体关系'),features=ids(source.get('features',[])))
         for key in ('pronunciation','conditions','source','notes'):target[key]=text(source.get(key,''))
         types=source.get('condition_types',[])

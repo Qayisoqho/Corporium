@@ -342,10 +342,12 @@ def summary_rows(db, results):
 def copy_spans(db, source_kind, source_id, target_kind, target_id, mapping, move=False):
     """Copy selected identities, without copying their recording-specific links."""
     target = owner(db, target_kind, target_id)
+    copied = {}
     for s in rows(db, source_kind, source_id):
         ids = json.loads(s['word_ids']); picked = [i for i in ids if i in mapping]
         if not picked: continue
         snap = json.loads(s['snapshot']); sid = str(uuid.uuid4())
+        copied[s['id']] = sid
         db.execute('INSERT INTO code_spans VALUES(?,?,?,?,?,?,?,?,1)', (sid, target_kind, target_id, target['owner_language'], s['code_id'], dump([mapping[i] for i in picked]), dump({mapping[i]: snap[i] for i in picked}), s['notes']))
         if move:
             rest = [i for i in ids if i not in mapping]
@@ -353,6 +355,7 @@ def copy_spans(db, source_kind, source_id, target_kind, target_id, mapping, move
             detach_audio(db, s['id'])
             if rest: db.execute('UPDATE code_spans SET word_ids=?,snapshot=?,revision=revision+1 WHERE id=?', (dump(rest), dump({i: snap[i] for i in rest}), s['id']))
             else: db.execute('DELETE FROM code_spans WHERE id=?', (s['id'],))
+    return copied
 
 
 def export_bundle(db, lid, stream=False):

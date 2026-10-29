@@ -11,7 +11,7 @@ OPERATIONS={
     'dictionary-replace-preview','dictionary-replace-apply','dictionary-batch-preview','dictionary-batch-apply',
     'punctuation-preview','punctuation-apply','lexeme-auto-link',
     'dict-org-assign','homophone-phonology-save','morpheme-assign','morpheme-merge',
-    'move','copy-entries','merge','split','word-transfer',
+    'move','copy-text','copy-entries','merge','split','word-transfer',
     'timeline-text-order','timeline-interval','timeline-delete-interval','timeline-split','timeline-merge',
     'lexeme-save','morpheme-save',
 }

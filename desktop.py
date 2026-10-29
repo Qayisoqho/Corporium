@@ -135,7 +135,7 @@ def make_handler(projects,token):
                 if parsed.path=='/desktop.js':return self.send((ASSETS/'web'/'desktop.js').read_bytes(),mime='text/javascript; charset=utf-8')
                 if parsed.path=='/desktop-status':return self.send(projects.status())
                 # Legal notices are available before choosing a project, still within the desktop session.
-                if parsed.path in server.legal_notices.ASSET_PATHS|server.ui_localization.ASSET_PATHS:return super().do_GET()
+                if parsed.path in server.legal_notices.ASSET_PATHS|server.ui_localization.ASSET_PATHS|{'/workbench.css'}:return super().do_GET()
                 if parsed.path=='/':
                     file='index.html' if projects.current else 'desktop-start.html'
                     html=(ASSETS/'web'/file).read_text(encoding='utf-8').replace('</body>','<script src="/desktop.js"></script></body>')
@@ -297,7 +297,8 @@ class Bridge:
             logging.exception('Project action failed');return self._result({'error':str(exc)})
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--project');parser.add_argument('--self-test');parser.add_argument('--smoke-test');parser.add_argument('--dev',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--project');parser.add_argument('--self-test');parser.add_argument('--smoke-test');parser.add_argument('--smoke-start',action='store_true');parser.add_argument('--dev',action='store_true');args=parser.parse_args()
+    if args.smoke_start and not args.smoke_test:parser.error('--smoke-start requires --smoke-test')
     app_name='Corporium-dev' if args.dev else 'Corporium'
     window_title='Corporium · 开发版' if args.dev else 'Corporium'
     home=Path(args.self_test or args.smoke_test or os.environ.get('LOCALAPPDATA',str(Path.home())))/app_name
@@ -323,7 +324,7 @@ def main():
     smoke_resumed=False
     if args.smoke_test:
         smoke_resumed=projects.restore_last()
-        if not smoke_resumed:projects.create(home/'UI test project')
+        if not smoke_resumed and not args.smoke_start:projects.create(home/'UI test project')
     elif args.project:
         with LOCK:projects.open(args.project)
     else:
@@ -335,7 +336,7 @@ def main():
     webview.settings['ALLOW_DOWNLOADS']=True
     bridge=Bridge(projects);bridge._origin='http://127.0.0.1:'+str(http.server_port)
     window_title=server.ui_localization.message(window_title,bridge._ui_language())
-    window=webview.create_window(window_title,bridge._origin+'/desktop-bootstrap?token='+token,js_api=bridge,width=1280,height=860,min_size=MIN_WINDOW_SIZE,background_color='#f7f4e9',hidden=bool(args.smoke_test),text_select=True)
+    window=webview.create_window(window_title,bridge._origin+'/desktop-bootstrap?token='+token,js_api=bridge,width=1280,height=860,min_size=MIN_WINDOW_SIZE,background_color='#ffffff',hidden=bool(args.smoke_test),text_select=True)
     bridge._window=window
     def refresh_window_minimum(*args):
         try:bridge._apply_window_minimum()
@@ -372,7 +373,7 @@ def main():
     if args.smoke_test:
         def smoke():
             try:
-                value=json.loads(window.evaluate_js("JSON.stringify({title:document.title,uiLanguage:document.documentElement.lang,interfaceLanguage:document.getElementById('interface-language')?.value,home:!!document.getElementById('home-enter'),homeVisible:document.documentElement.dataset.home==='true'&&!document.getElementById('homepage').hidden,desktop:!!document.getElementById('desktop-toolbar'),licenses:!!document.getElementById('legal-notices-open'),textSelection:getComputedStyle(document.body).userSelect,buttonSelection:getComputedStyle(document.getElementById('home-enter')).userSelect})"))
+                value=json.loads(window.evaluate_js("JSON.stringify({title:document.title,uiLanguage:document.documentElement.lang,interfaceLanguage:document.getElementById('interface-language')?.value,theme:document.documentElement.dataset.theme,background:getComputedStyle(document.body).backgroundColor,startup:!!document.getElementById('startup-language'),languageAtTop:document.getElementById('interface-language')?.getBoundingClientRect().top<100,home:!!document.getElementById('home-enter'),homeVisible:document.documentElement.dataset.home==='true'&&!document.getElementById('homepage').hidden,desktop:!!document.getElementById('desktop-toolbar'),licenses:!!document.getElementById('legal-notices-open'),textSelection:getComputedStyle(document.body).userSelect,buttonSelection:document.getElementById('home-enter')?getComputedStyle(document.getElementById('home-enter')).userSelect:null})"))
                 value.update(version=VERSION,project=str(projects.current),resumed=smoke_resumed)
                 (home/'ui-test.json').write_text(json.dumps(value,ensure_ascii=False),encoding='utf-8')
             except Exception:logging.exception('UI smoke test failed')
