@@ -7459,7 +7459,6 @@
     "未登记标签候选": "Unregistered label candidates",
     "切分不一致": "Segmentation mismatch",
     "别名与大小写变体": "Aliases & case variants",
-    "失效词典关联": "Invalid dictionary links",
     "待核对内容": "Items to review",
     "附加标注待核对": "Extra annotations to review",
     "所选标签用例": "Examples of selected label",
@@ -7470,7 +7469,6 @@
     "已忽略候选": "Ignored candidates",
     "未登记候选": "Unregistered candidates",
     "别名与大小写": "Aliases & case",
-    "失效关联": "Invalid links",
     "附加层待核对": "Extra tiers to review",
     "标签用例": "Label occurrences",
     "解释与分类": "Meaning & category",
@@ -8279,7 +8277,6 @@
     "＋ 另一意义": "＋ Another meaning",
     "移除此形式／意义": "Remove this form/meaning",
     "请先移除本行的形式，再更改填写状态。": "Remove the row's form before changing its filled state.",
-    "选择模板后添加，直接填写词形和标签。Tab 移至下一格，Enter 移至下一行。": "Choose and add a template, then enter forms and labels directly. Tab moves to the next cell; Enter moves to the next row.",
     "请选择模板；可在“模板管理”中先定义栏目和行类别。": "Select a template. Define columns and row categories in Templates first if needed.",
     "请先调整依赖此义项的变形标注：⟦0⟧": "Adjust inflectional glosses that depend on this sense first: ⟦0⟧",
     "已移除基本义项引用；相关变形保留当前完整标注，改为独立标注。": "Base-sense references removed. Related forms retain their complete glosses as custom glosses.",
@@ -9976,9 +9973,6 @@
     "标签或别名重复：⟦0⟧": "Duplicate label or alias: ⟦0⟧",
     "导入标签与目标语言冲突：⟦0⟧。请先核对定义，或导入到新语言。": "Imported labels conflict with the destination language: ⟦0⟧. Review definitions first, or import into a new language.",
     "导入标签与目标语言冲突：⟦0⟧": "Imported labels conflict with the destination language: ⟦0⟧",
-    "原关联单位现识别为音系边界，请核对旧词典关联": "The original linked unit is now recognized as a phonological boundary. Review its old dictionary link.",
-    "原句已删除，词典旧关联仍保留": "The original sentence was deleted; the old dictionary link is retained",
-    "词典关联的原单位已失效或语言已变化": "The original unit of the dictionary link is outdated or its language changed",
     "未登记的标签候选，请人工确认": "Unregistered label candidate; confirm manually",
     "使用别名或大小写变体；不一定是错误": "Uses an alias or case variant; not necessarily an error",
     "导入合法性类型与目标语言冲突：⟦0⟧；请先核对定义，或导入到新语言": "Imported judgment types conflict with the destination language: ⟦0⟧; review definitions first, or import into a new language",
@@ -10589,7 +10583,13 @@
     "删除或调整这些义项、用法或形式后，部分例句关联将失效。仍要保存吗？": "Removing or changing these senses, usages or forms will invalidate some example links. Save anyway?",
     "确认后仅解除失效关联，保留例句当前词形和标注；其他关联不变，整次修改可一步撤销。": "Confirm to detach only invalid links. Keep each sentence’s current forms and glosses and all other links. Undo the entire change in one step.",
     "词条或例句关联已变化，请重新预览后确认": "The entry or its example links have changed. Preview and confirm again.",
-    "要移除的义项、用法或形式仍被例句直接引用，请先预览并确认解除关联后保存；稳定身份不会按编号自动转移。": "The removed senses, usages or forms are still linked to examples. Preview and confirm detaching them before saving. Stable identities are never reassigned by display number."
+    "要移除的义项、用法或形式仍被例句直接引用，请先预览并确认解除关联后保存；稳定身份不会按编号自动转移。": "The removed senses, usages or forms are still linked to examples. Preview and confirm detaching them before saving. Stable identities are never reassigned by display number.",
+    "空形态表": "Empty inflection table",
+    "这张形态表的词形均为空。保存时要移除还是保留？": "All word forms in this table are empty. Remove the table or keep it when saving?",
+    "移除形态表": "Remove table",
+    "保留空表": "Keep empty table",
+    "取消保存": "Cancel saving",
+    "模板行可留空。↑↓ 按列移动；←→ 在文字边缘切格；Tab 下一格，Enter 下一行。": "Template rows may stay empty. Up/Down keep the column; Left/Right switch fields at text edges. Tab: next cell. Enter: next row."
   },
   "backend": {
     "请选择当前语言的书写类型": "Choose a writing type in the current language.",
@@ -11903,9 +11903,6 @@
     "标签或别名重复：⟦0⟧": "Duplicate label or alias: ⟦0⟧",
     "导入标签与目标语言冲突：⟦0⟧。请先核对定义，或导入到新语言。": "Imported labels conflict with the destination language: ⟦0⟧. Review definitions first, or import into a new language.",
     "导入标签与目标语言冲突：⟦0⟧": "Imported labels conflict with the destination language: ⟦0⟧",
-    "原关联单位现识别为音系边界，请核对旧词典关联": "The original linked unit is now recognized as a phonological boundary. Review its old dictionary link.",
-    "原句已删除，词典旧关联仍保留": "The original sentence was deleted; the old dictionary link is retained",
-    "词典关联的原单位已失效或语言已变化": "The original unit of the dictionary link is outdated or its language changed",
     "未登记的标签候选，请人工确认": "Unregistered label candidate; confirm manually",
     "标签用例": "Label occurrences",
     "使用别名或大小写变体；不一定是错误": "Uses an alias or case variant; not necessarily an error",
@@ -15905,8 +15902,8 @@
       "en": "Labels & checks"
     },
     "7352c9fc8b77b8": {
-      "zh": "<h1>语法标签与标注检查</h1><p>按当前语言管理标签定义。检查仅提出候选和待核对项，不改写原句；当前标签识别范围为核心 gloss 层。</p><div class=\"grammar-heading\"><h2>本语言正式标签</h2><button id=\"grammar-new\">＋ 新建标签</button><button id=\"grammar-reference-open\">参考库</button><input id=\"grammar-tag-query\" aria-label=\"筛选标签\" placeholder=\"筛选标签、解释或分类\"></div><div id=\"grammar-tags\" class=\"grammar-table\"></div><h2>标注检查</h2><div class=\"filters\"><label>来源<select id=\"grammar-source\"><option value=\"all\">全部例句</option><option value=\"corpus\">文本句子</option><option value=\"independent\">独立例句</option></select></label><label>检查类型<select id=\"grammar-issue\"><option value=\"all\">全部待核对项</option><option value=\"unknown\">未登记标签候选</option><option value=\"boundary\">切分不一致</option><option value=\"alias\">别名与大小写变体</option><option value=\"link\">失效词典关联</option><option value=\"pending\">待核对内容</option><option value=\"annotation\">附加标注待核对</option><option value=\"usage\">所选标签用例</option></select></label><label><input id=\"grammar-lower\" type=\"checkbox\">扩大候选范围（含普通英文词义）</label></div><div class=\"search-row\"><input id=\"grammar-query\" aria-label=\"筛选检查结果\" placeholder=\"筛选标签、词形、文本名\"><button id=\"grammar-run\">重新检查</button><button id=\"grammar-reset\">全部检查</button></div><p id=\"grammar-summary\" role=\"status\"></p><p id=\"grammar-notice\" role=\"alert\"></p><details open id=\"grammar-candidates\"><summary>未登记候选汇总</summary><div id=\"grammar-unknown\"></div></details><details id=\"grammar-ignored\"><summary>已忽略候选</summary><div id=\"grammar-ignored-list\"></div></details><nav id=\"grammar-top\"></nav><div id=\"grammar-results\"></div><nav id=\"grammar-bottom\"></nav>",
-      "en": "<h1>Grammatical labels &amp; annotation checks</h1><p>Manage label definitions for this language. Checks identify candidates and items to review without rewriting source sentences. Label recognition currently covers the core gloss tier.</p><div class=\"grammar-heading\"><h2>Registered labels in this language</h2><button id=\"grammar-new\">＋ New label</button><button id=\"grammar-reference-open\">References</button><input id=\"grammar-tag-query\" aria-label=\"Filter label\" placeholder=\"Filter labels, meanings, or categories\"></div><div id=\"grammar-tags\" class=\"grammar-table\"></div><h2>Checks</h2><div class=\"filters\"><label>Source<select id=\"grammar-source\"><option value=\"all\">All examples</option><option value=\"corpus\">Text sentence</option><option value=\"independent\">Example</option></select></label><label>Check type<select id=\"grammar-issue\"><option value=\"all\">All items to review</option><option value=\"unknown\">Unregistered label candidates</option><option value=\"boundary\">Segmentation mismatch</option><option value=\"alias\">Aliases &amp; case variants</option><option value=\"link\">Invalid dictionary links</option><option value=\"pending\">Items to review</option><option value=\"annotation\">Extra annotations to review</option><option value=\"usage\">Examples of selected label</option></select></label><label><input id=\"grammar-lower\" type=\"checkbox\">Broader candidates (include ordinary English glosses)</label></div><div class=\"search-row\"><input id=\"grammar-query\" aria-label=\"Filter check results\" placeholder=\"Filter labels, forms, or text names\"><button id=\"grammar-run\">Check again</button><button id=\"grammar-reset\">All checks</button></div><p id=\"grammar-summary\" role=\"status\"></p><p id=\"grammar-notice\" role=\"alert\"></p><details open id=\"grammar-candidates\"><summary>Unregistered candidate summary</summary><div id=\"grammar-unknown\"></div></details><details id=\"grammar-ignored\"><summary>Ignored candidates</summary><div id=\"grammar-ignored-list\"></div></details><nav id=\"grammar-top\"></nav><div id=\"grammar-results\"></div><nav id=\"grammar-bottom\"></nav>"
+      "zh": "<h1>语法标签与标注检查</h1><p>按当前语言管理标签定义。检查仅提出候选和待核对项，不改写原句；当前标签识别范围为核心 gloss 层。</p><div class=\"grammar-heading\"><h2>本语言正式标签</h2><button id=\"grammar-new\">＋ 新建标签</button><button id=\"grammar-reference-open\">参考库</button><input id=\"grammar-tag-query\" aria-label=\"筛选标签\" placeholder=\"筛选标签、解释或分类\"></div><div id=\"grammar-tags\" class=\"grammar-table\"></div><h2>标注检查</h2><div class=\"filters\"><label>来源<select id=\"grammar-source\"><option value=\"all\">全部例句</option><option value=\"corpus\">文本句子</option><option value=\"independent\">独立例句</option></select></label><label>检查类型<select id=\"grammar-issue\"><option value=\"all\">全部待核对项</option><option value=\"unknown\">未登记标签候选</option><option value=\"boundary\">切分不一致</option><option value=\"alias\">别名与大小写变体</option><option value=\"pending\">待核对内容</option><option value=\"annotation\">附加标注待核对</option><option value=\"usage\">所选标签用例</option></select></label><label><input id=\"grammar-lower\" type=\"checkbox\">扩大候选范围（含普通英文词义）</label></div><div class=\"search-row\"><input id=\"grammar-query\" aria-label=\"筛选检查结果\" placeholder=\"筛选标签、词形、文本名\"><button id=\"grammar-run\">重新检查</button><button id=\"grammar-reset\">全部检查</button></div><p id=\"grammar-summary\" role=\"status\"></p><p id=\"grammar-notice\" role=\"alert\"></p><details open id=\"grammar-candidates\"><summary>未登记候选汇总</summary><div id=\"grammar-unknown\"></div></details><details id=\"grammar-ignored\"><summary>已忽略候选</summary><div id=\"grammar-ignored-list\"></div></details><nav id=\"grammar-top\"></nav><div id=\"grammar-results\"></div><nav id=\"grammar-bottom\"></nav>",
+      "en": "<h1>Grammatical labels &amp; annotation checks</h1><p>Manage label definitions for this language. Checks identify candidates and items to review without rewriting source sentences. Label recognition currently covers the core gloss tier.</p><div class=\"grammar-heading\"><h2>Registered labels in this language</h2><button id=\"grammar-new\">＋ New label</button><button id=\"grammar-reference-open\">References</button><input id=\"grammar-tag-query\" aria-label=\"Filter label\" placeholder=\"Filter labels, meanings, or categories\"></div><div id=\"grammar-tags\" class=\"grammar-table\"></div><h2>Checks</h2><div class=\"filters\"><label>Source<select id=\"grammar-source\"><option value=\"all\">All examples</option><option value=\"corpus\">Text sentence</option><option value=\"independent\">Example</option></select></label><label>Check type<select id=\"grammar-issue\"><option value=\"all\">All items to review</option><option value=\"unknown\">Unregistered label candidates</option><option value=\"boundary\">Segmentation mismatch</option><option value=\"alias\">Aliases &amp; case variants</option><option value=\"pending\">Items to review</option><option value=\"annotation\">Extra annotations to review</option><option value=\"usage\">Examples of selected label</option></select></label><label><input id=\"grammar-lower\" type=\"checkbox\">Broader candidates (include ordinary English glosses)</label></div><div class=\"search-row\"><input id=\"grammar-query\" aria-label=\"Filter check results\" placeholder=\"Filter labels, forms, or text names\"><button id=\"grammar-run\">Check again</button><button id=\"grammar-reset\">All checks</button></div><p id=\"grammar-summary\" role=\"status\"></p><p id=\"grammar-notice\" role=\"alert\"></p><details open id=\"grammar-candidates\"><summary>Unregistered candidate summary</summary><div id=\"grammar-unknown\"></div></details><details id=\"grammar-ignored\"><summary>Ignored candidates</summary><div id=\"grammar-ignored-list\"></div></details><nav id=\"grammar-top\"></nav><div id=\"grammar-results\"></div><nav id=\"grammar-bottom\"></nav>"
     },
     "654e0ae6f4d5cb": {
       "zh": "未登记候选",
@@ -15919,10 +15916,6 @@
     "07de0d46cfbbf7": {
       "zh": "别名与大小写",
       "en": "Aliases & case"
-    },
-    "4b67e6d43328fa": {
-      "zh": "失效关联",
-      "en": "Invalid links"
     },
     "d3381bc2e508c3": {
       "zh": "待核对",
@@ -15983,10 +15976,6 @@
     "2aca2c17defa23": {
       "zh": "<button data-audit-register=\"⟦0⟧\">登记此标签</button>",
       "en": "<button data-audit-register=\"⟦0⟧\">Register this label</button>"
-    },
-    "01e6541e61927b": {
-      "zh": "<button data-audit-lexeme=\"⟦0⟧\">查看词典关联</button>",
-      "en": "<button data-audit-lexeme=\"⟦0⟧\">View dictionary link</button>"
     },
     "3a8196e419cbaa": {
       "zh": "<button data-audit-layer=\"⟦0⟧\">核对附加标注</button>",
@@ -17093,8 +17082,8 @@
       "en": "<p><small>Shows source sentences and current glosses. Old links retain their former forms and are not reassigned to new words.</small></p>"
     },
     "0c954982493d13": {
-      "zh": "<article class=\"lex-example ⟦0⟧\"><div class=\"lex-example-source\"><input type=\"checkbox\" data-example-select=\"⟦1⟧\" aria-label=\"选择关联 ⟦2⟧\"><strong class=\"dictionary-wordform\">⟦3⟧</strong> <span class=\"gloss\">⟦4⟧</span><small> · ⟦5⟧⟦6⟧</small></div><div class=\"lex-example-classification\"><span>⟦7⟧ / ⟦8⟧</span>⟦9⟧</div>⟦10⟧<p class=\"preserve-lines\">⟦11⟧</p><div class=\"lex-example-footer\">⟦12⟧<button data-example-unlink=\"⟦13⟧\">解除关联</button></div></article>",
-      "en": "<article class=\"lex-example ⟦0⟧\"><div class=\"lex-example-source\"><input type=\"checkbox\" data-example-select=\"⟦1⟧\" aria-label=\"Select link ⟦2⟧\"><strong class=\"dictionary-wordform\">⟦3⟧</strong> <span class=\"gloss\">⟦4⟧</span><small> · ⟦5⟧⟦6⟧</small></div><div class=\"lex-example-classification\"><span>⟦7⟧ / ⟦8⟧</span>⟦9⟧</div>⟦10⟧<p class=\"preserve-lines\">⟦11⟧</p><div class=\"lex-example-footer\">⟦12⟧<button data-example-unlink=\"⟦13⟧\">Unlink</button></div></article>"
+      "zh": "<article class=\"lex-example ⟦0⟧\"><div class=\"lex-example-source\"><input type=\"checkbox\" data-example-select=\"⟦1⟧\" aria-label=\"选择关联 ⟦2⟧\"><strong class=\"dictionary-wordform\">⟦3⟧</strong> <span class=\"gloss\">⟦4⟧</span><small> · ⟦5⟧⟦6⟧</small></div><div class=\"lex-example-classification\"><span>⟦7⟧ / ⟦8⟧</span>⟦9⟧</div>⟦10⟧⟦11⟧<div class=\"lex-example-footer\">⟦12⟧<button data-example-unlink=\"⟦13⟧\">解除关联</button></div></article>",
+      "en": "<article class=\"lex-example ⟦0⟧\"><div class=\"lex-example-source\"><input type=\"checkbox\" data-example-select=\"⟦1⟧\" aria-label=\"Select link ⟦2⟧\"><strong class=\"dictionary-wordform\">⟦3⟧</strong> <span class=\"gloss\">⟦4⟧</span><small> · ⟦5⟧⟦6⟧</small></div><div class=\"lex-example-classification\"><span>⟦7⟧ / ⟦8⟧</span>⟦9⟧</div>⟦10⟧⟦11⟧<div class=\"lex-example-footer\">⟦12⟧<button data-example-unlink=\"⟦13⟧\">Unlink</button></div></article>"
     },
     "120a490f704fe8": {
       "zh": "整词",
@@ -19172,10 +19161,6 @@
       "zh": "选择已有形式",
       "en": "Select existing form"
     },
-    "42e93804d551e0": {
-      "zh": "已填写变形意义，请同时填写或选择该行的形式。",
-      "en": "An inflectional meaning is filled in. Also enter or select this row's form."
-    },
     "2fd751319209ab": {
       "zh": "<summary></summary><div class=\"paradigm-labels\">⟦0⟧</div><label>此行状态<select class=\"paradigm-state\"><option value=\"unfilled\">未填写</option><option value=\"filled\">已填写</option><option value=\"missing\">无此形式</option></select></label><div class=\"paradigm-realizations\"></div><button type=\"button\" class=\"paradigm-add-form\">＋ 添加形式</button>",
       "en": "<summary></summary><div class=\"paradigm-labels\">⟦0⟧</div><label>Row state<select class=\"paradigm-state\"><option value=\"unfilled\">Not provided</option><option value=\"filled\">Has a value</option><option value=\"missing\">No form</option></select></label><div class=\"paradigm-realizations\"></div><button type=\"button\" class=\"paradigm-add-form\">＋ Add form</button>"
@@ -19337,8 +19322,8 @@
       "en": "Remove the row's form before changing its filled state."
     },
     "037b2ac6dd649a": {
-      "zh": "<p class=\"paradigm-quick-empty\">选择模板后添加，直接填写词形和标签。Tab 移至下一格，Enter 移至下一行。</p>",
-      "en": "<p class=\"paradigm-quick-empty\">Choose and add a template, then enter forms and labels directly. Tab moves to the next cell; Enter moves to the next row.</p>"
+      "zh": "<p class=\"paradigm-quick-empty\">模板行可留空。↑↓ 按列移动；←→ 在文字边缘切格；Tab 下一格，Enter 下一行。</p>",
+      "en": "<p class=\"paradigm-quick-empty\">Template rows may stay empty. Up/Down keep the column; Left/Right switch fields at text edges. Tab: next cell. Enter: next row.</p>"
     },
     "87784113a305ce": {
       "zh": "词形变化",
@@ -19835,22 +19820,6 @@
     "521af4308bd754": {
       "zh": "<small class=\"redup-candidate\">含 ~：可选中词格后关联重叠基底，候选不会自动生效。</small>",
       "en": "<small class=\"redup-candidate\">Contains ~. Select cells to link a reduplication base; candidates are not applied automatically.</small>"
-    },
-    "d051d02b25c787": {
-      "zh": " · 待核对",
-      "en": " · Needs review"
-    },
-    "5c216e832e4de2": {
-      "zh": "~ 候选 ⟦0⟧",
-      "en": "~ candidates: ⟦0⟧"
-    },
-    "4f7cedd2b03c63": {
-      "zh": "重叠关系 ⟦0⟧⟦1⟧",
-      "en": "Reduplication relationships: ⟦0⟧⟦1⟧"
-    },
-    "86ed41d6fd207e": {
-      "zh": " · 待核对",
-      "en": " · Needs review"
     },
     "23f9ade44144ac": {
       "zh": "<button type=\"button\" data-redup-panel>重叠与基底</button>",

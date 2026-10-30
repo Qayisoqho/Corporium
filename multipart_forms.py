@@ -250,4 +250,4 @@ def apply(db,item,lid):
     fresh=segmentation.get(db,p['kind'],p['id'])
     segmentation.link(db,dict(kind=p['kind'],id=p['id'],revision=fresh['revision'],word=p['word'],
         key='group:'+group['id'],lexeme_id=item['lexeme_id'],lexeme_revision=item['lexeme_revision'],
-        usage_id=item['usage_id'],sense_id=item['sense_id'],form_id=item.get('form_id'),notes=item['match_reason']),lid)
+        usage_id=item['usage_id'],sense_id=item['sense_id'],form_id=item.get('form_id'),notes=''),lid)

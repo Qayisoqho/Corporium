@@ -113,16 +113,21 @@ class AuditSpeedTests(unittest.TestCase):
             b=copy.deepcopy(w);cache_.apply(b,n)
             self.assertEqual(b,a);self.assertLessEqual(cache_.bytes,25000);self.assertLessEqual(len(cache_.values),2)
 
-    def test_orphan_links_keep_lexeme_then_morpheme_order_and_source_scope(self):
+    def test_orphan_lexeme_and_morpheme_links_are_absent_from_fresh_and_cached_audits(self):
         e=self.seed('#pass([], (([a],[A]),([b],[B])), [])');x=self.word()
         code,m=self.call('/api/morpheme-save',dict(form='b',body=dict(gloss='B',entry_type='root')));self.assertEqual(code,200,m)
         m=self.call('/api/lexeme?id='+m['id'])[1]
         self.link(e['words'][1]['unit_id'],m);self.link(e['words'][0]['unit_id'],x)
         with server.connect(audit=False) as db:db.execute('DELETE FROM entries WHERE id=?',(e['id'],))
-        items=self.audit(issue='link')['items']
-        self.assertEqual([i['linked_lexeme'] for i in items],[x['id'],m['id']])
-        self.assertTrue(all(i['deleted'] for i in items))
-        self.assertEqual(self.audit(source='independent')['total'],0)
+        with server.connect(audit=False) as db:before=[dict(r) for r in db.execute('SELECT * FROM lexical_links')]
+        self.assertEqual(len(before),2)
+        for source in ('all','corpus','independent'):
+            for issue in ('all','link'):
+                expected=self.fresh(source=source,issue=issue)
+                self.assertEqual(expected['items'],[]);self.assertEqual(expected['total'],0);self.assertEqual(expected['counts'],{})
+                self.assertEqual(expected['page'],1);self.assertEqual(expected['pages'],1)
+                self.assertEqual(self.audit(source=source,issue=issue),expected)
+        with server.connect(audit=False) as db:self.assertEqual([dict(r) for r in db.execute('SELECT * FROM lexical_links')],before)
 
 
 if __name__=='__main__':unittest.main()

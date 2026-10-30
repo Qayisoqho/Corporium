@@ -23,3 +23,22 @@ test('shared tag choices use the supplied language catalogue before any lexeme e
  const html=scope.usageTagOptions('region',[{id:'r',kind:'usage_tag',name:'地域'},{id:'c',kind:'usage_tag',name:'自定限制'},{id:'p',kind:'pos',name:'名词'}]);
  assert.match(html,/自定限制/);assert.match(html,/value="地域" selected/);assert.doesNotMatch(html,/名词/);assert.equal(scope.lexemeClasses.length,0);
 });
+
+
+test('current exact, boundary-ignored and multipart operation notes are hidden without losing research text',()=>{
+ const generated=[
+  '词形一致；简短释义「go」 完整匹配',
+  '词形一致；简短释义「go」＋固有特征 PST 完整匹配；使用已登记形式「went」',
+  '词形与完整标注唯一匹配此义项；具体形式有多个候选，未细分形式',
+  '忽略标记 =（仅首尾）：词典「=uron」与语料「uron」均为「uron」；简短释义与适用特征完整匹配，须人工确认',
+  '组合 2 个不连续部分；词形一致；简短释义「PST」 完整匹配；与多部分组合共用片段，请选择一种关联'
+ ];
+ for(const note of generated){assert.equal(scope.dictionaryLinkNote(note),'');assert.equal(scope.dictionaryLinkNote('  field note\n'+note+'\nfollow up  '),'  field note\nfollow up  ');}
+ for(const note of ['我认为“须人工确认”应作为研究记录','忽略标记 = 是本人的分析备注','词形一致；这是我写的备注'])assert.equal(scope.dictionaryLinkNote(note),note);
+});
+test('cleaned operation notes emit no empty paragraph while research markup is escaped',()=>{
+ const c={esc:v=>String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')};vm.createContext(c);
+ vm.runInContext(source.match(/^function dictionaryLinkNote[^\n]+/m)[0]+'\n'+source.match(/^function dictionaryLinkNoteHtml[^\n]+/m)[0],c);
+ assert.equal(c.dictionaryLinkNoteHtml('词形一致；简短释义「go」 完整匹配'),'');assert.equal(c.dictionaryLinkNoteHtml('  '),'');
+ assert.equal(c.dictionaryLinkNoteHtml('<b>research</b>'),'<p class="preserve-lines dictionary-link-notes">&lt;b&gt;research&lt;/b&gt;</p>');
+});

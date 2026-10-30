@@ -1,4 +1,4 @@
-let homeVisible=false,homeData=null,homeIndex=0,homeTimer=null,homePaused=false,homeHovered=false,homeFocused=false,homeInitialized=false,homeRestoring=false,homeFetch=0;
+let homeVisible=false,homeData=null,homeIndex=0,homeTimer=null,homeRemaining=10000,homeStartedAt=null,homeAudioPlaying=false,homeAudioHolder=null,homePaused=false,homeHovered=false,homeFocused=false,homeInitialized=false,homeRestoring=false,homeFetch=0;
 const home=document.createElement('section');home.id='homepage';home.hidden=true;
 home.innerHTML=(globalThis.CorporiumI18n?.f("cf30846c1a0fae",()=>[])??'<div class="home-shell"><div class="home-heading"><div class="home-ornament" aria-hidden="true">✧</div><h1>Corporium</h1><div id="home-stats" class="home-stats" aria-label="全部语言统计"></div></div><section class="home-example" id="home-example"><div id="home-example-language"></div><div id="home-example-body"><button id="home-example-open" class="home-example-link" aria-label="查看例句来源"><span id="home-example-original"></span><span id="home-example-translation"></span></button></div><div id="home-example-source"></div><div class="home-example-footer"><div class="home-example-tools"><button id="home-pause" aria-pressed="false">暂停轮换</button><button id="home-next">换一句</button></div><div id="home-example-audio"></div></div></section><div id="home-empty" hidden><p>暂无可展示的例句。</p><button id="home-add-language">添加语言</button><button id="home-import">导入文本</button></div><div class="home-bottom"><button id="home-enter" class="home-enter" disabled>进入 <span class="home-wordmark">Corporium</span> <span class="home-enter-arrow" aria-hidden="true">→</span></button><label class="home-skip"><input type="checkbox" id="home-skip"> 下次直接进入工作区</label><p id="home-error" role="status"></p></div></div>');
 document.body.append(home);
@@ -24,12 +24,29 @@ const homeSetWorkspace=setWorkspace;setWorkspace=async function(name){await home
 const homeSelectText=selectText;selectText=async function(id,...options){await homeSelectText(id,...options);saveHomePlace();};
 const homeShowLexeme=showLexeme;showLexeme=async function(id,p=1){await homeShowLexeme(id,p);saveHomePlace();};
 const homeRenderLanguage=renderLanguage;renderLanguage=function(){homeRenderLanguage();if(homeVisible)document.title='Corporium';};
-function stopHomeTimer(){clearTimeout(homeTimer);homeTimer=null;}
+function stopHomeTimer(){
+  if(homeStartedAt!==null)homeRemaining=Math.max(0,homeRemaining-(performance.now()-homeStartedAt));
+  clearTimeout(homeTimer);homeTimer=null;homeStartedAt=null;
+}
 function nextHomeExample(){if(!homeData?.samples.length)return;if(homeIndex+1>=homeData.samples.length){showHome();return;}homeIndex++;drawHomeExample();scheduleHome();}
-function scheduleHome(){stopHomeTimer();if(!homeVisible||homePaused||homeHovered||homeFocused||document.hidden||(homeData?.samples.length||0)<2)return;homeTimer=setTimeout(nextHomeExample,10000);}
+function scheduleHome(){
+  stopHomeTimer();
+  if(!homeVisible||homePaused||homeHovered||homeFocused||homeAudioPlaying||document.hidden||(homeData?.samples.length||0)<2)return;
+  homeStartedAt=performance.now();
+  homeTimer=setTimeout(()=>{homeTimer=null;homeStartedAt=null;homeRemaining=0;nextHomeExample();},homeRemaining);
+}
+function homeAudioState(event){
+  const {holder,active}=event.detail||{};
+  if(active&&$('home-example-audio').contains(holder)){homeAudioHolder=holder;homeAudioPlaying=true;}
+  else if(!active&&holder&&holder===homeAudioHolder){homeAudioHolder=null;homeAudioPlaying=false;}
+  else return;
+  scheduleHome();
+}
+document.addEventListener('corporium-sentence-audio-state',homeAudioState);
 function drawHomeExample(){
   const e=homeData?.samples[homeIndex];$('home-example').hidden=!e;$('home-empty').hidden=!!e;
-  window.stopSentenceAudio?.();
+  stopHomeTimer();homeAudioHolder=null;homeAudioPlaying=false;
+  window.stopSentenceAudio?.();homeRemaining=10000;
   if(!e)return;
   $('home-example-language').textContent=e.language_name;$('home-example-language').title=e.language_name;
   $('home-example-audio').innerHTML=sentenceAudioMarkup((e.kind==='independent'?'independent:':'')+e.id,{compact:true});

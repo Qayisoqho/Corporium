@@ -16,6 +16,7 @@ TABLES=('gloss_meanings','gloss_bindings')
 CURRENT=ContextVar('gloss_inheritance_session',default=None)
 CHANGES=ContextVar('gloss_inheritance_changes',default=None)
 MARKER='sense-gloss-inheritance-v1'
+NUMBER_JOIN='digit-final-gloss-v1'
 
 
 def encoded(value):return json.dumps(value,ensure_ascii=False,separators=(',',':'))
@@ -675,10 +676,28 @@ def set_mode(db,request,lid):
     return dict(ok=True,gloss_revision=body.get('gloss_revision'))
 
 
+def refresh_number_join(db):
+    """Refresh computed labels once; preserve baselines, overrides and link IDs."""
+    if db.execute('SELECT 1 FROM gloss_migrations WHERE id=?',(NUMBER_JOIN,)).fetchone():return
+    from dictionary_gloss_sync import meanings
+    count=0
+    for table in ('lexemes','morphemes'):
+        for row in db.execute('SELECT * FROM '+table).fetchall():
+            target=dict(row)
+            for (usage,sense),label in meanings(target,table).items():
+                count+=db.execute('UPDATE gloss_meanings SET gloss=?,revision=revision+1 WHERE id=? AND gloss<>?',(label,meaning_id(target['id'],usage,sense),label)).rowcount
+    if count:
+        import analysis_workspace
+        analysis_workspace.invalidate(db)
+    db.execute('INSERT INTO gloss_migrations VALUES(?,?)',(NUMBER_JOIN,encoded(dict(meanings=count))))
+
+
 def migrate(db):
     """One-time default inheritance, explicitly covering existing linked glosses."""
     saved=db.execute('SELECT body FROM gloss_migrations WHERE id=?',(MARKER,)).fetchone()
-    if saved:return json.loads(saved['body'])
+    if saved:
+        refresh_number_join(db)
+        return json.loads(saved['body'])
     sync_meanings(db);result=dict(corpus=0,independent=0,bindings=0)
     owners=[('corpus',r[0]) for r in db.execute('SELECT DISTINCT u.entry_id FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id WHERE u.active=1 AND l.sense_id IS NOT NULL')]
     owners += [('independent',r[0]) for r in db.execute("SELECT id FROM dictionary_examples WHERE json_array_length(json_extract(body,'$.targets'))>0")]
@@ -687,6 +706,7 @@ def migrate(db):
         reconcile_owner(db,kind,rid,force=True);result[kind]+=1
     result['bindings']=db.execute('SELECT count(*) FROM gloss_bindings').fetchone()[0]
     db.execute('INSERT INTO gloss_migrations VALUES(?,?)',(MARKER,encoded(result)))
+    refresh_number_join(db)
     return result
 
 

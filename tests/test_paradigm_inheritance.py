@@ -37,7 +37,7 @@ class ParadigmInheritanceTests(unittest.TestCase):
         self.assertEqual(paradigms.usages(self.get(x)['body'])[0]['senses'][1]['short_gloss'],'独立')
 
     def test_composition_boundaries_decorations_and_deduplication(self):
-        self.assertEqual(paradigms.compose('1SG','NOM.SG.NOM'),'1SG.NOM.SG')
+        self.assertEqual(paradigms.compose('1SG','NOM.SG.NOM'),'1SG.NOM')
         self.assertEqual(paradigms.compose('go.NOM','nom.SG'),'go.NOM.SG')
         self.assertEqual(paradigms.compose('1#sub[POT]','ACC'),'1#sub[POT].ACC')
         self.assertEqual(paradigms.compose('go-PST',''),'go-PST')

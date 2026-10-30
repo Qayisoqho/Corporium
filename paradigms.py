@@ -31,10 +31,10 @@ def compose(base,extra):
         raise ValueError('基本义项的标注含复杂结构，无法直接附加标签；请使用独立标注')
     parts=base.split('.')
     if any(not p for p in parts):raise ValueError('基本义项的标注含空片段，请先修正或使用独立标注')
-    seen={p.casefold() for p in parts}
+    seen=sense_gloss.atoms(base)
     for p in extra.split('.'):
         if p.casefold() not in seen:parts.append(p);seen.add(p.casefold())
-    return '.'.join(parts)
+    return sense_gloss.join(parts)
 
 
 def effective_gloss(body,table,meaning):
@@ -120,7 +120,7 @@ def normalize(body,result):
             if original.get('template_row_id'):row['template_row_id']=text(original['template_row_id'])
             for item in rows(original.get('realizations',[])):
                 fid=text(item.get('form_id',''))
-                if fid not in forms:
+                if fid and fid not in forms:
                     label=' · '.join(row['labels']) or '未命名行'
                     raise ValueError(f'变形表「{table["title"]}」的「{label}」找不到引用的词形，请重新选择或填写该行词形。')
                 realization=dict(id=identity(item),form_id=fid,meanings=[])
@@ -135,7 +135,7 @@ def normalize(body,result):
                         effective_gloss(result,table,m)
                     realization['meanings'].append(m)
                 row['realizations'].append(realization)
-            if row['state']!='filled' and row['realizations']:raise ValueError('已有变形形式的行须设为“已填写”；请先移除形式再改变状态')
+            if row['state']!='filled' and any(f['form_id'] for f in row['realizations']):raise ValueError('已有变形形式的行须设为“已填写”；请先移除形式再改变状态')
         tables.append(table)
     result['paradigms']=tables
     return result
@@ -146,6 +146,7 @@ def meanings(body):
         for row in table['rows']:
             if row['state']!='filled':continue
             for form in row['realizations']:
+                if not form['form_id']:continue
                 for meaning in form['meanings']:
                     yield table,row,form,meaning
 
@@ -207,7 +208,8 @@ def remap(body,owner,submap):
         for row in table['rows']:
             row.pop('template_row_id',None)
             for form in row['realizations']:
-                form['id']=str(uuid.uuid4());form['form_id']=submap[(owner,form['form_id'])]
+                form['id']=str(uuid.uuid4())
+                if form['form_id']:form['form_id']=submap[(owner,form['form_id'])]
                 for meaning in form['meanings']:
                     old=meaning['id'];meaning['id']=str(uuid.uuid4());submap[(owner,old)]=meaning['id']
                     if meaning['base_sense_id']:meaning['base_sense_id']=submap[(owner,meaning['base_sense_id'])]

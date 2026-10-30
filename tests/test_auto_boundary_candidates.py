@@ -30,6 +30,22 @@ class AutoBoundaryTests(unittest.TestCase):
         if selected is not None:b.update(mode='candidates', selected=selected)
         return self.api('lexeme-auto-link', {**b, **options})
 
+    def test_matching_explanations_are_not_saved_as_research_notes(self):
+        for kind in ('corpus','independent'):
+            for relaxed in (False,True):
+                with self.subTest(kind=kind,relaxed=relaxed):
+                    form=kind+('relaxed' if relaxed else 'exact')
+                    self.entry(form+'-' if relaxed else form,'G')
+                    src=self.source(kind,[(form,'G')]);plan=self.plan(src)
+                    rows=self.rows(plan,src,'suggestions' if relaxed else 'matches')
+                    self.assertTrue(rows);self.assertTrue(rows[0]['match_reason'])
+                    self.apply(plan,[rows[0]['candidate_id']] if relaxed else None)
+                    if kind=='independent':notes=[t.get('notes','') for t in self.detail(src)['body']['targets']]
+                    else:
+                        with server.connect(audit=False) as db:
+                            notes=[r[0] for r in db.execute('SELECT l.notes FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id WHERE u.entry_id=?',(src['id'],))]
+                    self.assertTrue(notes);self.assertEqual(notes,['']*len(notes))
+
     def test_each_apply_mode_leaves_the_other_matches_available_with_fresh_token(self):
         for kind in ('corpus','independent'):
             for first in ('strict','candidates'):

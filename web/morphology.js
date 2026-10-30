@@ -44,6 +44,13 @@ function fillLexemeChoices(select,rows,value,query,placeholder,status,page=1){
  if(status){status.hidden=rows.length<=result.limit;status.title=(globalThis.CorporiumI18n?.f("0b6ab0ee4a0434",()=>[])??'每批显示50项；可输入词形筛选，当前已选项始终保留。');status.innerHTML=(globalThis.CorporiumI18n?.f("1f458437c21f91",()=>[result.total,result.pages>1?' · '+result.page+' / '+result.pages:'',value?(globalThis.CorporiumI18n?.f("d1d5da491f2992",()=>[])??' · 已选保留'):'',result.pages>1?(globalThis.CorporiumI18n?.f("1aa736b05892b0",()=>[result.page-1,result.page===1?'disabled':'',result.page+1,result.page===result.pages?'disabled':''])??'<button type="button" data-choice-page="'+(result.page-1)+'" aria-label="上一批关联候选" '+(result.page===1?'disabled':'')+'>‹</button><button type="button" data-choice-page="'+(result.page+1)+'" aria-label="下一批关联候选" '+(result.page===result.pages?'disabled':'')+'>›</button>'):''])??'<span>匹配 '+result.total+' 项'+(result.pages>1?' · '+result.page+' / '+result.pages:'')+(value?' · 已选保留':'')+'</span>'+(result.pages>1?'<button type="button" data-choice-page="'+(result.page-1)+'" aria-label="上一批关联候选" '+(result.page===1?'disabled':'')+'>‹</button><button type="button" data-choice-page="'+(result.page+1)+'" aria-label="下一批关联候选" '+(result.page===result.pages?'disabled':'')+'>›</button>':''));if(result.pages>1)for(const b of status.querySelectorAll('[data-choice-page]'))b.onclick=()=>fillLexemeChoices(select,rows,select.value,query,placeholder,status,Number(b.dataset.choicePage));}
 }
 function fillMorphEntry(b={}){
+ if(!$('morph-base').closest('.morph-base-relation-fields')){
+  const base=$('morph-base').closest('label'),relation=$('morph-relation').closest('label');
+  const row=document.createElement('div');row.className='metadata-grid morph-base-relation-fields';
+  base.before(row);row.append(base,relation);
+  $('morph-base-query').classList.add('morph-base-filter');row.before($('morph-base-query'));
+  $('morph-base-count').classList.add('morph-base-filter');row.after($('morph-base-count'));
+ }
  const type=$('morph-entry-type');type.dataset.legacy=b.entry_type==='morpheme'?'morpheme':'';type.value=b.entry_type==='morpheme'?'unspecified':b.entry_type||'unspecified';type.onchange=()=>{type.dataset.legacy='';};$('morph-entry-features').innerHTML=featurePicker(b.features||[]);
  const base=b.relation?.base_id||'',entries=lexemeChoiceRows(morphEditorData.entries).filter(x=>x.id!==editingLexeme?.id),query=$('morph-base-query');
  query.value='';query.hidden=entries.length<=50;

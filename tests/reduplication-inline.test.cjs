@@ -15,13 +15,16 @@ test('tilde creates editable matching form and gloss pieces without splitting br
  assert.equal(JSON.stringify(partsContext.glossEditParts('[a~b]~go',true)),JSON.stringify(['[a~b]','~','go']));
 });
 
-test('shared relation summary preserves review and candidate information in read-only analysis cards',()=>{
+test('sentence summaries add no row for confirmed relations, pending relations or candidates',()=>{
  const js=fs.readFileSync('web/reduplication.js','utf8');
  const c=vm.createContext({esc:s=>s.replaceAll('<','&lt;').replaceAll('"','&quot;')});
  vm.runInContext(js.slice(js.indexOf(' const kinds='),js.indexOf(' let state=')),c);
  vm.runInContext(js.slice(js.indexOf(' function summary('),js.indexOf(' window.CorporiumReduplication=')),c);
  const body={reduplication_info:{relations:[{source:{form:'<je>'},base:{form:'jepasu'},type:'partial',review:true}],candidates:[{}]}};
- const html=c.summary(body,false);assert.match(html,/重叠关系 1 · 待核对/);assert.match(html,/&lt;je> → jepasu/);assert.match(html,/~ 候选 1/);assert.doesNotMatch(html,/<button/);
- assert.match(c.summary(body),/data-redup-open/);assert.equal(c.summary({}), '');
- body.reduplication_info.relations[0].type='modified';assert.match(c.summary(body,false),/变形重叠/);
+ const before=JSON.stringify(body);
+ for(const editable of [true,false])assert.equal(c.summary(body,editable),'');
+ assert.equal(JSON.stringify(body),before);
+ body.reduplication_info.relations[0].review=false;assert.equal(c.summary(body),'');
+ body.reduplication_info.relations=[];assert.equal(c.summary(body),'');assert.equal(c.summary({}),'');
+ assert.equal(body.reduplication_info.candidates.length,1);
 });

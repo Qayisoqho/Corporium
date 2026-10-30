@@ -52,6 +52,8 @@ def convert(db,lid,b):
     mid=source['id'];number=db.execute('SELECT COALESCE(MAX(number),0)+1 FROM morphemes WHERE language_id=? AND form=?',(lid,source['headword'])).fetchone()[0]
     db.execute('INSERT INTO morphemes VALUES(?,?,?,?,?,?)',(mid,lid,source['headword'],number,encoded(body),source['revision']+1))
     db.execute('DELETE FROM lexemes WHERE id=?',(mid,))
+    import homonyms
+    homonyms.clear_singleton(db,lid,source['headword'])
     db.execute("UPDATE object_media SET kind='morpheme',revision=revision+1 WHERE kind='lexeme' AND record_id=?",(mid,))
     _synonyms(db,mid,mid,{s['id']:s['id'] for u in source['body'].get('usages',[]) for s in u.get('senses',[])},'lexeme')
     if choice!='@new':

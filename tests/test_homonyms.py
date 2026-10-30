@@ -64,7 +64,7 @@ class HomonymTests(unittest.TestCase):
         dest=Path(self.temp.name)/'restored.sqlite3';restore(p,dest);server.DB=dest
         self.assertEqual(self.get(a)['body']['homonym_number'],4)
 
-    def test_legacy_numbers_stay_when_sibling_deleted(self):
+    def test_legacy_singleton_number_clears_when_sibling_deleted(self):
         a=self.create();b=self.create()
         with server.connect() as db:
             for x in (a,b):
@@ -73,7 +73,25 @@ class HomonymTests(unittest.TestCase):
         a=self.get(a);b=self.get(b)
         self.assertEqual(b['body']['homonym_number'],2)
         self.assertEqual(self.call('/api/lexeme-delete',dict(id=a['id'],revision=a['revision'],confirmed=True))[0],200)
-        self.assertEqual(self.get(b)['body']['homonym_number'],2)
+        self.assertIsNone(self.get(b)['body']['homonym_number'])
+
+    def test_delete_clears_remaining_number_in_detail_lists_and_undo_redo(self):
+        a=self.create(num=4);b=self.create(num=9)
+        self.assertEqual(self.call('/api/lexeme-delete',dict(id=b['id'],revision=b['revision'],confirmed=True))[0],200)
+        self.assertIsNone(self.get(a)['body']['homonym_number'])
+        for query in ('','&summary=true','&q=bank'):
+            items=self.call('/api/lexemes?language=ordos'+query)[1]['items']
+            self.assertIsNone(next(x for x in items if x['id']==a['id'])['body']['homonym_number'])
+        self.assertEqual(self.undo()[0],200)
+        self.assertEqual(self.get(a)['body']['homonym_number'],4);self.assertEqual(self.get(b)['body']['homonym_number'],9)
+        self.assertEqual(self.undo('redo')[0],200);self.assertIsNone(self.get(a)['body']['homonym_number'])
+
+    def test_delete_from_three_preserves_remaining_numbers_and_other_groups(self):
+        a=self.create();b=self.create();c=self.create()
+        other=self.create('Bank',num=6)
+        self.assertEqual(self.call('/api/lexeme-delete',dict(id=c['id'],revision=c['revision'],confirmed=True))[0],200)
+        self.assertEqual(self.get(a)['body']['homonym_number'],1);self.assertEqual(self.get(b)['body']['homonym_number'],2)
+        self.assertEqual(self.get(other)['body']['homonym_number'],6)
 
     def test_rename_clears_old_group_and_undo_restores_numbers(self):
         a=self.create();b=self.create();b=self.get(b);b['headword']='new-form'

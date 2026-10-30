@@ -21,6 +21,7 @@ import entry_dates
 import example_numbering
 import gloss_inheritance
 import paradigms
+import sense_gloss
 from collections import Counter,defaultdict,OrderedDict
 from contextvars import ContextVar
 from corpus import analyze, boundary_count, clean, gloss_relations
@@ -652,11 +653,11 @@ def mutate(db,action,body,lid):
             if item.get('owner_kind')=='independent':
                 row=db.execute('SELECT body FROM dictionary_examples WHERE id=?',(item['entry_id'],)).fetchone()
                 data=json.loads(row['body'])
-                data.setdefault('targets',[]).append(dict(lexeme_id=item['lexeme_id'],usage_id=item['usage_id'],sense_id=item['sense_id'],form_id=item.get('form_id'),features=[],notes=item['match_reason'],segmentation_ref=item['segmentation_ref']))
+                data.setdefault('targets',[]).append(dict(lexeme_id=item['lexeme_id'],usage_id=item['usage_id'],sense_id=item['sense_id'],form_id=item.get('form_id'),features=[],notes='',segmentation_ref=item['segmentation_ref']))
                 db.execute('UPDATE dictionary_examples SET body=?,revision=revision+1 WHERE id=?',(json.dumps(data,ensure_ascii=False),item['entry_id']))
                 continue
             link_id=str(uuid.uuid4())
-            db.execute('INSERT INTO lexical_links(id,unit_id,lexeme_id,usage_id,sense_id,notes,language_id,revision) VALUES(?,?,?,?,?,?,?,1)',(link_id,item['unit_id'],item['lexeme_id'],item['usage_id'],item['sense_id'],item['match_reason'],lid))
+            db.execute('INSERT INTO lexical_links(id,unit_id,lexeme_id,usage_id,sense_id,notes,language_id,revision) VALUES(?,?,?,?,?,?,?,1)',(link_id,item['unit_id'],item['lexeme_id'],item['usage_id'],item['sense_id'],'',lid))
             if item.get('form_id'):morphology.set_analysis(db,link_id,{'form_id':item['form_id']},get_lexeme(db,item['lexeme_id']))
         return {'ok':True,'count':len(items)}
     if action=='lexeme-save':
@@ -706,7 +707,9 @@ def mutate(db,action,body,lid):
         if db.execute('SELECT 1 FROM lexical_links WHERE lexeme_id=?',(old['id'],)).fetchone():
             raise ValueError('词条仍有关联例证，请先解除关联再删除')
         homonyms.prepare(db,lid,old['headword'],old['body'],old,None)
-        db.execute('DELETE FROM lexemes WHERE id=?',(old['id'],));return {'ok':True}
+        db.execute('DELETE FROM lexemes WHERE id=?',(old['id'],))
+        homonyms.clear_singleton(db,lid,old['headword'])
+        return {'ok':True}
     if action=='lexeme-unlink':
         items=body.get('items',[body])
         if not isinstance(items,list) or not 1<=len(items)<=100:raise ValueError('请选择本页要解除的关联')
@@ -939,12 +942,20 @@ def auto_gloss_key(value,lookup,features=()):
     if any(c in value for c in '-=+<>[](){}'):
         return ('structured',value,tuple(sorted(set(features))))
     parts=value.split('.')
+    # A person number can directly precede a registered tag (3SG, 3sg).
+    # Preserve full registered spellings and underscore-connected tag atoms.
+    expanded=[]
+    for atom in parts:
+        person=re.fullmatch(r'([0-9]+)([A-Za-z][A-Za-z0-9_]*)',atom)
+        if atom.casefold() not in lookup and person and person[2].casefold() in lookup:expanded.extend(person.groups())
+        else:expanded.append(atom)
+    parts=expanded
     tags=[]
     while parts and parts[-1].casefold() in lookup:
         tags.append(lookup[parts.pop().casefold()])
     # Deduplicate inherited declarations, not repeated tags in the actual gloss.
     tags.extend(f for f in set(features) if f not in tags)
-    return ('ordinary', '.'.join(parts), tuple(sorted(tags)))
+    return ('ordinary', sense_gloss.join(parts), tuple(sorted(tags)))
 
 
 def morpheme_citation_match(kind,source,spelling):
@@ -1067,7 +1078,7 @@ def auto_link_plan(db,lid,text_id='',ignore_symbols='-=.',ignore_position='edges
         nonlocal choice_bytes
         key=(effective,form,gloss);saved=choices.get(key)
         if saved is not None:choices.move_to_end(key);return saved[:2]
-        if boundary_count(form):return [],[]
+        if not form.strip() or boundary_count(form):return [],[]
         gloss_key=auto_gloss_key(gloss,lookups.get(effective,{}))
         candidates=index.get((effective,form_key(form),gloss_key),[])
         identity=lambda c:(c['lexeme_id'],c['usage_id'],c['sense_id'],c['form_id'])

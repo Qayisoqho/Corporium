@@ -22,7 +22,7 @@ test('composed form glosses share one projection for pickers and the reading tab
  b.usages[0].senses[0].short_gloss='leave';assert.equal(c.paradigmUsages(b)[0].senses[1].short_gloss,'leave.PST');
 });
 test('composition deduplicates complete atoms and preserves scope and decorations',()=>{
- const c=setup();assert.equal(c.paradigmCompose('1SG','NOM'),'1SG.NOM');assert.equal(c.paradigmCompose('go.NOM','nom.SG.NOM'),'go.NOM.SG');
+ const c=setup();assert.equal(c.paradigmCompose('1SG','NOM'),'1SG.NOM');assert.equal(c.paradigmCompose('go.NOM','nom.SG.NOM'),'go.NOM.SG');assert.equal(c.paradigmCompose('1SG','NOM.SG.NOM'),'1SG.NOM');
  assert.equal(c.paradigmCompose('1#sub[POT]','ACC'),'1#sub[POT].ACC');assert.equal(c.paradigmCompose('go-PST',''),'go-PST');
  for(const [base,extra] of [['','NOM'],['go-PST','NOM'],['1SG','ACC..SG'],['1SG','ACC-SG'],['1SG','ACC GEN']])assert.throws(()=>c.paradigmCompose(base,extra));
 });
@@ -30,4 +30,22 @@ test('template snapshots keep row presets without capturing base-sense identitie
  const c=setup(),t=body().paradigms[0];t.default_base_sense_id='base';t.rows[0].gloss_addition='NOM';
  const copy=c.paradigmFromTemplate(t);assert.equal(copy.rows[0].gloss_addition,'NOM');assert.equal(copy.default_base_sense_id,undefined);
  copy.rows[0].gloss_addition='ACC';assert.equal(t.rows[0].gloss_addition,'NOM');
+});
+test('digit-final glosses append their next label directly in senses and tables',()=>{
+ const c=setup();assert.equal(c.paradigmCompose('pron.3','sg.dat'),'pron.3sg.dat');assert.equal(c.senseGloss({short_gloss:'pron.3',gloss_addition:'SG.DAT'}),'pron.3SG.DAT');
+ assert.equal(c.paradigmCompose('1SG','NOM'),'1SG.NOM');assert.equal(c.paradigmCompose('3#sub[POT]','SG'),'3#sub[POT].SG');
+ assert.equal(c.paradigmCompose(c.senseGloss({short_gloss:'pron.3',gloss_addition:'SG'}),'SG.DAT'),'pron.3SG.DAT');
+});
+test('blank forms retain their labels in the reading table and are absent from sense pickers',()=>{
+ const c=setup(),b=body();b.paradigms[0].rows[0].realizations[0].form_id='';b.variants=[];
+ c.validateParadigmForms(b);assert.deepEqual(Array.from(c.paradigmUsages(b)[0].senses,s=>s.id),['base']);
+ const html=c.paradigmView({body:b});assert.match(html,/go.PST/);assert.doesNotMatch(html,/形式已不存在/);assert.doesNotMatch(html,/data-morph-form=""/);
+});
+test('an all-empty table can be kept or removed and cancellation preserves the entire proposal',async()=>{
+ const c=setup(),b=body();b.paradigms[0].rows[0].realizations[0].form_id='';b.variants=[];
+ const before=JSON.stringify(b);assert.equal(c.emptyParadigmTables(b).length,1);
+ assert.equal(await c.prepareEmptyParadigms(b,async()=>null),false);assert.equal(JSON.stringify(b),before);
+ assert.equal(await c.prepareEmptyParadigms(b,async()=> 'keep'),true);assert.equal(JSON.stringify(b),before);
+ assert.equal(await c.prepareEmptyParadigms(b,async()=> 'remove'),true);assert.equal(b.paradigms.length,0);
+ const filled=body();assert.equal(await c.prepareEmptyParadigms(filled,async()=>{throw Error('must not prompt for filled table');}),true);
 });

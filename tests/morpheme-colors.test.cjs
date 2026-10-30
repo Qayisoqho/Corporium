@@ -25,6 +25,16 @@ test('dictionary corpus and independent examples use the shared word-level rende
  }
  assert.doesNotMatch(c.renderWord({...word,dictionary_example:true},'one'),/interlinear-word|interlinear-part/);assert.equal(JSON.stringify(body),before);
 });
+
+test('analysis context shares source colors, scripts, boundaries and complete-link underlines without dictionary buttons',()=>{
+ const c=setup(),app=fs.readFileSync('web/app.js','utf8');vm.runInContext(app.slice(app.indexOf('function renderWord('),app.indexOf('function renderBody(')),c);c.renderExtraLayers=()=>'<span class="extra-test">custom</span>';
+ const w={form:'je~jepasu-na',gloss:'RED~go-PST',unit_id:'unit',dictionary_linked:true,morph_colors:[{tone:'base',form:[[3,9]],gloss:[[4,6]]},{tone:'affix',form:[[10,12]],gloss:[[7,10]]}],redup_colors:[{tone:'reduplication',form:[[0,2]],gloss:[[0,3]]}]},before=JSON.stringify(w);
+ const standard=c.renderWord(w,'one',true),context=c.renderWord(w,'one',true,true),pair=c.window.CorporiumMorphColors.pair(w,'one');
+ for(const html of [standard,context]){assert.ok(html.includes(pair.form));assert.ok(html.includes(pair.gloss));assert.match(html,/form is-linked/);assert.match(html,/extra-test/);}
+ assert.match(context,/analysis-context-word/);assert.doesNotMatch(context,/<button|word-dictionary/);assert.doesNotMatch(c.renderWord({...w,dictionary_linked:false},'one',false,true),/is-linked/);assert.equal(JSON.stringify(w),before);
+ const boundary=c.renderWord({form:'#',gloss:''},'one',false,true);assert.match(boundary,/phonological-boundary/);assert.doesNotMatch(boundary,/word-dictionary/);
+ const punctuation=c.renderWord({form:',',gloss:'',punctuation:true,punctuation_form:','},'one',false,true);assert.match(punctuation,/punctuation-unit/);
+});
 test('confirmed reduplicant overlays override dictionary tones without changing the base or tilde',()=>{
  const c=setup(),api=c.window.CorporiumMorphColors,w={form:'je~jepasu',gloss:'RED~go',morph_colors:[{tone:'affix',form:[[0,2]],gloss:[[0,3]]},{tone:'clitic',form:[[3,9]],gloss:[[4,6]]}],redup_colors:[{tone:'reduplication',form:[[0,2]],gloss:[[0,3]]}]};
  for(const p of [api.pair(w,'one'),api.aligned(w,'one')]){assert.match(p.form,/morph-tone-reduplication[^>]*>je<\/span>/);assert.match(p.gloss,/morph-tone-reduplication[^>]*>RED<\/span>/);assert.match(p.form,/morph-tone-clitic[^>]*>jepasu/);assert.doesNotMatch(p.form,/morph-tone-reduplication[^>]*>~/);}

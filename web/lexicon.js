@@ -1,6 +1,6 @@
 // Linking preserves the current gloss; later meaning edits sync by stable sense IDs.
 let exampleKind='all',exampleRequest=0;
-let workspace='corpus',dictionaryPage=1,dictionarySelection=null,dictionaryRequest=0;
+let workspace='corpus',dictionaryPage=1,dictionarySelection=null,dictionaryRequest=0,dictionaryMissingNotice='';
 let editingLexeme=null,lexemeDirty=false,linkUnit=null,linkLexeme=null,linkRequest=0;
 const tagNames={register:(globalThis.CorporiumI18n?.f("f3164bee1aa1b6",()=>[])??'语域'),region:(globalThis.CorporiumI18n?.f("5bcb932ebe3aae",()=>[])??'地域'),period:(globalThis.CorporiumI18n?.f("77e999749b763f",()=>[])??'使用年代与状态'),generation:(globalThis.CorporiumI18n?.f("679ff23a7801c2",()=>[])??'使用人群与代际'),domain:(globalThis.CorporiumI18n?.f("a411919c660946",()=>[])??'领域'),other:(globalThis.CorporiumI18n?.f("32265f77c65fb8",()=>[])??'其他')};
 const main=document.querySelector('main'),corpusWorkspace=document.createElement('div');
@@ -35,6 +35,7 @@ $('workspace-dictionary').onclick=dictSafe(()=>setWorkspace('dictionary'));
 document.querySelector('aside').addEventListener('click',e=>{if(e.target.closest('[data-text],#all,#new,#import'))dictSafe(()=>setWorkspace('corpus'))();},true);
 new MutationObserver(()=>{if(workspace==='dictionary')$('dictionary-notice').textContent=$('notice').textContent;}).observe($('notice'),{childList:true,subtree:true,characterData:true});
 function showTags(tags=[]){return tags.map(t=>`<span class="lex-tag" title="${esc(t.note||'')}">${esc(tagNames[t.type]||t.type)}：${esc(t.value)}${t.note?' · '+esc(t.note):''}</span>`).join('');}
+function clearDictionaryMissingNotice(message){if(message)for(const id of ['notice','dictionary-notice'])if($(id)?.textContent===message)$(id).textContent='';}
 async function loadDictionary(withDetail=true){
   const seq=++dictionaryRequest,lid=activeLanguage;
   const list=$('dictionary-list'),listKey=JSON.stringify([lid,dictionaryPage,$('dictionary-query').value,$('dictionary-page-size').value,window.dictionaryOrganizationParams?.(),window.dictionarySearchParams?.()]),listScroll=list.dataset.pageKey===listKey?list.scrollTop:0;
@@ -48,7 +49,7 @@ async function loadDictionary(withDetail=true){
   $('dictionary-prev').disabled=result.page===1;$('dictionary-next').disabled=result.page===result.pages;
   renderDictionaryList($('dictionary-list'),result.items,{attribute:'data-lexeme',select:id=>dictSafe(()=>showLexeme(id))(),empty:(globalThis.CorporiumI18n?.f("9093ee7248cf42",()=>[])??'<p class="empty">暂无词条。可以新建，也可以从语料中的词形开始。</p>'),transform:window.dictionaryClassList,html:x=>{if(x.dictionaryClass)return window.dictionaryClassHeading(x.dictionaryClass);const markup=(x=>{const pos=x.body.usages.map(u=>usageLabel(u)).join(' / ');return `<button class="lexeme-list-item ${dictionarySelection===x.id?'active':''}" data-lexeme="${esc(x.id)}" aria-label="${esc(lexemePlainLabel(x)+(pos?'，'+pos:''))}" aria-pressed="${dictionarySelection===x.id}"><span class="lexeme-list-heading"><span class="lexeme-title-mask" title="${esc(lexemePlainLabel(x))}"><strong class="lexeme-title" style="${languageTypography(JSON.parse(languageList.find(l=>l.id===(x.language_id||activeLanguage))?.metadata||'{}'))}">${lexemeLabel(x)}</strong></span><span class="lexeme-list-pos" title="${esc(pos)}">${esc(pos)}</span></span>${x.body.homonym_note?'<small>'+esc(x.body.homonym_note)+'</small>':''}</button>`;})(x);return window.dictionarySelectableRow?.(x,markup)||markup;}});
   list.dataset.pageKey=listKey;list.scrollTop=listScroll;
-  if(withDetail&&dictionarySelection){try{await showLexeme(dictionarySelection);}catch{$('dictionary-detail').innerHTML=(globalThis.CorporiumI18n?.f("7de22aa8f2da29",()=>[])??'<p>该词条已不存在，或已撤销。</p>');dictionarySelection=null;}}
+  if(withDetail&&dictionarySelection){try{await showLexeme(dictionarySelection);}catch(error){dictionaryMissingNotice=error.message;$('dictionary-detail').innerHTML=(globalThis.CorporiumI18n?.f("7de22aa8f2da29",()=>[])??'<p>该词条已不存在，或已撤销。</p>');}}
 }
 const loadLexemeListOnly=loadDictionary;
 async function refreshDictionaryListOnly(withDetail=true){
@@ -96,7 +97,7 @@ function wireExampleSelection(section,items,unlink){
 function renderLexemeExamples(x,morphData,examples,request){
  const id=x.id,b=x.body,section=$('corpus-examples-section');if(!section||dictionarySelection!==id||request!==exampleRequest)return;
  section.classList.toggle('brief-empty',!(examples.reference_total??examples.total));
- section.innerHTML=(globalThis.CorporiumI18n?.f("96fd1fc8f6c0c5",()=>[examples.occurrences??examples.total,examples.total?(globalThis.CorporiumI18n?.f("8a36aa5e6775cb",()=>[examples.total])??`<p><small>${examples.total} 条关联记录（包括待核对的旧关联）</small></p>`):'',(examples.reference_total??examples.total)?'':'hidden',examples.total?(globalThis.CorporiumI18n?.f("d18ad181cc6ec6",()=>[])??'<p><small>显示原句及其当前 gloss；待核对记录保留旧形式，不会自动转挂到新词上。</small></p>'):'',examples.total?'':'hidden',examples.total?'':'hidden'])??`<h3>语料引用 · ${examples.occurrences??examples.total} 次出现</h3>${examples.total?`<p><small>${examples.total} 条关联记录（包括待核对的旧关联）</small></p>`:''}<label ${(examples.reference_total??examples.total)?'':'hidden'}>例证类型 <select id="example-kind"><option value="all">全部</option><option value="word">整词</option><option value="morpheme">语素</option></select></label>${examples.total?'<p><small>显示原句及其当前 gloss；待核对记录保留旧形式，不会自动转挂到新词上。</small></p>':''}<nav id="examples-top-pagination" ${examples.total?'':'hidden'} aria-label="语料例证上方分页"></nav><div id="lexeme-examples"></div><nav id="examples-bottom-pagination" ${examples.total?'':'hidden'} aria-label="语料例证下方分页"></nav>`);
+ section.innerHTML=(globalThis.CorporiumI18n?.f("96fd1fc8f6c0c5",()=>[examples.occurrences??examples.total,'',(examples.reference_total??examples.total)?'':'hidden','',examples.total?'':'hidden',examples.total?'':'hidden'])??`<h3>语料引用 · ${examples.occurrences??examples.total} 次出现</h3><label ${(examples.reference_total??examples.total)?'':'hidden'}>例证类型 <select id="example-kind"><option value="all">全部</option><option value="word">整词</option><option value="morpheme">语素</option></select></label><nav id="examples-top-pagination" ${examples.total?'':'hidden'} aria-label="语料例证上方分页"></nav><div id="lexeme-examples"></div><nav id="examples-bottom-pagination" ${examples.total?'':'hidden'} aria-label="语料例证下方分页"></nav>`);
  section.exampleRequest=(section.exampleRequest||0)+1;
  const refresh=async target=>{
   await leaveSentenceDrafts();const seq=++section.exampleRequest,current=()=>seq===section.exampleRequest&&section.isConnected&&request===exampleRequest;
@@ -114,7 +115,7 @@ function renderLexemeExamples(x,morphData,examples,request){
  $('example-kind').value=exampleKind;$('example-kind').onchange=dictSafe(async()=>{exampleKind=$('example-kind').value;await refresh(1);});
   $('lexeme-examples').innerHTML=examples.items.map((e,i)=>{
     const usage=paradigmUsages(b).find(u=>u.id===e.usage_id),sense=usage?.senses.find(s=>s.id===e.sense_id);
-    return (globalThis.CorporiumI18n?.f("0c954982493d13",()=>[e.needs_review?'needs-review':'',i,i+1,esc(e.form),richGloss(e.display_gloss??e.gloss,x.language_id),e.kind==='word'?(globalThis.CorporiumI18n?.f("120a490f704fe8",()=>[])??'整词'):(globalThis.CorporiumI18n?.f("c4732059503eab",()=>[])??'语素'),e.needs_review?' · '+((e.review_reason?(globalThis.CorporiumI18n?.f("7bbca57bf2ddc0",()=>[esc(e.review_reason)])??'待核对：'+esc(e.review_reason)):e.component_review?(globalThis.CorporiumI18n?.f("1d5b91a9eadf08",()=>[])??'待核对：关联的形态分析组分已改变或删除'):(globalThis.CorporiumI18n?.f("8fcb9c38624eb3",()=>[])??'待核对：原单位已失效或语言已改变'))):'',esc(usage?.pos||(globalThis.CorporiumI18n?.f("f97d356fb0c389",()=>[])??'词类未定')),esc(sense?.short_gloss||(globalThis.CorporiumI18n?.f("1c37ee94d76484",()=>[])??'义项未定')),morphEvidence(e,b,morphData.tags),e.entry?(globalThis.CorporiumI18n?.f("f72811af4f8748",()=>[esc(e.title),e.position,renderDictionaryExample({...e.entry,text_language_id:e.text_language,position:e.position},'corpus',e.entry_id,[e])])??`<p>${esc(e.title)} · 第 ${e.position} 句</p><div class="lex-example-body">${renderDictionaryExample({...e.entry,text_language_id:e.text_language,position:e.position},'corpus',e.entry_id,[e])}</div>`):(globalThis.CorporiumI18n?.f("6a482e43fd5d84",()=>[])??'<p>原句已删除；撤销删除可恢复。</p>'),esc(dictionaryLinkNote(e.notes)),e.entry?(globalThis.CorporiumI18n?.f("cd72149eacf81a",()=>[i])??`<button data-example-open="${i}">返回原句</button>`):'',i])??`<article class="lex-example ${e.needs_review?'needs-review':''}"><div class="lex-example-source"><input type="checkbox" data-example-select="${i}" aria-label="选择关联 ${i+1}"><strong class="dictionary-wordform">${esc(e.form)}</strong> <span class="gloss">${richGloss(e.display_gloss??e.gloss,x.language_id)}</span><small> · ${e.kind==='word'?'整词':'语素'}${e.needs_review?' · '+((e.review_reason?'待核对：'+esc(e.review_reason):e.component_review?'待核对：关联的形态分析组分已改变或删除':'待核对：原单位已失效或语言已改变')):''}</small></div><div class="lex-example-classification"><span>${esc(usage?.pos||'词类未定')} / ${esc(sense?.short_gloss||'义项未定')}</span>${morphEvidence(e,b,morphData.tags)}</div>${e.entry?`<p>${esc(e.title)} · 第 ${e.position} 句</p><div class="lex-example-body">${renderDictionaryExample({...e.entry,text_language_id:e.text_language,position:e.position},'corpus',e.entry_id,[e])}</div>`:'<p>原句已删除；撤销删除可恢复。</p>'}<p class="preserve-lines">${esc(dictionaryLinkNote(e.notes))}</p><div class="lex-example-footer">${e.entry?`<button data-example-open="${i}">返回原句</button>`:''}<button data-example-unlink="${i}">解除关联</button></div></article>`);
+    return (globalThis.CorporiumI18n?.f("0c954982493d13",()=>[e.needs_review?'needs-review':'',i,i+1,esc(e.form),richGloss(e.display_gloss??e.gloss,x.language_id),e.kind==='word'?(globalThis.CorporiumI18n?.f("120a490f704fe8",()=>[])??'整词'):(globalThis.CorporiumI18n?.f("c4732059503eab",()=>[])??'语素'),e.needs_review?' · '+((e.review_reason?(globalThis.CorporiumI18n?.f("7bbca57bf2ddc0",()=>[esc(e.review_reason)])??'待核对：'+esc(e.review_reason)):e.component_review?(globalThis.CorporiumI18n?.f("1d5b91a9eadf08",()=>[])??'待核对：关联的形态分析组分已改变或删除'):(globalThis.CorporiumI18n?.f("8fcb9c38624eb3",()=>[])??'待核对：原单位已失效或语言已改变'))):'',esc(usage?.pos||(globalThis.CorporiumI18n?.f("f97d356fb0c389",()=>[])??'词类未定')),esc(sense?.short_gloss||(globalThis.CorporiumI18n?.f("1c37ee94d76484",()=>[])??'义项未定')),morphEvidence(e,b,morphData.tags),e.entry?(globalThis.CorporiumI18n?.f("f72811af4f8748",()=>[esc(e.title),e.position,renderDictionaryExample({...e.entry,text_language_id:e.text_language,position:e.position},'corpus',e.entry_id,[e])])??`<p>${esc(e.title)} · 第 ${e.position} 句</p><div class="lex-example-body">${renderDictionaryExample({...e.entry,text_language_id:e.text_language,position:e.position},'corpus',e.entry_id,[e])}</div>`):(globalThis.CorporiumI18n?.f("6a482e43fd5d84",()=>[])??'<p>原句已删除；撤销删除可恢复。</p>'),dictionaryLinkNoteHtml(e.notes),e.entry?(globalThis.CorporiumI18n?.f("cd72149eacf81a",()=>[i])??`<button data-example-open="${i}">返回原句</button>`):'',i])??`<article class="lex-example ${e.needs_review?'needs-review':''}"><div class="lex-example-source"><input type="checkbox" data-example-select="${i}" aria-label="选择关联 ${i+1}"><strong class="dictionary-wordform">${esc(e.form)}</strong> <span class="gloss">${richGloss(e.display_gloss??e.gloss,x.language_id)}</span><small> · ${e.kind==='word'?'整词':'语素'}${e.needs_review?' · '+((e.review_reason?'待核对：'+esc(e.review_reason):e.component_review?'待核对：关联的形态分析组分已改变或删除':'待核对：原单位已失效或语言已改变')):''}</small></div><div class="lex-example-classification"><span>${esc(usage?.pos||'词类未定')} / ${esc(sense?.short_gloss||'义项未定')}</span>${morphEvidence(e,b,morphData.tags)}</div>${e.entry?`<p>${esc(e.title)} · 第 ${e.position} 句</p><div class="lex-example-body">${renderDictionaryExample({...e.entry,text_language_id:e.text_language,position:e.position},'corpus',e.entry_id,[e])}</div>`:'<p>原句已删除；撤销删除可恢复。</p>'}${dictionaryLinkNoteHtml(e.notes)}<div class="lex-example-footer">${e.entry?`<button data-example-open="${i}">返回原句</button>`:''}<button data-example-unlink="${i}">解除关联</button></div></article>`);
   }).join('');
   $('lexeme-examples').querySelectorAll('[data-example-open]').forEach(button=>button.onclick=dictSafe(async()=>{
     const e=examples.items[Number(button.dataset.exampleOpen)];
@@ -137,6 +138,7 @@ async function showLexeme(id,examplePage=1){
   if(current){current.classList.add('active');current.setAttribute('aria-pressed','true');}
   const x=await api('lexeme?id='+encodeURIComponent(id));
   if(dictionarySelection!==id||request!==exampleRequest)return;
+  clearDictionaryMissingNotice(dictionaryMissingNotice);dictionaryMissingNotice='';
   $('dictionary-detail').dataset.referenceId=id;$('dictionary-detail').dataset.referenceRevision=String(x.revision);
   $('dictionary-detail').style.cssText=languageTypographyCSS(JSON.parse(languageList.find(l=>l.id===x.language_id)?.metadata||'{}'));
   if(!['all','unassigned'].includes(exampleForm)&&!x.body.variants.some(v=>v.id===exampleForm))exampleForm='all';
@@ -166,17 +168,35 @@ function tagEditor(container,values=[],changed=()=>{lexemeDirty=true;},catalogue
   values.forEach(add);container.querySelector('.add-tag').onclick=()=>{add();changed();};
 }
 function readTags(container){return [...container.querySelector('.tag-rows').children].map(r=>({type:r.querySelector('select').value,value:r.querySelectorAll('input')[0].value,note:r.querySelectorAll('input')[1].value}));}
+function collapseDictionaryNotes(root,reset=false){
+ for(const input of root.querySelectorAll('#lexeme-notes,.usage-notes,.sense-notes,#morpheme-notes')){
+  let details=input.closest('.dictionary-note');
+  if(!details){
+   const label=input.closest('label');if(!label)continue;
+   const caption=[...label.childNodes].filter(n=>n.nodeType===3);
+   input.setAttribute('aria-label',caption.map(n=>n.textContent).join('').trim());
+   if(label.parentElement.tagName==='DETAILS'&&label.parentElement.querySelector(':scope>summary')){
+    details=label.parentElement;details.classList.add('dictionary-note');for(const node of caption)node.remove();
+   }else{
+    details=document.createElement('details');details.className='dictionary-note';
+    const summary=document.createElement('summary');summary.append(...caption);
+    label.before(details);details.append(summary,label);
+   }
+  }
+  if(reset)details.open=false;
+ }
+}
 function addSense(container,s={}){
   const row=document.createElement('section');row.className='sense-editor';row.dataset.id=s.id||crypto.randomUUID();
   row.innerHTML=(globalThis.CorporiumI18n?.f("179969cd1fb9b6",()=>[esc(s.short_gloss||''),esc(s.definition||''),esc(s.notes||''),featurePicker(s.features||[])])??`<div class="lex-row-heading"><strong>义项</strong><button type="button" class="remove-sense">移除义项</button></div><label>简短标注释义<input class="sense-short" value="${esc(s.short_gloss||'')}" placeholder="如：家"></label><label>词典详细释义<textarea class="sense-definition" rows="3" placeholder="完整解释这个意义">${esc(s.definition||'')}</textarea></label><label>用法说明<textarea class="sense-notes" rows="2">${esc(s.notes||'')}</textarea></label><details><summary>仅此义项的使用标签</summary><div class="sense-tags"></div></details><details><summary>此义项的语法特征</summary><div class="sense-features morph-feature-editor">${featurePicker(s.features||[])}</div></details>`);
   mountGlossAddition(row.querySelector('.sense-short'),s,morphEditorData.tags,()=>{lexemeDirty=true;});
-  tagEditor(row.querySelector('.sense-tags'),s.tags||[]);row.querySelector('.remove-sense').onclick=()=>{if(!row.dispatchEvent(new CustomEvent('corporium-before-sense-remove',{bubbles:true,cancelable:true,detail:{row}})))return;row.remove();lexemeDirty=true;$('lexeme-usages').dispatchEvent(new Event('input',{bubbles:true}));};container.append(row);
+  tagEditor(row.querySelector('.sense-tags'),s.tags||[]);row.querySelector('.remove-sense').onclick=()=>{if(!row.dispatchEvent(new CustomEvent('corporium-before-sense-remove',{bubbles:true,cancelable:true,detail:{row}})))return;row.remove();lexemeDirty=true;$('lexeme-usages').dispatchEvent(new Event('input',{bubbles:true}));};collapseDictionaryNotes(row);container.append(row);
 }
 function addUsage(u={}){
   const row=document.createElement('section');row.className='usage-editor';row.dataset.id=u.id||'';
   row.innerHTML=(globalThis.CorporiumI18n?.f("3e77a4482c7421",()=>[esc(u.pos||''),esc(u.subclass||''),esc(u.notes||'')])??`<div class="lex-row-heading"><strong>词类用法</strong><button type="button" class="remove-usage">移除此用法</button></div><label>词类<input class="usage-pos" value="${esc(u.pos||'')}" placeholder="如：名词；尚未确定时可留空"></label><label>子类<input class="usage-subclass" value="${esc(u.subclass||'')}" placeholder="如：分布数词、II 类"></label><label>用法备注<textarea class="usage-notes" rows="2">${esc(u.notes||'')}</textarea></label><details><summary>此词类用法的使用标签</summary><div class="usage-tags"></div></details><div class="sense-editors"></div><button type="button" class="add-sense">＋ 添加义项</button>`);
   tagEditor(row.querySelector('.usage-tags'),u.tags||[]);for(const s of u.senses||[])addSense(row.querySelector('.sense-editors'),s);
-  row.querySelector('.add-sense').onclick=()=>{addSense(row.querySelector('.sense-editors'));lexemeDirty=true;$('lexeme-usages').dispatchEvent(new Event('input',{bubbles:true}));};row.querySelector('.remove-usage').onclick=()=>{if(!row.dispatchEvent(new CustomEvent('corporium-before-usage-remove',{bubbles:true,cancelable:true,detail:{row}})))return;row.remove();lexemeDirty=true;$('lexeme-usages').dispatchEvent(new Event('input',{bubbles:true}));};$('lexeme-usages').append(row);
+  row.querySelector('.add-sense').onclick=()=>{addSense(row.querySelector('.sense-editors'));lexemeDirty=true;$('lexeme-usages').dispatchEvent(new Event('input',{bubbles:true}));};row.querySelector('.remove-usage').onclick=()=>{if(!row.dispatchEvent(new CustomEvent('corporium-before-usage-remove',{bubbles:true,cancelable:true,detail:{row}})))return;row.remove();lexemeDirty=true;$('lexeme-usages').dispatchEvent(new Event('input',{bubbles:true}));};collapseDictionaryNotes(row);$('lexeme-usages').append(row);
 }
 function addVariant(v={}){
   const row=document.createElement('section');row.className='variant-editor';row.dataset.id=v.id||'';
@@ -191,7 +211,7 @@ function openLexemeEditor(x=null,form='',lid=activeLanguage){
   $('lexeme-orthographies').replaceChildren();for(const o of b.orthographies||[])addOrthography(o);
   for(const u of b.usages||[])addUsage(u);for(const v of b.variants||[])addVariant(v);
   if(!x)addUsage({senses:[{short_gloss:linkUnit?.display_gloss??linkUnit?.gloss??''}]});
-  $('lexeme-error').textContent='';lexemeDirty=false;$('lexeme-editor').showModal();
+  collapseDictionaryNotes($('lexeme-form'),true);$('lexeme-error').textContent='';lexemeDirty=false;$('lexeme-editor').showModal();
 }
 $('add-orthography').onclick=()=>{addOrthography();lexemeDirty=true;};
 $('new-lexeme').onclick=()=>{linkUnit=null;openLexemeEditor();};
@@ -233,6 +253,7 @@ $('lexeme-form').onsubmit=async event=>{
       usages:[...$('lexeme-usages').children].map(u=>({id:u.dataset.id,pos:u.querySelector('.usage-pos').value,subclass:u.querySelector('.usage-subclass').value,features:readFeatures(u.querySelector('.usage-features')),notes:u.querySelector('.usage-notes').value,tags:readTags(u.querySelector('.usage-tags')),senses:[...u.querySelector('.sense-editors').children].map(s=>({id:s.dataset.id,features:readFeatures(s.querySelector('.sense-features')),short_gloss:s.querySelector('.sense-short').value,...readGlossAddition(s.querySelector('.sense-addition-controls')?s:document.querySelector('[data-addition-for="'+s.dataset.id+'"]')),definition:s.querySelector('.sense-definition').value,notes:s.querySelector('.sense-notes').value,tags:readTags(s.querySelector('.sense-tags'))}))})),
       variants:[...$('lexeme-variants').children].map(v=>({...readMorphForm(v),id:v.dataset.id,form:v.querySelector('.variant-form').value,notes:v.querySelector('.variant-notes').value,tags:readTags(v.querySelector('.variant-tags'))}))};
     pruneNewLexemeRows(b,editingLexeme?.body);
+    if(await globalThis.CorporiumParadigms?.prepareSave?.(b)===false)return;
     const hp=await api('homonym-preview?'+new URLSearchParams({lexical_language:$('lexeme-language').value,form:$('lexeme-headword').value,exclude:editingLexeme?.id||''}));
     if(hp.peers.length&&(!editingLexeme||editingLexeme.headword!==$('lexeme-headword').value.trim())&&!await corporiumConfirm((globalThis.CorporiumI18n?.f("b490f47f9bc359",()=>[hp.peers.map(p=>lexemePlainLabel({headword:p.headword,body:{homonym_number:p.number}})).join('、')])??'此词形与已有词条「'+hp.peers.map(p=>lexemePlainLabel({headword:p.headword,body:{homonym_number:p.number}})).join('、')+'」同形。确认建立独立同形词条？系统会分配互不重复的下标。')))return;
     const mp=await prepareMorphemeSave(b,editingLexeme?.id,$('lexeme-language').value);if(!mp)return;

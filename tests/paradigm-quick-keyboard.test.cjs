@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),vm=require(
 function setup(){
  const source=fs.readFileSync('web/paradigms.js','utf8'),start=source.indexOf("   tbody.addEventListener('keydown',e=>{"),end=source.indexOf('   for(const category',start);
  let handler,focused,selected;
- const rows=Array.from({length:3},(_,r)=>Array.from({length:2},(_,c)=>({r,c,disabled:false,matches:()=>true,focus(){focused=this;},select(){selected=this;}})));
+ const rows=Array.from({length:3},(_,r)=>Array.from({length:2},(_,c)=>({r,c,value:'word',selectionStart:0,selectionEnd:0,disabled:false,matches:()=>true,focus(){focused=this;},select(){selected=this;}})));
  const tbody={addEventListener:(name,fn)=>handler=fn,querySelectorAll:()=>rows.map(inputs=>({querySelectorAll:()=>inputs}))};
  vm.runInNewContext(source.slice(start,end),{tbody});
  function key(r,c,key,extra={}){let prevented=false;focused=selected=undefined;handler({target:rows[r][c],key,preventDefault(){prevented=true;},...extra});return {focused,selected,prevented};}
@@ -22,4 +22,17 @@ test('IME composition, modifier shortcuts and advanced controls retain native ke
  const {rows,key}=setup();assert.equal(key(0,0,'Enter',{isComposing:true}).prevented,false);
  for(const modifier of ['ctrlKey','altKey','metaKey'])assert.equal(key(0,0,'Enter',{[modifier]:true}).prevented,false);
  rows[0][0].matches=()=>false;assert.equal(key(0,0,'Enter').prevented,false);
+});
+test('vertical arrows keep the column, skip missing forms and stay inside the table',()=>{
+ const {rows,key}=setup();rows[1].forEach(input=>input.disabled=true);
+ assert.equal(key(0,0,'ArrowDown').focused,rows[2][0]);assert.equal(key(2,1,'ArrowUp').focused,rows[0][1]);
+ assert.equal(key(0,0,'ArrowUp').prevented,true);assert.equal(key(2,0,'ArrowDown').prevented,true);
+ assert.equal(key(0,0,'ArrowDown',{isComposing:true}).prevented,false);
+});
+test('horizontal arrows change columns only at the caret boundary and preserve text selection',()=>{
+ const {rows,key}=setup();rows[0][0].selectionStart=rows[0][0].selectionEnd=4;
+ assert.equal(key(0,0,'ArrowRight').focused,rows[0][1]);assert.equal(key(0,1,'ArrowLeft').focused,rows[0][0]);
+ rows[0][0].selectionStart=rows[0][0].selectionEnd=2;assert.equal(key(0,0,'ArrowRight').prevented,false);
+ rows[0][1].selectionEnd=4;assert.equal(key(0,1,'ArrowLeft').prevented,false);
+ assert.equal(key(0,0,'ArrowRight',{shiftKey:true}).prevented,false);
 });

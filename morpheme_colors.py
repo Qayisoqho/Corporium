@@ -101,13 +101,50 @@ def attach(db,body,kind,rid,lid,prepared=None):
             w['morph_colors'].append(dict(key=unit['key'],tone=tone(unit,link),linked=link is not None,form=ranges(unit.get('fragments',[]),fm),gloss=ranges(unit.get('gloss_fragments',[]),gm)))
         w['dictionary_linked']=w['dictionary_linked'] or bool(w['morph_colors']) and all(c['linked'] for c in w['morph_colors'])
     attach_reduplication(body)
+    complete_reduplication_links(body)
+
+
+def complete_reduplication_links(body):
+    """Resolve complete reduplicant words from their current linked base spans."""
+    words=body.get('words',[])
+    if not any(w.get('redup_colors') for w in words):return
+    resolved=[];entire=[];candidates=set()
     for w in words:
+        _,fm=plain_map(w['form'])
+        entire.append([[fm[0][0],fm[-1][1]]] if fm else [])
+        resolved.append([span for c in w['morph_colors'] if c['linked'] for span in c['form']])
         if w['dictionary_linked'] or not w.get('redup_colors'):continue
         sources=[span for c in w['redup_colors'] for span in c['form']]
         required=[c for c in w['morph_colors'] if not covered(c['form'],sources)]
-        # A confirmed reduplicant needs no separate dictionary entry. Require
-        # an actual linked remainder: source overlays alone create no links.
+        # A mixed word is complete when its non-reduplicant units are linked.
         w['dictionary_linked']=bool(required) and all(c['linked'] for c in required)
+        if (not required and w['morph_colors']) or covered(entire[-1],sources):candidates.add(len(resolved)-1)
+    if not candidates:return
+    for i,w in enumerate(words):
+        if w['dictionary_linked']:resolved[i].extend(entire[i])
+    import reduplication
+    info=body.get('reduplication_info') or reduplication.describe(body)
+    pending=[]
+    for relation in info.get('relations',[]):
+        if relation['review']:continue
+        source,base=relation['source_word'],relation['base_word']
+        _,sm=plain_map(words[source]['form']);_,bm=plain_map(words[base]['form'])
+        pending.append((source,ranges(relation['source']['fragments'],sm),base,ranges(relation['base']['fragments'],bm)))
+    # Resolve chains in either word order, with no recursion or persistent cache.
+    # A base must cover the exact endpoint, not merely some other linked affix.
+    while pending:
+        waiting=[]
+        for source,spans,base,base_spans in pending:
+            if not covered(base_spans,resolved[base]):
+                waiting.append((source,spans,base,base_spans));continue
+            resolved[source].extend(spans)
+            if source in candidates:
+                units=[span for c in words[source]['morph_colors'] for span in c['form']] or entire[source]
+                if covered(units,resolved[source]):
+                    words[source]['dictionary_linked']=True
+                    resolved[source].extend(entire[source]);candidates.remove(source)
+        if len(waiting)==len(pending):break
+        pending=waiting
 
 
 def covered(fragments,sources):

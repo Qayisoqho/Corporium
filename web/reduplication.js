@@ -65,17 +65,8 @@
  inlineSlotTools=function(d){return originalTools(d).replace('</div>',(globalThis.CorporiumI18n?.f("fe5b6f007a0c67",()=>[])??'<button type="button" data-redup-open>关联重叠基底</button></div>'));};
  const originalFields=inlineFields;
  inlineFields=function(d){const html=originalFields(d),count=d.body.words.filter(w=>w.form.includes('~')).length;return html+(count?(globalThis.CorporiumI18n?.f("521af4308bd754",()=>[])??'<small class="redup-candidate">含 ~：可选中词格后关联重叠基底，候选不会自动生效。</small>'):'');};
- function summary(e,editable=true){
-  const info=e.reduplication_info;
-  if(!info)return '';
-  const rows=info.relations||[],candidates=info.candidates||[];if(!rows.length&&!candidates.length)return '';
-  const title=rows.map(r=>r.source.form+' → '+r.base.form+' · '+kinds[r.type]+(r.review?(globalThis.CorporiumI18n?.f("d051d02b25c787",()=>[])??' · 待核对'):'')).join('\n');
-  const hint=candidates.length?(globalThis.CorporiumI18n?.f("5c216e832e4de2",()=>[candidates.length])??`~ 候选 ${candidates.length}`):'';
-  return `<span class="redup-summary" title="${esc(title)}">${rows.length?(globalThis.CorporiumI18n?.f("4f7cedd2b03c63",()=>[rows.length,rows.some(r=>r.review)?(globalThis.CorporiumI18n?.f("86ed41d6fd207e",()=>[])??' · 待核对'):''])??`重叠关系 ${rows.length}${rows.some(r=>r.review)?' · 待核对':''}`):''}${hint?(editable?` <button type="button" data-redup-open>${hint}</button>`:' '+hint):''}</span>`;
- }
+ function summary(){return '';}
  window.CorporiumReduplication={summary};
- const originalBody=renderBody;
- renderBody=function(e,...args){return originalBody(e,...args)+summary(e);};
  const draw=drawSegmentation;
  drawSegmentation=function(){draw();$('segment-source').insertAdjacentHTML('beforeend',(globalThis.CorporiumI18n?.f("23f9ade44144ac",()=>[])??'<button type="button" data-redup-panel>重叠与基底</button>'));};
  document.addEventListener('focusin',e=>{const t=e.target;if(!t.matches('.inline-piece.form'))return;const card=t.closest('.editable-example'),d=inlineDrafts.get(card?.dataset.exampleKey);if(d){d.redupWord=+t.dataset.word;d.redupKey=(d.body.words[d.redupWord].form.includes('~')?'r:':'')+Math.floor(+t.dataset.part/2)+':host';}});

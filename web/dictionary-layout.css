@@ -28,3 +28,29 @@
 .dictionary-class-heading>span:last-child{min-width:0}
 .dictionary-class-triangle{flex:none;width:0;height:0;border-block:4px solid transparent;border-left:6px solid currentColor;transform:rotate(90deg)}
 .dictionary-class-heading[aria-expanded=false] .dictionary-class-triangle{transform:none}
+
+/* The identity shares space with actions, not the full detail-column grid. */
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) :is(.lexeme-heading,.morpheme-detail-head){align-items:baseline;gap:6px 12px;min-width:0}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .lexeme-identity{display:flex;grid-template-columns:none;align-items:baseline;flex-wrap:wrap;gap:2px 12px;flex:1 1 14rem;min-width:min(100%,14rem);max-width:100%}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) :is(.lexeme-identity>h2,.morpheme-detail-head>h2){min-width:0;max-width:100%;margin:0;overflow-wrap:anywhere}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .morpheme-detail-head>h2{flex:1 1 14rem;min-width:min(100%,14rem)}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .lexeme-entry-type{flex:0 0 auto;max-width:100%;word-break:keep-all;overflow-wrap:normal}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) :is(.lexeme-actions,.morpheme-detail-head>.morpheme-actions){flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:5px;margin:0 0 0 auto;min-width:0;max-width:100%}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) :is(.lexeme-actions,.morpheme-detail-head>.morpheme-actions) button{flex:none;white-space:nowrap;font-size:.82rem;line-height:1.4;min-height:30px;padding:4px 8px;margin:0}
+
+/* Optional research notes occupy a single summary until opened. */
+:is(#lexeme-editor,#morpheme-editor) .dictionary-note{margin:4px 0;min-width:0}
+:is(#lexeme-editor,#morpheme-editor) .dictionary-note>summary{cursor:pointer;font-size:.8125rem;line-height:1.5}
+:is(#lexeme-editor,#morpheme-editor) .dictionary-note>label{margin:2px 0 0}
+:is(#lexeme-editor,#morpheme-editor) .dictionary-note textarea{margin-top:0}
+#lexeme-editor #lexeme-form>h3{margin:10px 0 2px;line-height:1.4}
+#lexeme-editor #lexeme-form>h3+p{margin:0 0 4px}
+#lexeme-editor #lexeme-orthographies:empty{display:none}
+#lexeme-editor #lexeme-usages>.usage-editor:first-child{margin-top:4px}
+html[data-home=false] :is(#lexeme-editor,#morpheme-editor){--dictionary-control-height:2.25rem}
+html[data-home=false] :is(#lexeme-editor,#morpheme-editor) :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select:not([multiple]):not([size])){height:var(--dictionary-control-height);box-sizing:border-box;line-height:1.4}
+#lexeme-editor #lexeme-form>.metadata-grid{align-items:end}
+#lexeme-editor #lexeme-form>.metadata-grid>:is(label,.multipart-form-editor){margin:0;align-self:end}
+#lexeme-editor .morph-base-relation-fields{grid-column:1/-1;align-items:end;gap:8px 14px;margin:0}
+#lexeme-editor .morph-base-relation-fields>label{margin:0}
+#lexeme-editor .morph-base-filter{grid-column:1/-1;min-width:0;max-width:100%}

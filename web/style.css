@@ -146,7 +146,7 @@ html #homepage h1{font:min(clamp(4rem,11vw,7.6rem),22vw,18dvh)/1.1 Junicode,Geor
 #home-example-body{min-width:0;min-height:0;display:grid;place-items:center}
 .home-example-link{display:block;width:100%;min-width:0;min-height:0;background:transparent!important;border:0;padding:0;color:var(--ink);font-family:inherit;--home-example-scale:1}
 #home-example-original{display:block;font-size:calc(clamp(1.05rem,2vw,1.25rem) * var(--home-example-scale));line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
-#home-example-translation{display:block;font-size:calc(1rem * var(--home-example-scale));line-height:1.8;margin-top:calc(16px * var(--home-example-scale));white-space:pre-wrap;overflow-wrap:anywhere}
+#home-example-translation{display:block;font-size:calc(1rem * var(--home-example-scale) * .92);line-height:1.8;margin-top:calc(16px * var(--home-example-scale) * .92);white-space:pre-wrap;overflow-wrap:anywhere}
 #home-example-translation:empty{display:none}
 #home-example-source{font-size:min(.72rem,2.2dvh);color:var(--muted)}
 #home-example-language,#home-example-source{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -192,7 +192,7 @@ html .inline-words input.gloss{font-style:var(--gloss-style,normal)!important;fo
 #global-settings{width:100%;margin-top:12px}
 @font-face{font-family:Junicode;src:url('/font/Junicode/Junicode-Bold.ttf') format('truetype');font-weight:700;font-style:normal;font-display:swap}
 @font-face{font-family:Junicode;src:url('/font/Junicode/Junicode-BoldItalic.ttf') format('truetype');font-weight:700;font-style:italic;font-display:swap}
-#home-example-original.home-ipa{font-size:calc(var(--example-font-size,1.125rem) * var(--ipa-scale) * var(--home-example-scale))}
+#home-example-original.home-ipa{font-size:calc(var(--example-font-size,1.125rem) * var(--ipa-scale) * var(--home-example-scale) * 1.12)}
 .morph-features{display:flex;flex-wrap:wrap;gap:6px 18px;max-height:240px;overflow:auto;padding:8px;border:1px solid var(--line);border-radius:6px}.morph-features label{display:inline-flex;align-items:center;gap:5px;margin:3px 0;font-size:.85rem}.morph-condition-types{display:flex;flex-wrap:wrap;gap:15px}.morph-condition-types label{display:inline-flex;align-items:center;gap:5px}.morphology-view{margin:20px 0;padding:14px;border:1px solid var(--line);border-radius:6px}.morphology-view button{padding:4px 8px}.morph-form-view{border-top:1px solid var(--line);padding:12px 0}.morph-form-view p,.morph-evidence{font-size:.85rem;margin:6px 0}.morph-form-view>strong{font-family:Junicode,serif;font-size:1.25rem}#morph-entry-editor{border:1px solid var(--line);padding:12px;border-radius:6px}#link-form-description{font-size:.85rem}#example-form{max-width:100%}
 .morph-evidence{display:block}
 /* Native controls otherwise prohibit selecting their labels in Chromium. */

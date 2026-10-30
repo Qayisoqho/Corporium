@@ -85,14 +85,36 @@ class GrammarTests(unittest.TestCase):
         restored=Path(self.temp.name)/'restored.sqlite3';restore(p,restored);server.DB=restored
         self.assertEqual(self.call('/api/grammar-tags?language=ordos')[1][0]['notes'],'reference')
 
-    def test_stale_link_and_pagination(self):
+    def test_stale_links_do_not_add_results_or_counts_and_pagination_still_works(self):
         e=self.seed();x=self.word();self.link(e['words'][0]['unit_id'],x)
         self.assertEqual(self.call('/api/save',{**e,'words':[dict(form='other',gloss='N')],'notes':''})[0],200)
         audit=self.call('/api/grammar-audit?issue=link')[1]
-        self.assertEqual(audit['total'],1)
+        self.assertEqual(audit['total'],0)
+        self.assertNotIn('link',audit['counts'])
+        all_items=self.call('/api/grammar-audit')[1]
+        self.assertEqual(all_items['total'],1)
+        self.assertEqual(all_items['counts'],{'unknown':1})
+        self.assertEqual([item['issue'] for item in all_items['items']],['unknown'])
         self.seed('\n'.join('#pass([ipa], (([x],[UNREGISTERED])), [t])' for _ in range(25)))
         audit=self.call('/api/grammar-audit?issue=unknown&page=2&lower=true')[1]
         self.assertEqual(audit['total'],26);self.assertEqual(audit['page'],2);self.assertEqual(len(audit['items']),6)
+
+    def test_language_mismatched_links_do_not_add_results_or_change_stored_links(self):
+        e=self.seed('#pass([], (([home],[house])), [])');x=self.word();self.link(e['words'][0]['unit_id'],x)
+        other=self.call('/api/save-language',dict(name='Other',metadata={}))[1]['id']
+        self.assertEqual(self.call('/api/save',{**e,'language_id':other,'notes':''})[0],200)
+        with server.connect() as db:before=[dict(r) for r in db.execute('SELECT * FROM lexical_links')]
+        for lid in ('all','ordos',other):
+            for reuse in ('0','1'):
+                audit=self.call('/api/grammar-audit?language='+lid+'&reuse='+reuse)[1]
+                self.assertEqual(audit['items'],[]);self.assertEqual(audit['total'],0);self.assertEqual(audit['counts'],{})
+        with server.connect() as db:self.assertEqual([dict(r) for r in db.execute('SELECT * FROM lexical_links')],before)
+
+    def test_legacy_phonological_boundary_links_are_not_audit_items(self):
+        e=self.seed('#pass([], (([home],[house])), [])');x=self.word();self.link(e['words'][0]['unit_id'],x)
+        with server.connect() as db:db.execute("UPDATE corpus_units SET form='home#' WHERE id=?",(e['words'][0]['unit_id'],))
+        audit=self.call('/api/grammar-audit')[1]
+        self.assertEqual(audit['items'],[]);self.assertEqual(audit['total'],0);self.assertEqual(audit['counts'],{})
 
     def test_legacy_migration(self):
         with server.connect() as db:

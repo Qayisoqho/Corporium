@@ -63,16 +63,73 @@ class ReduplicationColorReadTests(unittest.TestCase):
         self.assertEqual(self.call('/api/import',dict(title='Reduplication',content=content))[0],200)
         return next(e for e in self.entries() if e['id'] not in before)
 
-    def link(self,e,kind,key,form):
+    def link(self,e,kind,key,form,word=0):
         if not hasattr(self,'link_targets'):self.link_targets={}
         x=self.link_targets.get(form)
         if not x:
             code,x=self.call('/api/lexeme-save',dict(headword=form,body=dict(entry_type='root')));self.assertEqual(code,200,x)
             self.link_targets[form]=x
         d=self.get(e,kind)
-        code,result=self.call('/api/segmentation-link',dict(kind=kind,id=e['id'],revision=d['revision'],word=0,key=key,lexeme_id=x['id'],lexeme_revision=x['revision']))
+        code,result=self.call('/api/segmentation-link',dict(kind=kind,id=e['id'],revision=d['revision'],word=word,key=key,lexeme_id=x['id'],lexeme_revision=x['revision']))
         self.assertEqual(code,200,result)
         return self.get(e,kind)['body']['words'][0]
+
+    def unlink(self,e,kind,word,key):
+        d=self.get(e,kind)
+        if kind=='corpus':
+            w=d['body']['words'][word]
+            uid=w['unit_id'] if key=='@word' else next(c['unit_id'] for c in w['morphemes'] if c['key']==key)
+            code,current=self.call('/api/unit-dictionary?id='+uid);self.assertEqual(code,200,current)
+            code,result=self.call('/api/lexeme-unlink',dict(id=current['link']['id'],revision=current['link']['revision']))
+        else:
+            index=next(i for i,t in enumerate(d['body']['targets']) if t['segmentation_ref']['word']==word and t['segmentation_ref']['key']==key)
+            code,result=self.call('/api/segmentation-link',dict(kind=kind,id=e['id'],revision=d['revision'],remove_target=index))
+        self.assertEqual(code,200,result)
+
+    def test_whole_reduplicant_follows_base_link_unlink_undo_and_redo(self):
+        import grammar_survey
+        for kind in ('corpus','independent'):
+            e=self.example(kind,form='x',gloss='RED')
+            self.save(e,kind,source=dict(word=0,key='@word'),base=dict(word=1,key='@word'),type='full')
+            self.assertFalse(self.get(e,kind)['body']['words'][0]['dictionary_linked'])
+            self.assertTrue(self.link(e,kind,'@word','x',word=1)['dictionary_linked'])
+            with server.connect(audit=False) as db:
+                self.assertTrue(grammar_survey.reference(db,kind,e['id'],'ordos')['body']['words'][0]['dictionary_linked'])
+            w=self.get(e,kind)['body']['words'][0];self.assertFalse(any(c['linked'] for c in w['morph_colors']))
+            self.unlink(e,kind,1,'@word')
+            self.assertFalse(self.get(e,kind)['body']['words'][0]['dictionary_linked'])
+            with server.connect(audit=False) as db:
+                self.assertFalse(grammar_survey.reference(db,kind,e['id'],'ordos')['body']['words'][0]['dictionary_linked'])
+            self.assertEqual(self.undo()[0],200);self.assertTrue(self.get(e,kind)['body']['words'][0]['dictionary_linked'])
+            self.assertEqual(self.undo('redo')[0],200);self.assertFalse(self.get(e,kind)['body']['words'][0]['dictionary_linked'])
+
+    def test_whole_reduplicant_requires_its_exact_base_span_to_be_linked(self):
+        for kind in ('corpus','independent'):
+            e=self.example(kind,form='x',gloss='RED')
+            draft=self.draft(kind,e);draft['body']['words'][1].update(form='x-na',gloss='go-PL')
+            self.assertEqual(self.call('/api/inline-save',draft)[0],200)
+            self.save(e,kind,source=dict(word=0,key='@word'),base=dict(word=1,key='@word'),type='full')
+            self.assertFalse(self.link(e,kind,'1:host','na',word=1)['dictionary_linked'])
+            self.assertTrue(self.link(e,kind,'0:host','x',word=1)['dictionary_linked'])
+            self.unlink(e,kind,1,'0:host');self.assertFalse(self.get(e,kind)['body']['words'][0]['dictionary_linked'])
+            d=self.get(e,kind)
+            self.assertEqual(self.call('/api/segmentation-save',dict(kind=kind,id=e['id'],revision=d['revision'],action='redup-save',relation_id=d['body']['reduplications'][0]['id'],source=dict(word=0,key='@word'),base=dict(word=1,key='1:host'),type='modified'))[0],200)
+            self.assertTrue(self.get(e,kind)['body']['words'][0]['dictionary_linked'])
+
+    def test_whole_reduplicant_chains_propagate_backwards_and_stale_relations_do_not(self):
+        for kind in ('corpus','independent'):
+            if kind=='corpus':e=self.seed('#pass([], (([x],[RED]),([x],[RED]),([x],[go])), [chain])')
+            else:
+                code,e=self.call('/api/example-save',dict(body=dict(ipa='',translation='chain',words=[dict(form='x',gloss=g) for g in ('RED','RED','go')],targets=[])));self.assertEqual(code,200,e)
+            self.save(e,kind,source=dict(word=0,key='@word'),base=dict(word=1,key='@word'),type='full')
+            self.save(e,kind,source=dict(word=1,key='@word'),base=dict(word=2,key='@word'),type='full')
+            self.link(e,kind,'0:host','x',word=2)
+            self.assertTrue(all(w['dictionary_linked'] for w in self.get(e,kind)['body']['words']))
+            self.unlink(e,kind,2,'0:host');self.assertFalse(any(w['dictionary_linked'] for w in self.get(e,kind)['body']['words']))
+            self.assertEqual(self.undo()[0],200)
+            draft=self.draft(kind,e);draft['body']['words'][1]['form']='changed'
+            self.assertEqual(self.call('/api/inline-save',draft)[0],200)
+            self.assertFalse(any(w['dictionary_linked'] for w in self.get(e,kind)['body']['words'][:2]))
 
     def test_linked_remainder_completes_word_and_relation_delete_undo_refreshes_it(self):
         import grammar_survey
@@ -132,6 +189,37 @@ class ReduplicationColorReadTests(unittest.TestCase):
                 self.assertFalse(w['dictionary_linked']);self.assertFalse(any(c['linked'] for c in w['morph_colors']))
             with server.connect(audit=False) as db:
                 for t,rows in before.items():self.assertEqual(list(map(tuple,db.execute('SELECT * FROM '+t))),rows)
+
+    def test_secondary_sentence_views_match_live_source_after_base_link_and_unlink(self):
+        import analysis_workspace
+        import grammar
+        import grammar_survey
+        for kind in ('corpus','independent'):
+            for whole in (False,True):
+                e=self.example(kind,form='x' if whole else 'je~jepasu',gloss='RED' if whole else 'RED~go')
+                self.save(e,kind,**(dict(source=dict(word=0,key='@word'),base=dict(word=1,key='@word'),type='full') if whole else {}))
+                word=1 if whole else 0;key='@word' if whole else 'r:1:host'
+                self.link(e,kind,key,'x' if whole else 'jepasu',word=word)
+                for linked in (True,False):
+                    if not linked:self.unlink(e,kind,word,key)
+                    timeline=self.get(e,kind)['body']
+                    self.assertEqual(timeline['effective_language_id'],'ordos')
+                    self.assertEqual(timeline['text_language_id'],'ordos')
+                    self.assertEqual(timeline['words'][0]['dictionary_linked'],linked)
+                    def display(body):
+                        return [{k:w.get(k) for k in ('form','gloss','morph_colors','redup_colors','dictionary_linked')} for w in body['words']]
+                    with server.connect(audit=False) as db:
+                        before=db.total_changes
+                        survey=grammar_survey.reference(db,kind,e['id'],'ordos')['body']
+                        hit=dict(entry_id=('independent:' if kind=='independent' else '')+e['id'])
+                        analysis=next(analysis_workspace.materialized_items(db,[hit]))[1]['body']
+                        audit=dict(issues=[dict(kind=kind,id=e['id'],body={},issue='usage')],tags=[],unknown=[],ignored=[],counts={},sentences=1)
+                        checked=grammar.audit_page(db,{},audit)['items'][0]['body']
+                        for body in (survey,analysis,checked):self.assertEqual(display(body),display(timeline))
+                        self.assertEqual(db.total_changes,before)
+                    if kind=='corpus':
+                        source=next(item for item in self.entries() if item['id']==e['id'])
+                        self.assertEqual(display(source),display(timeline))
 
     def test_reorder_review_delete_and_undo_restore_the_source_overlay(self):
         for kind in ('corpus','independent'):

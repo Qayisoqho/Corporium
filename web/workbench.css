@@ -1069,8 +1069,8 @@ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .editable-example
 .language-body .translation,.language-body [data-inline-field=translation],#editor #translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--translation-scale,1))}
 html[data-home=false] .editable-example .words:not(.inline-words)>.word.hit{padding-inline:0}
 #home-example-original{font-style:var(--form-style,italic);font-weight:var(--form-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--form-scale,1) * var(--home-example-scale))}
-#home-example-original.home-ipa{font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--ipa-scale,1) * var(--home-example-scale))}
-#home-example-translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--translation-scale,1) * var(--home-example-scale))}
+#home-example-original.home-ipa{font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--ipa-scale,1) * var(--home-example-scale) * 1.12)}
+#home-example-translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--translation-scale,1) * var(--home-example-scale) * .92)}
 
 #standalone-editor #standalone-ipa{font-family:var(--ipa-font,IPAPANNEW);font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--ipa-scale,1))}
 #standalone-editor #standalone-translation{font-family:var(--translation-font,sans-serif);font-style:var(--translation-style,normal);font-weight:var(--translation-weight,400);font-size:calc(var(--example-font-size,1.125rem) * var(--translation-scale,1))}
@@ -1163,7 +1163,7 @@ html[data-home=false] .editable-example .words:not(.inline-words)>.word.hit{padd
 
 /* Compact shared reduplication editor; colors follow every skin. */
 #redup-dialog{width:620px;max-width:calc(100vw - 32px)}
-.redup-pair{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px}.redup-pair select{width:100%;min-width:0}.redup-row,.redup-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.redup-row{padding:5px 0}.redup-row>span{flex:1;min-width:120px}.redup-actions{margin:8px 0}.redup-actions label{display:flex;align-items:center;gap:6px;margin:0}.redup-summary,.redup-candidate{font-size:.8em;opacity:.85}.redup-summary button{font:inherit;padding:1px 5px}#redup-notes{width:100%}#redup-help{display:block;margin-top:6px}
+.redup-pair{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px}.redup-pair select{width:100%;min-width:0}.redup-row,.redup-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.redup-row{padding:5px 0}.redup-row>span{flex:1;min-width:120px}.redup-actions{margin:8px 0}.redup-actions label{display:flex;align-items:center;gap:6px;margin:0}.redup-candidate{font-size:.8em;opacity:.85}#redup-notes{width:100%}#redup-help{display:block;margin-top:6px}
 .redup-actions label{white-space:nowrap}.redup-actions label select{width:auto;min-width:100px}
 
 .class-row .class-drag-handle{flex:none;width:24px;min-width:24px;padding:2px!important;cursor:grab;align-self:center;background:transparent}.class-drop-before{box-shadow:0 -2px var(--green)}#semantic-class-list .class-row>button[data-semantic-edit]{flex:1;text-align:left;background:transparent;border:0;padding:4px 2px}
@@ -1175,3 +1175,5 @@ html[data-home=false] .editable-example .words:not(.inline-words)>.word.hit{padd
 
 /* Example rows share an absolute root-rem base; each language supplies its own ratios. */
 :root{--example-font-size:1.125rem}
+
+.empty-paradigm-dialog{max-width:480px;width:calc(100vw - 40px)}

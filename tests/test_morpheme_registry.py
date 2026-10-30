@@ -22,6 +22,26 @@ class MorphemeRegistryTests(unittest.TestCase):
         b.update(extra)
         return self.call('/api/morpheme-assign',b)
 
+    def test_homonym_subscript_hides_after_deletion_and_follows_undo_redo(self):
+        for deleted_first in (False,True):
+            form='homonym-'+str(deleted_first)
+            a=self.call('/api/morpheme-save',dict(form=form,body=dict(gloss='first')))[1]
+            b=self.call('/api/morpheme-save',dict(form=form,body=dict(gloss='second')))[1]
+            delete,keep=(a,b) if deleted_first else (b,a)
+            self.assertEqual(self.call('/api/morpheme?id='+keep['id'])[1]['display_number'],keep['number'])
+            self.assertEqual(self.call('/api/morpheme-delete',dict(id=delete['id'],revision=delete['revision']))[0],200)
+            detail=self.call('/api/morpheme?id='+keep['id'])[1]
+            self.assertIsNone(detail['display_number']);self.assertIsNone(detail['dictionary_body']['homonym_number'])
+            self.assertEqual(detail['number'],keep['number'])
+            self.assertIsNone(self.call('/api/lexeme?id='+keep['id'])[1]['body']['homonym_number'])
+            for query in ('','?q='+form):
+                items=self.call('/api/morphemes'+query)[1]['items']
+                self.assertIsNone(next(x for x in items if x['id']==keep['id'])['display_number'])
+            self.assertEqual(self.undo()[0],200)
+            self.assertEqual(self.call('/api/morpheme?id='+keep['id'])[1]['display_number'],keep['number'])
+            self.assertEqual(self.undo('redo')[0],200)
+            self.assertIsNone(self.call('/api/morpheme?id='+keep['id'])[1]['display_number'])
+
     def test_save_plan_atomic_homonyms_and_counts(self):
         e,x=self.fixture()
         plan=self.call('/api/morpheme-save-preview',x)[1]

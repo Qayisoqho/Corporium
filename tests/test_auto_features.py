@@ -47,7 +47,8 @@ class AutoFeatureTests(unittest.TestCase):
         lookup={'hon':'h','pl':'p','nom':'n'}
         key=lambda s,fs=():lexicon.auto_gloss_key(s,lookup,fs)
         self.assertEqual(key('接受.hon',['h','p']),key('接受.pl.hon'))
-        for separator in '.;:_\\':self.assertEqual(key('接受'+separator+'hon'),key('接受.hon'))
+        for separator in '.;:\\':self.assertEqual(key('接受'+separator+'hon'),key('接受.hon'))
+        self.assertNotEqual(key('接受_hon'),key('接受.hon'))
         for gloss in ['接受[hon]','接受< hon>','接受-hon','接受.hon.hon','接受.HonX','接受. hon']:
             self.assertNotEqual(key(gloss),key('接受',['h']))
         self.assertNotEqual(key('s.1>o.3sg'),key('o.3sg>s.1'))

@@ -6,7 +6,8 @@ function sentenceAudioMarkup(id,{compact=false}={}){return `<span class="sentenc
  const audio=document.createElement('audio');audio.id='sentence-audio-player';audio.preload='metadata';audio.hidden=true;document.body.append(audio);
  let activeButton=null,activeClip=null,sequence=0,scanTimer=null,running=false,again=false;
  const player=new RangePlayback(audio,resetButton);
- function resetButton(){if(activeButton?.isConnected){activeButton.textContent='▶';activeButton.title=(globalThis.CorporiumI18n?.f("afcc853928b4f2",()=>[])??'播放句子音频');activeButton.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("9b7a7dea0fbd6b",()=>[])??'播放句子音频'));}activeButton=null;}
+ function notifyPlayback(holder,active){if(holder)document.dispatchEvent(new CustomEvent('corporium-sentence-audio-state',{detail:{holder,active}}));}
+ function resetButton(){const holder=activeButton?.closest('.sentence-audio');if(activeButton?.isConnected){activeButton.textContent='▶';activeButton.title=(globalThis.CorporiumI18n?.f("afcc853928b4f2",()=>[])??'播放句子音频');activeButton.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("9b7a7dea0fbd6b",()=>[])??'播放句子音频'));}activeButton=null;activeClip=null;notifyPlayback(holder,false);}
  function stop(){sequence++;player.stop();resetButton();}
  window.stopSentenceAudio=stop;
  document.addEventListener('corporium-playback-start',e=>{if(e.detail!==audio)stop();});
@@ -21,7 +22,7 @@ function sentenceAudioMarkup(id,{compact=false}={}){return `<span class="sentenc
  function schedule(){clearTimeout(scanTimer);scanTimer=setTimeout(scan,60);}
  new MutationObserver(records=>{if(records.some(r=>[...r.addedNodes].some(n=>n.nodeType===1&&(n.matches?.('.sentence-audio:not([data-audio-ready])')||n.querySelector?.('.sentence-audio:not([data-audio-ready])')))))schedule();}).observe(document.body,{childList:true,subtree:true});
  document.addEventListener('corporium-alignment-changed',()=>{stop();for(const n of document.querySelectorAll('.sentence-audio')){n.removeAttribute('data-audio-ready');n.hidden=true;}schedule();});
- document.addEventListener('click',async e=>{const button=e.target.closest('.sentence-audio-play');if(!button)return;e.preventDefault();e.stopPropagation();const holder=button.closest('.sentence-audio');if(activeButton===button&&!audio.paused){stop();return;}stop();const ticket=sequence;activeButton=button;button.textContent='…';const status=holder.querySelector('.sentence-audio-status');status.textContent='';try{
+ document.addEventListener('click',async e=>{const button=e.target.closest('.sentence-audio-play');if(!button)return;e.preventDefault();e.stopPropagation();const holder=button.closest('.sentence-audio');if(activeButton===button&&!audio.paused){stop();return;}stop();const ticket=sequence;activeButton=button;notifyPlayback(holder,true);button.textContent='…';const status=holder.querySelector('.sentence-audio-status');status.textContent='';try{
   // Fetch again on activation so source replacement/undo never plays a stale asset.
   const data=await originalApi('timeline-clips?ids='+encodeURIComponent(holder.dataset.audioEntry));if(ticket!==sequence)return;const selected=holder._clips[Number(holder.querySelector('select')?.value||0)];const clip=data[holder.dataset.audioEntry]?.find(c=>c.id===selected?.id);if(!clip)throw Error((globalThis.CorporiumI18n?.f("91c0b496a177b8",()=>[])??'这个对齐区间已改变，请刷新例句'));activeClip=clip;
   const q=new URLSearchParams({asset:clip.asset,proxy:String(clip.proxy)});if(typeof desktopProjectStamp==='string')q.set('project',desktopProjectStamp);audio.src='/api/timeline-file?'+q;

@@ -7,13 +7,13 @@ function paradigmAddition(value=''){
 function paradigmCompose(base='',extra=''){
  base=base.trim();extra=paradigmAddition(extra);if(!base)throw Error((globalThis.CorporiumI18n?.f("e042510716e891",()=>[])??'请选择已填写简短释义的基本义项'));if(!extra)return base;
  if(/[\s\-=+<>\[\](){}:;/\\#]/.test(base.replace(/#(?:sub|super|sup)\[[A-Za-z0-9]+\]/g,'')))throw Error((globalThis.CorporiumI18n?.f("c67c2698d241a0",()=>[])??'基本标注含复杂结构，请使用独立标注'));
- const parts=base.split('.');if(parts.some(p=>!p))throw Error((globalThis.CorporiumI18n?.f("6e6144acd86e08",()=>[])??'基本标注含空片段'));const seen=new Set(parts.map(p=>p.toLowerCase()));
- for(const p of extra.split('.'))if(!seen.has(p.toLowerCase())){parts.push(p);seen.add(p.toLowerCase());}return parts.join('.');
+ const parts=base.split('.');if(parts.some(p=>!p))throw Error((globalThis.CorporiumI18n?.f("6e6144acd86e08",()=>[])??'基本标注含空片段'));const seen=glossAtoms(base);
+ for(const p of extra.split('.'))if(!seen.has(p.toLowerCase())){parts.push(p);seen.add(p.toLowerCase());}return joinGlossAtoms(parts);
 }
 function paradigmGloss(body,table,m){return m.gloss_mode==='inherit'?paradigmCompose(senseGloss((body.usages||[]).find(u=>u.id===table.usage_id)?.senses.find(s=>s.id===m.base_sense_id)||{}),m.gloss_addition||''):m.short_gloss||'';}
 function paradigmUsages(body={},formId=null){
  const added=new Map();
- for(const t of body.paradigms||[])for(const r of t.rows||[])if(r.state==='filled')for(const f of r.realizations||[])if(formId===null||f.form_id===formId)for(const m of f.meanings||[]){
+ for(const t of body.paradigms||[])for(const r of t.rows||[])if(r.state==='filled')for(const f of r.realizations||[])if(f.form_id&&(formId===null||f.form_id===formId))for(const m of f.meanings||[]){
   if(!added.has(t.usage_id))added.set(t.usage_id,[]);
   added.get(t.usage_id).push({...m,short_gloss:paradigmGloss(body,t,m),paradigm_form_id:f.form_id,paradigm_label:t.title+' / '+r.labels.join(' · ')});
  }
@@ -41,18 +41,35 @@ function paradigmDetachSense(meaning,sense){
 function validateParadigmForms(body){
  const forms=new Map((body.variants||[]).map(f=>[f.id,f]));
  for(const table of body.paradigms||[])for(const row of table.rows)for(const form of row.realizations){
+  if(!form.form_id)continue;
   if(!forms.has(form.form_id))throw Error((globalThis.CorporiumI18n?.f("eda9f2c7f6f817",()=>[table.title,row.labels.join(' · ')||(globalThis.CorporiumI18n?.f("2d872b7ee5a4df",()=>[])??'未命名行')])??'变形表「'+table.title+'」的「'+(row.labels.join(' · ')||'未命名行')+'」找不到引用的词形，请重新选择或填写该行词形。'));
   if(!forms.get(form.form_id).form.trim())throw Error((globalThis.CorporiumI18n?.f("3271945e6b6996",()=>[table.title,row.labels.join(' · ')||(globalThis.CorporiumI18n?.f("49d552f712fc7c",()=>[])??'未命名行')])??'变形表「'+table.title+'」的「'+(row.labels.join(' · ')||'未命名行')+'」词形已被清空。请补填词形，或先从表格中移除此形式。'));
  }
+}
+function emptyParadigmTables(body){
+ const forms=new Map((body.variants||[]).map(f=>[f.id,f.form]));
+ return (body.paradigms||[]).filter(t=>!t.rows.some(r=>r.realizations.some(f=>(forms.get(f.form_id)||'').trim())));
+}
+async function chooseEmptyParadigm(table){
+ const t=v=>globalThis.CorporiumI18n?.phrase(v)??v,dialog=document.createElement('dialog');dialog.className='empty-paradigm-dialog';
+ dialog.innerHTML='<h2>'+esc(t('空形态表'))+'</h2><p><strong>'+esc(table.title)+'</strong></p><p>'+esc(t('这张形态表的词形均为空。保存时要移除还是保留？'))+'</p><div class="morpheme-actions"><button type="button" data-choice="remove">'+esc(t('移除形态表'))+'</button><button type="button" data-choice="keep">'+esc(t('保留空表'))+'</button><button type="button" data-choice="cancel">'+esc(t('取消保存'))+'</button></div>';
+ document.body.append(dialog);
+ try{return await new Promise(resolve=>{dialog.addEventListener('cancel',e=>{e.preventDefault();resolve(null);});for(const b of dialog.querySelectorAll('[data-choice]'))b.onclick=()=>resolve(b.dataset.choice==='cancel'?null:b.dataset.choice);dialog.showModal();dialog.querySelector('[data-choice="keep"]').focus();});}
+ finally{dialog.close();dialog.remove();}
+}
+async function prepareEmptyParadigms(body,choose=chooseEmptyParadigm){
+ const removed=new Set();
+ for(const table of emptyParadigmTables(body)){const choice=await choose(table);if(!choice)return false;if(choice==='remove')removed.add(table.id);}
+ body.paradigms=(body.paradigms||[]).filter(t=>!removed.has(t.id));return true;
 }
 function paradigmView(x){
  const forms=new Map((x.body.variants||[]).map(f=>[f.id,f]));
  return (x.body.paradigms||[]).map(t=>(globalThis.CorporiumI18n?.f("75ec0df036b752",()=>[esc(t.title),esc(usageLabel(x.body.usages.find(u=>u.id===t.usage_id)||{})),t.notes?`<p class="preserve-lines">${esc(t.notes)}</p>`:'',t.dimensions.map(d=>`<th>${esc(d)}</th>`).join(''),t.rows.map(r=>{
   const values=r.realizations.flatMap(f=>f.meanings.length?f.meanings.map(m=>({f,m})):[{f,m:{}}]);
-  return (values.length?values:[{f:null,m:{}}]).map(({f,m},i)=>`<tr>${i?'':r.labels.map(l=>`<th scope="row" rowspan="${Math.max(1,values.length)}">${esc(l)}</th>`).join('')}<td>${f?`<button type="button" class="dictionary-wordform" data-morph-form="${esc(f.form_id)}">${esc(forms.get(f.form_id)?.form||(globalThis.CorporiumI18n?.f("e29e0e938316cc",()=>[])??'形式已不存在'))}</button>`:r.state==='missing'?(globalThis.CorporiumI18n?.f("62fd4575aba217",()=>[])??'无此形式'):(globalThis.CorporiumI18n?.f("03521d239d4c4e",()=>[])??'未填写')}</td><td class="gloss"><span class="paradigm-gloss-line"><span>${richGloss(paradigmGloss(x.body,t,m),x.language_id)}</span>${m.gloss_mode==='inherit'?(globalThis.CorporiumI18n?.f("6447c7f20a1231",()=>[esc(m.gloss_addition||(globalThis.CorporiumI18n?.f("1999cf85a96f7b",()=>[])??'无附加标签'))])??'<small class="paradigm-inheritance">继承＋'+esc(m.gloss_addition||'无附加标签')+'</small>'):''}</span></td><td class="preserve-lines">${esc(m.definition||'')}${m.notes?`<small>${esc(m.notes)}</small>`:''}</td></tr>`).join('');
+  return (values.length?values:[{f:null,m:{}}]).map(({f,m},i)=>`<tr>${i?'':r.labels.map(l=>`<th scope="row" rowspan="${Math.max(1,values.length)}">${esc(l)}</th>`).join('')}<td>${f?.form_id?`<button type="button" class="dictionary-wordform" data-morph-form="${esc(f.form_id)}">${esc(forms.get(f.form_id)?.form||(globalThis.CorporiumI18n?.f("e29e0e938316cc",()=>[])??'形式已不存在'))}</button>`:r.state==='missing'?(globalThis.CorporiumI18n?.f("62fd4575aba217",()=>[])??'无此形式'):(globalThis.CorporiumI18n?.f("03521d239d4c4e",()=>[])??'未填写')}</td><td class="gloss"><span class="paradigm-gloss-line"><span>${richGloss(paradigmGloss(x.body,t,m),x.language_id)}</span>${m.gloss_mode==='inherit'?(globalThis.CorporiumI18n?.f("6447c7f20a1231",()=>[esc(m.gloss_addition||(globalThis.CorporiumI18n?.f("1999cf85a96f7b",()=>[])??'无附加标签'))])??'<small class="paradigm-inheritance">继承＋'+esc(m.gloss_addition||'无附加标签')+'</small>'):''}</span></td><td class="preserve-lines">${esc(m.definition||'')}${m.notes?`<small>${esc(m.notes)}</small>`:''}</td></tr>`).join('');
  }).join('')])??`<section class="paradigm-view"><h3>${esc(t.title)}</h3><small>${esc(usageLabel(x.body.usages.find(u=>u.id===t.usage_id)||{}))}</small>${t.notes?`<p class="preserve-lines">${esc(t.notes)}</p>`:''}<div class="paradigm-scroll"><table><thead><tr>${t.dimensions.map(d=>`<th>${esc(d)}</th>`).join('')}<th>形式</th><th>简短标注</th><th>释义</th></tr></thead><tbody>${t.rows.map(r=>{
   const values=r.realizations.flatMap(f=>f.meanings.length?f.meanings.map(m=>({f,m})):[{f,m:{}}]);
-  return (values.length?values:[{f:null,m:{}}]).map(({f,m},i)=>`<tr>${i?'':r.labels.map(l=>`<th scope="row" rowspan="${Math.max(1,values.length)}">${esc(l)}</th>`).join('')}<td>${f?`<button type="button" class="dictionary-wordform" data-morph-form="${esc(f.form_id)}">${esc(forms.get(f.form_id)?.form||'形式已不存在')}</button>`:r.state==='missing'?'无此形式':'未填写'}</td><td class="gloss"><span class="paradigm-gloss-line"><span>${richGloss(paradigmGloss(x.body,t,m),x.language_id)}</span>${m.gloss_mode==='inherit'?'<small class="paradigm-inheritance">继承＋'+esc(m.gloss_addition||'无附加标签')+'</small>':''}</span></td><td class="preserve-lines">${esc(m.definition||'')}${m.notes?`<small>${esc(m.notes)}</small>`:''}</td></tr>`).join('');
+  return (values.length?values:[{f:null,m:{}}]).map(({f,m},i)=>`<tr>${i?'':r.labels.map(l=>`<th scope="row" rowspan="${Math.max(1,values.length)}">${esc(l)}</th>`).join('')}<td>${f?.form_id?`<button type="button" class="dictionary-wordform" data-morph-form="${esc(f.form_id)}">${esc(forms.get(f.form_id)?.form||'形式已不存在')}</button>`:r.state==='missing'?'无此形式':'未填写'}</td><td class="gloss"><span class="paradigm-gloss-line"><span>${richGloss(paradigmGloss(x.body,t,m),x.language_id)}</span>${m.gloss_mode==='inherit'?'<small class="paradigm-inheritance">继承＋'+esc(m.gloss_addition||'无附加标签')+'</small>':''}</span></td><td class="preserve-lines">${esc(m.definition||'')}${m.notes?`<small>${esc(m.notes)}</small>`:''}</td></tr>`).join('');
  }).join('')}</tbody></table></div></section>`)).join('');
 }
 (()=>{
@@ -85,7 +102,7 @@ function paradigmView(x){
   function set(value){mode.value=value.gloss_mode||'independent';previousMode=mode.value;bases(value.base_sense_id||'');full.value=value.short_gloss||'';extra.value=value.gloss_addition||'';refresh();}
   const tagChoices=()=>morphEditorData.tags.filter(t=>t.language_id===$('lexeme-language').value);tagSelect(picker,tagChoices());picker.onfocus=()=>tagSelect(picker,tagChoices());picker.onchange=()=>{if(!picker.value)return;extra.value=[extra.value,picker.value].filter(Boolean).join('.');picker.value='';refresh();onchange(read());lexemeDirty=true;};
   base.onfocus=()=>bases();base.onchange=()=>{refresh();onchange(read());lexemeDirty=true;};
-  mode.onchange=()=>{try{if(mode.value==='independent'&&previousMode==='inherit')full.value=paradigmCompose(baseSenses(uid()).find(s=>s.id===base.value)?.short_gloss||'',extra.value);else if(mode.value==='inherit'&&full.value.trim()){const label=baseSenses(uid()).find(s=>s.id===base.value)?.short_gloss?.trim()||'';if(label&&full.value.trim()===label)extra.value='';else if(label&&full.value.trim().startsWith(label+'.'))extra.value=paradigmAddition(full.value.trim().slice(label.length+1));else throw Error((globalThis.CorporiumI18n?.f("70a4e492400529",()=>[])??'现有完整标注不能直接拆分，请先选择对应义项并调整标注。'));}previousMode=mode.value;refresh();onchange(read());lexemeDirty=true;}catch(e){mode.value=previousMode;refresh();$('lexeme-error').textContent=e.message;}};
+  mode.onchange=()=>{try{if(mode.value==='independent'&&previousMode==='inherit')full.value=paradigmCompose(baseSenses(uid()).find(s=>s.id===base.value)?.short_gloss||'',extra.value);else if(mode.value==='inherit'&&full.value.trim()){const label=baseSenses(uid()).find(s=>s.id===base.value)?.short_gloss?.trim()||'';if(label&&full.value.trim()===label)extra.value='';else if(label&&full.value.trim().startsWith(label+(/[0-9]$/.test(label)?'':'.')))extra.value=paradigmAddition(full.value.trim().slice(label.length+(/[0-9]$/.test(label)?0:1)));else throw Error((globalThis.CorporiumI18n?.f("70a4e492400529",()=>[])??'现有完整标注不能直接拆分，请先选择对应义项并调整标注。'));}previousMode=mode.value;refresh();onchange(read());lexemeDirty=true;}catch(e){mode.value=previousMode;refresh();$('lexeme-error').textContent=e.message;}};
   for(const input of [full,extra])input.oninput=()=>{refresh();onchange(read());lexemeDirty=true;};
   const control={read,set,refresh};box.control=control;set(m);return control;
  }
@@ -112,10 +129,7 @@ function paradigmView(x){
   detachedForms.delete(choice.id);
   select.innerHTML=options(wsVariants(),choice.id,(globalThis.CorporiumI18n?.f("df8c29629a8eaf",()=>[])??'选择已有形式'));input.value='';
  }
- function flushPending(){for(const row of $('paradigm-tables').querySelectorAll('.paradigm-realization')){
-  registerPending(row);
-  if(!row.querySelector('.paradigm-form').value&&[...row.querySelectorAll('.paradigm-meanings input,.paradigm-meanings textarea,.paradigm-base')].some(e=>e.value.trim()))throw Error((globalThis.CorporiumI18n?.f("42e93804d551e0",()=>[])??'已填写变形意义，请同时填写或选择该行的形式。'));
- }}
+ function flushPending(){for(const row of $('paradigm-tables').querySelectorAll('.paradigm-realization'))registerPending(row);}
  function tableRow(list,r={},table){
   const row=document.createElement('details');row.className='paradigm-row';row.dataset.id=r.id||id();row.dataset.templateRowId=r.template_row_id||'';row.open=!r.id;
   const dims=readDimensions(table);row.innerHTML=(globalThis.CorporiumI18n?.f("2fd751319209ab",()=>[dims.map((d,i)=>field('label-'+i,d,r.labels?.[i])).join('')])??`<summary></summary><div class="paradigm-labels">${dims.map((d,i)=>field('label-'+i,d,r.labels?.[i])).join('')}</div><label>此行状态<select class="paradigm-state"><option value="unfilled">未填写</option><option value="filled">已填写</option><option value="missing">无此形式</option></select></label><div class="paradigm-realizations"></div><button type="button" class="paradigm-add-form">＋ 添加形式</button>`);
@@ -128,7 +142,7 @@ function paradigmView(x){
   row.refreshParadigmSummary=refreshSummary;row.addEventListener('input',refreshSummary);row.addEventListener('change',refreshSummary);row.addEventListener('click',()=>queueMicrotask(refreshSummary));refreshSummary();
  }
  function readDimensions(t){return val(t,'dimensions').split('|').map(s=>s.trim());}
- function readTable(t){return {id:t.dataset.id,template_id:t.dataset.templateId||'',title:val(t,'title'),notes:val(t,'notes'),usage_id:t.querySelector('.paradigm-usage').value,default_base_sense_id:t.querySelector('.paradigm-default-base').value,dimensions:readDimensions(t),rows:[...t.querySelector('.paradigm-rows').children].map(r=>({id:r.dataset.id,template_row_id:r.dataset.templateRowId||'',labels:[...r.querySelector('.paradigm-labels').querySelectorAll('input')].map(i=>i.value),state:r.querySelector('.paradigm-state').value,gloss_addition:val(r,'gloss_addition'),realizations:[...r.querySelector('.paradigm-realizations').children].map(f=>({id:f.dataset.id,form_id:f.querySelector('.paradigm-form').value,meanings:[...f.querySelector('.paradigm-meanings').children].map(readMeaning)})).filter(f=>f.form_id)}))};}
+ function readTable(t){return {id:t.dataset.id,template_id:t.dataset.templateId||'',title:val(t,'title'),notes:val(t,'notes'),usage_id:t.querySelector('.paradigm-usage').value,default_base_sense_id:t.querySelector('.paradigm-default-base').value,dimensions:readDimensions(t),rows:[...t.querySelector('.paradigm-rows').children].map(r=>({id:r.dataset.id,template_row_id:r.dataset.templateRowId||'',labels:[...r.querySelector('.paradigm-labels').querySelectorAll('input')].map(i=>i.value),state:r.querySelector('.paradigm-state').value,gloss_addition:val(r,'gloss_addition'),realizations:[...r.querySelector('.paradigm-realizations').children].map(f=>({id:f.dataset.id,form_id:f.querySelector('.paradigm-form').value,meanings:[...f.querySelector('.paradigm-meanings').children].map(readMeaning)}))}))};}
  function addTable(t={title:(globalThis.CorporiumI18n?.f("8fc1c3f6a096be",()=>[])??'变形表'),dimensions:[(globalThis.CorporiumI18n?.phrase('数')??'数'),(globalThis.CorporiumI18n?.f("a098f6a717f543",()=>[])??'格')],rows:[]}){
   const el=document.createElement('section');el.className='paradigm-table-editor';el.dataset.id=t.id||id();el.dataset.templateId=t.template_id||'';
   el.innerHTML=(globalThis.CorporiumI18n?.f("a355d4f29365d7",()=>[field('title',(globalThis.CorporiumI18n?.f("35ceaf2f0f54ab",()=>[])??'表名'),t.title),options(wsUsages(),t.usage_id,(globalThis.CorporiumI18n?.f("0c56306c41d36f",()=>[])??'请选择词类用法')),field('dimensions',(globalThis.CorporiumI18n?.f("8334ab25343792",()=>[])??'分类栏目（用 | 分开，例如：数 | 格 | 有生性）'),t.dimensions.join(' | ')),field('notes',(globalThis.CorporiumI18n?.f("1b663056995ac5",()=>[])??'表格备注'),t.notes,true)])??`<div class="metadata-grid">${field('title','表名',t.title)}<label>词类用法<select class="paradigm-usage">${options(wsUsages(),t.usage_id,'请选择词类用法')}</select></label></div>${field('dimensions','分类栏目（用 | 分开，例如：数 | 格 | 有生性）',t.dimensions.join(' | '))}<button type="button" class="paradigm-columns">应用栏目</button>${field('notes','表格备注',t.notes,true)}<div class="paradigm-rows"></div><div class="paradigm-toolbar"><button type="button" class="paradigm-add-row">＋ 添加一行</button><button type="button" class="paradigm-save-template">存为本语言模板</button></div>`);
@@ -159,13 +173,15 @@ function paradigmView(x){
    box.querySelector('.paradigm-remove-table').onclick=()=>{source.remove();lexemeDirty=true;renderQuick();};
    function focusRow(identity,field){const row=[...quickHost.querySelectorAll('.paradigm-quick-row')].find(r=>r.dataset.meaning===identity||r.dataset.realization===identity);row?.querySelector(field)?.focus();}
    tbody.addEventListener('keydown',e=>{
-    if(e.isComposing||e.ctrlKey||e.altKey||e.metaKey||!e.target.matches('.paradigm-quick-row input')||!['Tab','Enter'].includes(e.key))return;
+    if(e.isComposing||e.ctrlKey||e.altKey||e.metaKey||!e.target.matches('.paradigm-quick-row input')||!['Tab','Enter','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))return;
+    if(['ArrowLeft','ArrowRight'].includes(e.key)&&(e.shiftKey||e.target.selectionStart!==e.target.selectionEnd||e.target.selectionStart!==(e.key==='ArrowLeft'?0:e.target.value.length)))return;
     const rows=[...tbody.querySelectorAll('.paradigm-quick-row')].map(r=>[...r.querySelectorAll('input')].filter(i=>!i.disabled));
     const flat=rows.flat(),at=flat.indexOf(e.target);let target;
     if(e.key==='Tab')target=flat[at+(e.shiftKey?-1:1)];
-    else{const row=rows.findIndex(r=>r.includes(e.target)),column=rows[row]?.indexOf(e.target),step=e.shiftKey?-1:1;for(let i=row+step;i>=0&&i<rows.length;i+=step)if(rows[i][column]){target=rows[i][column];break;}}
+    else if(['ArrowLeft','ArrowRight'].includes(e.key)){const row=rows.find(r=>r.includes(e.target)),column=row.indexOf(e.target);target=row[column+(e.key==='ArrowLeft'?-1:1)];}
+    else{const row=rows.findIndex(r=>r.includes(e.target)),column=rows[row]?.indexOf(e.target),step=e.key==='ArrowUp'||e.key==='Enter'&&e.shiftKey?-1:1;for(let i=row+step;i>=0&&i<rows.length;i+=step)if(rows[i][column]){target=rows[i][column];break;}}
     // Enter edits the next row, never submits the complete dictionary form.
-    if(e.key==='Enter'||target)e.preventDefault();if(target){target.focus();target.select();}
+    if(['Enter','ArrowUp','ArrowDown'].includes(e.key)||target)e.preventDefault();if(target){target.focus();target.select();}
    });
    for(const category of source.querySelector('.paradigm-rows').children){
     const forms=category.querySelector('.paradigm-realizations'),state=category.querySelector('.paradigm-state'),uid=category.paradigmUID;
@@ -190,7 +206,7 @@ function paradigmView(x){
       if(advanced)advanced.set(value);
      }
      tr.refreshQuickGloss=refresh;refresh();
-     form.oninput=()=>{ensure();const select=item.f.querySelector('.paradigm-form'),pending=item.f.querySelector('.paradigm-new-form input');let v=[...$('lexeme-variants').children].find(v=>v.dataset.id===select.value);if(!v&&!pending.value&&detachedForms.has(select.value)){registerPending(item.f);v=[...$('lexeme-variants').children].find(v=>v.dataset.id===select.value);}if(v&&!pending.value){v.querySelector('.variant-form').value=form.value;for(const peer of quickHost.querySelectorAll('.paradigm-quick-form'))if(peer!==form&&peer.paradigmSource?.querySelector('.paradigm-form').value===select.value)peer.value=form.value;}else{pending.value=form.value;for(const peer of quickHost.querySelectorAll('.paradigm-quick-form'))if(peer!==form&&peer.paradigmSource===item.f)peer.value=form.value;}refresh();};
+     form.oninput=()=>{ensure();const select=item.f.querySelector('.paradigm-form'),pending=item.f.querySelector('.paradigm-new-form input');if(!form.value.trim()){select.value='';pending.value='';for(const peer of quickHost.querySelectorAll('.paradigm-quick-form'))if(peer!==form&&peer.paradigmSource===item.f)peer.value='';refresh();return;}let v=[...$('lexeme-variants').children].find(v=>v.dataset.id===select.value);if(!v&&!pending.value&&detachedForms.has(select.value)){registerPending(item.f);v=[...$('lexeme-variants').children].find(v=>v.dataset.id===select.value);}if(v&&!pending.value){v.querySelector('.variant-form').value=form.value;for(const peer of quickHost.querySelectorAll('.paradigm-quick-form'))if(peer!==form&&peer.paradigmSource?.querySelector('.paradigm-form').value===select.value)peer.value=form.value;}else{pending.value=form.value;for(const peer of quickHost.querySelectorAll('.paradigm-quick-form'))if(peer!==form&&peer.paradigmSource===item.f)peer.value=form.value;}refresh();};
      label.oninput=()=>{ensure();const value=current();if(value.gloss_mode==='inherit')value.gloss_addition=label.value;else value.short_gloss=label.value;item.m.glossControl.set(value);refresh();};
      more.onclick=()=>{
       const opening=detail.hidden;
@@ -210,9 +226,9 @@ function paradigmView(x){
     }
    }
   }
-  if(!quickHost.children.length)quickHost.innerHTML=(globalThis.CorporiumI18n?.f("037b2ac6dd649a",()=>[])??'<p class="paradigm-quick-empty">选择模板后添加，直接填写词形和标签。Tab 移至下一格，Enter 移至下一行。</p>');
+  if(!quickHost.children.length)quickHost.innerHTML=(globalThis.CorporiumI18n?.f("037b2ac6dd649a",()=>[])??'<p class="paradigm-quick-empty">模板行可留空。↑↓ 按列移动；←→ 在文字边缘切格；Tab 下一格，Enter 下一行。</p>');
  }
- window.CorporiumParadigms={setQuick(value){quick=value;editor.classList.toggle('paradigm-quick',quick);editor.querySelector('h3').textContent=quick?(globalThis.CorporiumI18n?.f("87784113a305ce",()=>[])??'词形变化'):(globalThis.CorporiumI18n?.f("144309ad6ace7b",()=>[])??'变形表');$('paradigm-tables').hidden=quick;quickHost.hidden=!quick;quickAdd.hidden=!quick;if(quick){quickAdd.append(addToolbar);quickAdd.open=!$('paradigm-tables').children.length;}else{quickHost.after(addToolbar);quickAdd.open=false;}$('paradigm-manage').textContent=quick?(globalThis.CorporiumI18n?.f("0ebb729643728a",()=>[])??'模板管理'):(globalThis.CorporiumI18n?.f("8d2562aee8e233",()=>[])??'管理本语言模板');$('paradigm-template').options[0].hidden=quick;if(quick){if(!$('paradigm-template').value&&templates().length)$('paradigm-template').value=templates()[0].id;renderQuick();}else{quickHost.replaceChildren();for(const row of $('paradigm-tables').querySelectorAll('.paradigm-row'))row.refreshParadigmSummary?.();}}};
+ window.CorporiumParadigms={prepareSave:prepareEmptyParadigms,setQuick(value){quick=value;editor.classList.toggle('paradigm-quick',quick);editor.querySelector('h3').textContent=quick?(globalThis.CorporiumI18n?.f("87784113a305ce",()=>[])??'词形变化'):(globalThis.CorporiumI18n?.f("144309ad6ace7b",()=>[])??'变形表');$('paradigm-tables').hidden=quick;quickHost.hidden=!quick;quickAdd.hidden=!quick;if(quick){quickAdd.append(addToolbar);quickAdd.open=!$('paradigm-tables').children.length;}else{quickHost.after(addToolbar);quickAdd.open=false;}$('paradigm-manage').textContent=quick?(globalThis.CorporiumI18n?.f("0ebb729643728a",()=>[])??'模板管理'):(globalThis.CorporiumI18n?.f("8d2562aee8e233",()=>[])??'管理本语言模板');$('paradigm-template').options[0].hidden=quick;if(quick){if(!$('paradigm-template').value&&templates().length)$('paradigm-template').value=templates()[0].id;renderQuick();}else{quickHost.replaceChildren();for(const row of $('paradigm-tables').querySelectorAll('.paradigm-row'))row.refreshParadigmSummary?.();}}};
  const originalOpen=openLexemeEditor;openLexemeEditor=async function(...args){await originalOpen(...args);if(!$('lexeme-editor').open)return;detachedForms.clear();$('paradigm-status').textContent='';$('paradigm-tables').replaceChildren();for(const t of args[0]?.body.paradigms||[])addTable(t);templateChoices();};
  const originalRead=readMorphEntry;readMorphEntry=function(){flushPending();return {...originalRead(),paradigms:[...$('paradigm-tables').children].map(readTable)};};
  const prune=pruneNewLexemeRows;pruneNewLexemeRows=function(body,previous){const kept=new Set((body.paradigms||[]).map(t=>t.usage_id)),saved={...previous,usages:[...previous?.usages||[],...(body.usages||[]).filter(u=>kept.has(u.id))]};const result=prune(body,saved);validateParadigmForms(result);return result;};

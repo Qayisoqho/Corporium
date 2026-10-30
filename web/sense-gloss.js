@@ -1,10 +1,12 @@
 /* The free gloss and optional tags are edited independently. */
+function joinGlossAtoms(parts){let value='';for(const atom of parts)value+=(!value||/[0-9]$/.test(value)?'':'.')+atom;return value;}
+function glossAtoms(value){const seen=new Set(value.split('.').map(p=>p.toLowerCase()));for(const part of value.split('.')){const person=part.match(/^([0-9]+)([A-Za-z][A-Za-z0-9_]*)$/);if(person){seen.add(person[1].toLowerCase());seen.add(person[2].toLowerCase());}}return seen;}
 function senseGloss(s={},field='short_gloss'){
  const base=s[field]||'',extra=s.show_gloss_addition===false?'':s.gloss_addition||'';
  if(!extra)return base;
- const parts=base.trim()?base.trim().split('.'):[],seen=new Set(parts.map(p=>p.toLowerCase()));
+ const parts=base.trim()?base.trim().split('.'):[],seen=glossAtoms(base.trim());
  for(const atom of extra.split('.'))if(atom&&!seen.has(atom.toLowerCase())){parts.push(atom);seen.add(atom.toLowerCase());}
- return parts.join('.');
+ return joinGlossAtoms(parts);
 }
 function readGlossAddition(host){
  if(host?.classList?.contains('sense-editor')&&!host.querySelector('.sense-addition-controls'))host=document.querySelector('[data-addition-for="'+host.dataset.id+'"]')||host;

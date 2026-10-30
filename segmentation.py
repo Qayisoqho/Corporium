@@ -121,10 +121,13 @@ def preserve(old,new):
 
 def get(db,kind,rid):
     import annotations
-    from corpus import analyze
-    result=annotations.get(db,kind,rid);analyze(result['body'])
+    result=annotations.get(db,kind,rid)
     if kind=='corpus':
         import lexicon
+        import languages
+        # Display readers need the same language-aware projection as the source;
+        # annotations.get deliberately remains the unadorned editing draft.
+        languages.annotate(result['body'],result['owner_language'],{r['id']:dict(r) for r in db.execute('SELECT * FROM languages')})
         item={**result['body'],'id':rid};lexicon.enrich(db,[item]);result['body']=item
     else:annotations.enrich(db,result['body'],kind,rid)
     return result

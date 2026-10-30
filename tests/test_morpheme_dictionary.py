@@ -26,6 +26,20 @@ class MorphemeDictionaryTests(unittest.TestCase):
         plan=self.ok('/api/lexeme-to-morpheme-preview',dict(id=x['id'],revision=x['revision']))
         return self.ok('/api/lexeme-to-morpheme',dict(id=x['id'],revision=x['revision'],token=plan['token'],target_id=target,**fields))
 
+    def test_conversion_out_of_homonym_group_clears_remaining_word_number(self):
+        a=self.ok('/api/lexeme-save',dict(headword='bank',body={}))
+        plan=self.ok('/api/homonym-preview?form=bank&language=ordos')
+        b=self.ok('/api/lexeme-save',dict(headword='bank',body={},homonym_confirmation=plan['token']))
+        m=self.convert(b)
+        self.assertIsNone(self.ok('/api/lexeme?id='+a['id'])['body']['homonym_number'])
+        self.assertIsNone(m['display_number'])
+        self.assertIsNone(self.ok('/api/lexeme?id='+m['id'])['body']['homonym_number'])
+        self.assertEqual(self.undo()[0],200)
+        self.assertEqual(self.ok('/api/lexeme?id='+a['id'])['body']['homonym_number'],1)
+        self.assertEqual(self.ok('/api/lexeme?id='+b['id'])['body']['homonym_number'],2)
+        self.assertEqual(self.undo('redo')[0],200)
+        self.assertIsNone(self.ok('/api/lexeme?id='+a['id'])['body']['homonym_number'])
+
     def test_native_direct_auto_matches_undo_and_color(self):
         e=self.seed('#pass([a], (([home-n],[家-GEN]),), [house])')
         m=self.ok('/api/morpheme-save',dict(form='n',body=dict(gloss='GEN',entry_type='affix',affix_function='inflection',affix_position='suffix')))

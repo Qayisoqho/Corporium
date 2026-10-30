@@ -10,7 +10,7 @@ import corpus
 import grammar_audit_cache
 import grammar_reference
 from functools import lru_cache
-from corpus import plain,analyze,boundary_count,gloss_chunks
+from corpus import plain,analyze,gloss_chunks
 
 TABLES=('grammar_tags',)
 
@@ -232,23 +232,6 @@ class AuditAnalysisCache:
         return [w.replace('第 1 ',f'第 {position+1} ',1) for w in saved[1]]
 
 
-def audit_links(db,records,lid,source):
-    # Read each unit once, preserving the UNION's lexeme-then-morpheme order.
-    if source not in ('all','corpus'):return []
-    catalogs=[dict(db.execute('SELECT id,language_id FROM '+table)) for table in ('lexemes','morphemes')]
-    issues=[[],[]];live_entries=None
-    for r in long_tasks.steps(db.execute('SELECT l.language_id,l.lexeme_id,u.entry_id,u.active,u.form,u.gloss FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id ORDER BY l.rowid')):
-        base=records.get(('corpus',r['entry_id']))
-        for n,catalog in enumerate(catalogs):
-            if r['lexeme_id'] not in catalog:continue
-            if not base and (lid=='all' or lid==r['language_id']):
-                if live_entries is None:live_entries={row['id'] for row in db.execute('SELECT id FROM entries')}
-                if r['entry_id'] not in live_entries:issues[n].append(dict(kind='corpus',id=r['entry_id'],language_id=r['language_id'],owner_language=r['language_id'],title='原句已删除',deleted=True,issue='link',message='原句已删除，词典旧关联仍保留',form=r['form'],gloss=r['gloss'],linked_lexeme=r['lexeme_id']))
-            if base and '#' in r['form'] and boundary_count(r['form']):issues[n].append(dict(base,issue='link',message='原关联单位现识别为音系边界，请核对旧词典关联',form=r['form'],gloss=r['gloss'],linked_lexeme=r['lexeme_id']))
-            elif base and (not r['active'] or base['language_id']!=catalog[r['lexeme_id']]):issues[n].append(dict(base,issue='link',message='词典关联的原单位已失效或语言已变化',form=r['form'],gloss=r['gloss'],linked_lexeme=r['lexeme_id']))
-    return issues[0]+issues[1]
-
-
 def classify_audit(db,q,facts):
     """Re-evaluate every label under the current inventory without rereading sources."""
     lid=q.get('language','all');lower=q.get('lower')=='true';tags=listing(db,lid);lookup=index(tags)
@@ -342,7 +325,6 @@ def audit(db,q):
                     if mi and mi%64==0:long_tasks.checkpoint()
                     display=m.get('display_gloss',m['gloss']);labels.append('<'+display+'>' if m.get('kind')=='infix' else display)
                 events.append([0,bi,i+1,w['form'],w['gloss'],labels])
-    events.extend([1,item] for item in audit_links(db,records,lid,source))
     for r in long_tasks.steps(db.execute('SELECT r.reason,u.entry_id,u.form,u.gloss FROM lexical_reviews r JOIN lexical_links l ON l.id=r.id JOIN corpus_units u ON u.id=l.unit_id')):
         base=records.get(('corpus',r['entry_id']))
         if base:add(base,'pending',r['reason'],form=r['form'],gloss=r['gloss'])
