@@ -476,7 +476,7 @@ html[data-home=false] .editable-example>.object-media-controls :is(select,.objec
 .morpheme-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:8px 0}
 .morpheme-actions>input{flex:1 1 140px;min-width:0}
 #morpheme-detail{padding:14px 18px;min-width:0}
-#morpheme-detail sub,#morpheme-list sub{font-size:.65em}
+#morpheme-detail :is(sub,sup),#morpheme-list :is(sub,sup){font-size:.65em}
 #morpheme-list .dictionary-wordform{display:inline}
 .morpheme-component-evidence{border-top:1px solid var(--line);padding:12px 0}
 .morpheme-component-choice{display:flex;align-items:baseline;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line)}
@@ -497,6 +497,14 @@ html[data-home=false] #dictionary-detail .lex-example-footer>button{margin:0}
 
 /* Shared compact sentence media row and dictionary tabs, for every theme. */
 html[data-home=false] .example-media-head{display:flex;align-items:center;gap:8px 16px;flex-wrap:wrap;margin:8px 0 12px;clear:both;min-width:0}
+/* A tier stays with its IPA line, including when adjacent controls wrap. */
+html[data-home=false] :is(.example-media-head,.sentence-reading-head):has(>.sentence-reading-lines){margin-bottom:0;align-items:flex-start}
+html[data-home=false] :is(#dictionary-workspace,#timeline-workspace) .editable-example .sentence-reading-head:has(>.sentence-reading-lines){margin-bottom:0}
+html[data-home=false] .sentence-reading-lines{flex:1 1 20rem;min-width:0;overflow-wrap:anywhere;display:flow-root}
+html[data-home=false] .example-media-head>.sentence-reading-lines{flex-basis:100px}
+html[data-home=false] .editable-example .sentence-reading-lines>.ipa{margin:0 0 12px}
+html[data-home=false] .sentence-reading-head>.sentence-reading-lines>.ipa{margin-bottom:8px}
+html[data-home=false] .editable-example .sentence-reading-lines>.ipa:has(+.sentence-layer[data-line-before]){margin-bottom:0}
 html[data-home=false] :is(#example-library,#dictionary-workspace,#survey-workspace) .editable-example .example-media-head>.ipa{flex:1 1 100px;min-width:0;overflow-wrap:anywhere;margin:0}
 html[data-home=false] .example-media-head>:is(.object-media-controls,.sentence-audio,.collaborator-badge){float:none;flex:0 1 auto;max-width:100%;margin:0;justify-content:flex-end}
 html[data-home=false] .example-media-head>.object-media-controls{margin-left:auto}
@@ -584,7 +592,7 @@ html[data-home=true] #hp-inspector{display:none}
 #morpheme-list .lexeme-title-mask{display:block;flex:1;min-width:0;overflow:hidden;white-space:nowrap}
 #morpheme-list .lexeme-title{display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:1.1rem;font-weight:700}
 #morpheme-list .lexeme-list-item .lexeme-title{font-size:1.1rem}
-#morpheme-list .lexeme-list-pos{flex:0 1 auto;max-width:48%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.74rem;color:var(--muted)}
+#morpheme-list .lexeme-list-pos{flex:0 0 auto;max-width:calc(100% - 3rem - 10px);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.74rem;color:var(--muted)}
 #morpheme-list .lexeme-list-pos:empty{display:none}
 :is(#dictionary-list,#morpheme-list) .lexeme-title,:is(#dictionary-list,#morpheme-list) .morpheme-form{font-family:var(--annotation-font,Junicode),'Microsoft YaHei',serif!important;font-style:var(--form-style,normal)!important;font-variant:normal!important;font-weight:700!important}
 #morpheme-list .morpheme-form{display:inline;font-size:inherit}
@@ -696,13 +704,13 @@ html[data-home=false] #texts [data-text]{display:flex;align-items:center;gap:10p
 #dictionary-list .lexeme-list-heading{display:flex;align-items:baseline;gap:10px;min-width:0;line-height:1.4}
 #dictionary-list .lexeme-title-mask{display:block;flex:1;min-width:0;overflow:hidden;white-space:nowrap}
 #dictionary-list .lexeme-title{display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:1.1rem;font-weight:700}
-#dictionary-list .lexeme-list-pos{flex:0 1 auto;max-width:48%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.74rem;color:var(--muted)}
+#dictionary-list .lexeme-list-pos{flex:0 0 auto;max-width:calc(100% - 3rem - 10px);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.74rem;color:var(--muted)}
 #dictionary-list .lexeme-list-pos:empty{display:none}
 #dictionary-list .lexeme-list-item>small{font-size:.72rem;line-height:1.4;overflow-wrap:anywhere}
 .text-dragging #texts .text-title{animation:none!important}
-#texts .title-overflows:hover .text-title,#texts [data-text]:focus-visible .title-overflows .text-title,#dictionary-list .title-overflows:hover .lexeme-title,#dictionary-list [data-lexeme]:focus-visible .title-overflows .lexeme-title{width:max-content;overflow:visible;text-overflow:clip;animation:sidebar-title-pan var(--title-duration,8s) linear infinite}
+#texts .title-overflows:hover .text-title,#texts [data-text]:focus-visible .title-overflows .text-title,:is(#dictionary-list,#morpheme-list) .title-overflows:hover .lexeme-title,:is(#dictionary-list,#morpheme-list) :is([data-lexeme],[data-morpheme]):focus-visible .title-overflows .lexeme-title{width:max-content;overflow:visible;text-overflow:clip;animation:sidebar-title-pan var(--title-duration,8s) linear infinite}
 @keyframes sidebar-title-pan{0%,12%,100%{transform:translateX(0)}45%,57%{transform:translateX(var(--title-travel,0px))}90%{transform:translateX(0)}}
-@media(prefers-reduced-motion:reduce){#texts .title-overflows .text-title,#dictionary-list .title-overflows .lexeme-title{animation:none!important}}
+@media(prefers-reduced-motion:reduce){#texts .title-overflows .text-title,:is(#dictionary-list,#morpheme-list) .title-overflows .lexeme-title{animation:none!important}}
 html[data-home=false] #workspace-sidebar .sidebar-text-actions{flex:none;display:flex;gap:6px;margin:0;padding:9px 0 0;border-top:1px solid var(--sidebar-divider)}
 html[data-home=false] #workspace-sidebar .sidebar-text-actions[hidden]{display:none}
 html[data-home=false] #workspace-sidebar .sidebar-text-actions>button,html[data-home=false] #workspace-sidebar .sidebar-text-actions .sidebar-create>summary{display:inline-flex;align-items:center;justify-content:center;gap:4px;flex:none;min-height:29px;margin:0;padding:4px 5px;font-size:.78rem;line-height:1.4;white-space:nowrap;background:transparent}
@@ -1177,3 +1185,17 @@ html[data-home=false] .editable-example .words:not(.inline-words)>.word.hit{padd
 :root{--example-font-size:1.125rem}
 
 .empty-paradigm-dialog{max-width:480px;width:calc(100vw - 40px)}
+
+/* The complete list toolbar sticks as one unit at every font size. */
+html[data-home=false] #workbench-module-nav .dictionary-list-panel{overflow:visible}
+html[data-home=false] #workbench-module-nav .dictionary-list-sticky{position:sticky;top:0;z-index:5;background:var(--sidebar,var(--paper));padding:2px 0 6px;border-bottom:1px solid var(--line)}
+#dictionary-example-controls .dictionary-evidence-actions,.morpheme-evidence-heading .dictionary-evidence-actions{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px;margin:0}
+html[data-home=false] :is(#dictionary-example-controls,.morpheme-evidence-heading) .dictionary-evidence-actions>button{box-sizing:border-box;margin:0;padding:5px 9px;min-height:30px;font-size:.82rem;line-height:1.4;white-space:nowrap}
+
+/* Dictionary projections have the same tier metrics in reading and editing. */
+.dictionary-derived-layer{white-space:nowrap}
+.dictionary-derived-layer .dictionary-layer-value,html[data-home=false] .editable-example .dictionary-layer-value{display:inline;margin:0;padding:0;min-height:0;min-width:0;width:auto;height:auto;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;line-height:inherit;text-align:inherit;vertical-align:baseline;cursor:pointer}
+.dictionary-derived-layer .dictionary-layer-value:hover{text-decoration:underline}
+.dictionary-layer-separator{opacity:.7}
+.dictionary-layer-help{display:block;margin:3px 0;line-height:1.4}
+.dictionary-layer-help[hidden]{display:none}

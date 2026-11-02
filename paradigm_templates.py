@@ -42,6 +42,11 @@ def synchronize(tables,old,new):
             if row is None:
                 row=dict(id=str(uuid.uuid4()),state='unfilled',realizations=[],gloss_addition=template.get('gloss_addition',''))
             elif row.get('gloss_addition','')==previous[key].get('gloss_addition',''):
+                old_addition=row.get('gloss_addition','');new_addition=template.get('gloss_addition','')
+                for form in row.get('realizations',[]):
+                    for meaning in form.get('meanings',[]):
+                        if meaning.get('gloss_mode')=='inherit' and meaning.get('gloss_addition','')==old_addition:
+                            meaning['gloss_addition']=new_addition
                 row['gloss_addition']=template.get('gloss_addition','')
             row.update(template_row_id=key,labels=copy.deepcopy(template['labels']));rows.append(row)
         for row in local:

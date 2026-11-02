@@ -7,6 +7,18 @@ import ui_localization as ui
 import desktop
 
 class InterfaceLanguageTests(unittest.TestCase):
+    def test_recent_link_and_analysis_errors_translate_without_touching_material(self):
+        messages=('词条或语言范围已变化，请重新打开','条目类型已变化，请重新打开',
+                  '请确认解除全部句子关联','请选择有效的语素边界标记',
+                  '同一词格请选择整词分析或逐语素补全，不能同时采用','重叠分析需要目标句子')
+        for message in messages:
+            with self.subTest(message=message):
+                original={'error':message,'body':{'gloss':message}}
+                result=ui.present(original,'/api/sentence-dictionary','en')
+                self.assertNotEqual(result['error'],message)
+                self.assertFalse(any('\u3400'<=c<='\u9fff' for c in result['error']))
+                self.assertEqual(result['body'],original['body'])
+
     def test_dictionary_copy_messages_translate_without_translating_copied_data(self):
         ui.catalog.cache_clear();ui.patterns.cache_clear();ui.message.cache_clear()
         result=ui.present({'undo':{'label':'复制词典条目'}},'/api/undo-state','en')
@@ -68,6 +80,14 @@ class InterfaceLanguageTests(unittest.TestCase):
         self.assertEqual(result['items'][0]['title'],'保存');self.assertEqual(result['items'][0]['body'],original['items'][0]['body'])
         self.assertEqual(json.dumps(original,ensure_ascii=False),snapshot)
 
+    def test_independent_default_audit_title_translates_without_rewriting_authored_source(self):
+        original={'items':[{'kind':'independent','title':'独立例句','title_default':True,'message':''},
+                           {'kind':'independent','title':'独立例句','title_default':False,'message':''}]}
+        result=ui.present(original,'/api/grammar-audit','en')
+        self.assertNotEqual(result['items'][0]['title'],'独立例句')
+        self.assertEqual(result['items'][1]['title'],'独立例句')
+        self.assertEqual(original['items'][0]['title'],'独立例句')
+
     def test_background_results_use_their_declared_route(self):
         original={'kind':'operation','operation':'punctuation-preview','message':'已完成','result':{'blocked':[{'form':'保存','reason':'纯标点格仍有标注或关联，请人工核对'}]}}
         result=ui.present(original,'/api/task-status','en')
@@ -81,6 +101,14 @@ class InterfaceLanguageTests(unittest.TestCase):
         self.assertEqual(result['fields'][0],{'id':'writing:user-id','name':'Written form › 语素'})
         self.assertEqual(result['fields'][1]['name'],'Word form')
         self.assertEqual(original['fields'][0]['name'],'自定义书写 › 语素')
+
+    def test_builtin_usage_label_field_names_translate_but_custom_names_remain_literal(self):
+        original={'fields':[{'id':'tag:语域','name':'使用标签 › 语域'},
+                            {'id':'tag:私人备注','name':'使用标签 › 私人备注'}],'groups':[]}
+        result=ui.present(original,'/api/vocabulary-options','en')
+        self.assertEqual(result['fields'][0],{'id':'tag:语域','name':'Usage label › Register'})
+        self.assertEqual(result['fields'][1],{'id':'tag:私人备注','name':'Usage label › 私人备注'})
+        self.assertEqual(original['fields'][0]['name'],'使用标签 › 语域')
 
     def test_native_file_type_captions_keep_extensions_and_need_no_project(self):
         bridge=desktop.Bridge(None)

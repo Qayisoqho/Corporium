@@ -145,10 +145,18 @@ class ReadMemoryIntegrationTests(unittest.TestCase):
         self.assertEqual(len(plan['matches']),205);self.assertEqual(len({m['unit_id'] for m in plan['matches']}),205)
         expected=hashlib.sha256(json.dumps({k:v for k,v in plan.items() if k!='token'},sort_keys=True,ensure_ascii=False).encode()).hexdigest()
         self.assertEqual(plan['token'],expected)
-        # Four registered forms/meanings plus one repeated source pair.
-        self.assertEqual(gloss_key.call_count,5)
+        # Candidate deduplication may compare registered meanings too. Repeated
+        # source occurrences must not turn those comparisons into per-token work.
+        comparisons=gloss_key.call_count
         unit_reads=[s for s in statements if 'SELECT u.id,u.entry_id,u.revision,u.kind' in s]
         self.assertEqual(len(unit_reads),2)
+        code,result=self.call('/api/import',dict(title='More repeated tokens',content='\n'.join('#pass([], (([home],[家]),), [])' for _ in range(205))+'\n// second text for scaling'))
+        self.assertEqual(code,200,result)
+        self.assertEqual(result['count'],205)
+        with server.connect(audit=False) as db,patch.object(lexicon,'auto_gloss_key',wraps=lexicon.auto_gloss_key) as repeated:
+            larger=lexicon.auto_link_plan(db,'ordos')
+        self.assertEqual(len(larger['matches']),410)
+        self.assertEqual(repeated.call_count,comparisons)
 
     def test_empty_all_box_with_local_conditions_skips_external_evidence_only_when_unused(self):
         entry=self.seed('#pass([], (([home],[家]),), [])');word=self.word();self.link(entry['words'][0]['unit_id'],word)

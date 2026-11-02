@@ -101,6 +101,7 @@ def plan(db,dbpath,b,lid):
             c=m.get('column');t=m.get('target')
             if type(c)!=int or not 1<=c<=sheet['width'] or c in columns:raise ValueError('列映射无效或重复')
             if t not in ('form','gloss','ipa','translation','notes','reduplication') and t not in known:raise ValueError('标注层已删除或不属于当前语言，请重新匹配')
+            if t in known and known[t].get('source')=='dictionary':raise ValueError('词典信息层为只读，不能导入手动内容')
             if t in targets:raise ValueError('同一标注行只能匹配一个 Excel 列')
             if not isinstance(m.get('separator',' '),str) or len(m.get('separator',' '))>100:raise ValueError('连接符过长')
             targets.add(t);columns.add(c)
@@ -222,6 +223,12 @@ def export(db,b,lid):
             body=gloss_inheritance.load(db,'corpus',r['id'],r['body'])
             if body.get('language_id') and body['language_id']!=lid:raise ValueError('文本含其他语言的句子，请先按语言拆分文本后导出')
             units=annotations.units(db,'corpus',r['id'],body);cells={(c['unit_id'],c['layer_id']):c['value'] for c in db.execute("SELECT * FROM annotation_cells WHERE owner_kind='corpus' AND record_id=?",(r['id'],))}
+            if any(d.get('source')=='dictionary' for d in defs):
+                import dictionary_layers,copy,corpus
+                projected=dictionary_layers.project(db,corpus.analyze(copy.deepcopy(body)),'corpus',r['id'],lid,defs)
+                for index,word in enumerate(projected['words']):
+                    for layer in word.get('extra_layers',[]):
+                        if layer.get('derived'):cells[units[index]['id'],layer['id']]=dictionary_layers.text(layer,b.get('ui_language','zh-CN'))
             for i,w in enumerate(body['words'] or [dict(form='',gloss='')]):
                 uid=units[i]['id'] if i<len(units) else ''
                 rows.append([str(number),str(i+1) if body['words'] else '0',w['form'],w['gloss']]+[body.get(k,'') if i==0 else '' for k in ('ipa','translation','notes')]+[cells.get((uid,d['id']),'') if d.get('anchor','word')=='word' else cells.get((annotations.SENTENCE,d['id']),'') if i==0 else '' for d in defs])

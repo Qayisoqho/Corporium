@@ -79,7 +79,7 @@ def present(value,path,locale):
         if result.get('kind')=='operation':route=result.get('operation')
         if route and isinstance(result.get('result'),dict):result['result']=present(result['result'],'/api/'+route,locale)
     if path=='/api/grammar-audit':
-        result={**result,'items':[fields(item,'message') for item in result.get('items',[])]}
+        result={**result,'items':[fields(item,'message',*(['title'] if item.get('title_default') else [])) for item in result.get('items',[])]}
     if path in {'/api/entries','/api/example-library'}:
         result={**result,'items':[{**annotations(item),**({'body':annotations(item['body'])} if isinstance(item.get('body'),dict) else {})} for item in result.get('items',[])]}
     if path in {'/api/entry','/api/independent-example'}:result=annotations(result)
@@ -122,6 +122,11 @@ def present(value,path,locale):
             if ident=='all':return {**item,'name':message('全部内容',locale)}
             if ':' in ident:
                 prefix,sep,tail=name.partition(' › ')
+                if ident.startswith('tag:'):
+                    from categories import TAG_NAMES
+                    tag=ident.partition(':')[2]
+                    if tag in TAG_NAMES or tag in TAG_NAMES.values():
+                        tail=message(tail,locale)
                 return {**item,'name':message(prefix,locale)+sep+tail} if sep else item
             if all(part in known for part in ident.split('.')):
                 return {**item,'name':' › '.join(message(part,locale) for part in name.split(' › '))}

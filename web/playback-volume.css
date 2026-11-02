@@ -1,0 +1,23 @@
+/* A portal keeps the sentence row unchanged and avoids scroll-container clipping. */
+.playback-volume{display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:.78rem;white-space:nowrap;vertical-align:middle;max-width:100%;flex-shrink:0}
+.playback-volume[hidden]{display:none!important}
+.playback-volume input[type=range]{box-sizing:border-box;flex:none;width:82px;min-width:0;height:24px;margin:0;padding:0;border:0;accent-color:var(--green);cursor:pointer;background:transparent}
+/* Keep workspace action/transport padding out of these compact icon buttons. */
+.playback-volume>button,
+html[data-home=false] #corpus-workspace .actions .playback-volume>button,
+#timeline-workspace .tl-toolbar .playback-volume>button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;flex:none;min-height:var(--volume-button-size,26px);height:var(--volume-button-size,26px);min-width:var(--volume-button-size,26px);width:var(--volume-button-size,26px);margin:0;padding:0;font:inherit;line-height:1;text-align:center}
+.playback-volume-value{flex:none;min-width:4ch;text-align:right;font-variant-numeric:tabular-nums;line-height:1.25}
+.playback-volume-popup{position:fixed;inset:auto;margin:0;padding:8px;flex-direction:column;gap:6px;width:max(58px,3.75rem);box-sizing:border-box;max-height:calc(100vh - 12px);overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);box-shadow:0 4px 16px #0004;z-index:10000}
+.playback-volume button svg{display:block;flex:none;width:18px;height:18px;margin:0}
+.playback-volume-popup input[type=range]{writing-mode:vertical-lr;direction:rtl;width:26px;height:104px;min-height:50px;flex:1 1 104px}
+.playback-volume-popup .playback-volume-value{text-align:center}
+.playback-volume-popup :focus-visible{outline:2px solid var(--green);outline-offset:2px}
+#corpus-workspace>header{flex-wrap:wrap}
+#corpus-workspace>header>div:not(.actions){flex:1 1 14rem;min-width:0}
+#corpus-workspace>header h1{overflow-wrap:anywhere}
+#corpus-workspace>header .text-reading-actions{--volume-button-size:2.1rem;align-items:center;justify-content:flex-end;gap:.5rem;max-width:100%;min-width:0;flex:0 1 auto}
+#text-playback-volume{margin:0;gap:.35rem;font-size:.8rem;line-height:1.25}
+#text-playback-volume input[type=range]{width:5.5rem;height:var(--volume-button-size)}
+#text-playback-volume button svg{width:1.15rem;height:1.15rem}
+#corpus-workspace>header .text-reading-actions>.workbench-menu{flex:none}
+#corpus-workspace>header .text-reading-actions>.workbench-menu>summary{display:inline-flex;align-items:center;justify-content:center;min-height:var(--volume-button-size);margin:0;padding:.3rem .55rem;font-size:.8rem;line-height:1.25}

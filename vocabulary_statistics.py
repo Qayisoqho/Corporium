@@ -39,10 +39,17 @@ class Collector:
                         for form in row.get('realizations',[]):m['senses'].setdefault(table['usage_id'],set()).update(s['id'] for s in form.get('meanings',[]))
             self.native[r['id']]=m
         self.targets={};self.components={};self.links=defaultdict(list);self.morpheme_words=set();self.root_words=set()
+        self.analysis_cache=corpus.WordAnalysisCache()
+        # Whole-lexeme citations do not contribute to the ordinary morpheme
+        # profile. Skip unit lookups if no corpus link can resolve to a native
+        # morpheme or an adopted component. Custom profiles keep all links.
+        self.corpus_links_required=bool(selection is not None or
+            db.execute('SELECT 1 FROM morphemes m JOIN lexical_links l ON l.lexeme_id=m.id LIMIT 1').fetchone() or
+            db.execute('SELECT 1 FROM component_links LIMIT 1').fetchone())
 
     def load_batch(self,ids):
         self.links.clear()
-        if not ids:return
+        if not ids or not self.corpus_links_required:return
         sql='''SELECT l.*,u.entry_id,u.kind,COALESCE(p.position,u.position) word_position,
                  c.body component_ref_json,a.form_id
           FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id
@@ -86,12 +93,21 @@ class Collector:
             index=len(self.hits);positions[pos]=index
             self.hits.append(dict(entry_id=rid,word=pos,form=form,value=form,unit_id=''))
             self.row_types[text_id or '@independent'].add(key)
-            row=self.forms.setdefault(key,dict(key=json.dumps(key,ensure_ascii=False),form=key[1],language_id=language,indices=[],sentences=set(),texts=set()))
+            row=self.forms.get(key)
+            if row is None:
+                row=dict(key=json.dumps(key,ensure_ascii=False),form=key[1],language_id=language,indices=[],sentences=set(),texts=set())
+                self.forms[key]=row
             row['indices'].append(index);row['sentences'].add(rid)
             if text_id:row['texts'].add(text_id)
         if rid.startswith('independent:'):
             import copy,segmentation
-            parsed=corpus.analyze(copy.deepcopy(body));segmentation.decorate_refs(parsed);links=[]
+            # Sentence-level citations cannot produce word/morpheme occurrences.
+            # Only structural references need parsing and detachment checks.
+            targets=body.get('targets',[]);links=[]
+            if any(t.get('segmentation_ref') for t in targets):
+                parsed=corpus.analyze(copy.deepcopy(body),cache=self.analysis_cache)
+                segmentation.decorate_refs(parsed)
+            else:parsed={'targets':[]}
             for target in parsed.get('targets',[]):
                 ref=target.get('segmentation_ref')
                 if not ref or ref.get('detached') or target.get('segmentation_review'):continue
@@ -120,7 +136,10 @@ class Collector:
             seen.add(identity);self.morpheme_words.add(index)
             if kind=='root':self.root_words.add(index)
             key=(m['id'],kind)
-            row=self.morphemes.setdefault(key,dict(key=json.dumps(key),id=m['id'],form=m['form'],gloss=m['body'].get('gloss',''),language_id=language,kind=kind,count=0,indices=set(),sentences=set(),texts=set(),forms=set()))
+            row=self.morphemes.get(key)
+            if row is None:
+                row=dict(key=json.dumps(key),id=m['id'],form=m['form'],gloss=m['body'].get('gloss',''),language_id=language,kind=kind,count=0,indices=set(),sentences=set(),texts=set(),forms=set())
+                self.morphemes[key]=row
             row['count']+=1;row['indices'].add(index);row['sentences'].add(rid)
             form=self.hits[index]['form'];row['forms'].add(form if self.case else form.casefold())
             if text_id:row['texts'].add(text_id)

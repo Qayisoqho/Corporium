@@ -52,12 +52,14 @@ function languageOptions(includeAll=false){return (includeAll?(globalThis.Corpor
 function projectStorageKey(key){return typeof desktopProjectKey==='string'?key+':project:'+desktopProjectKey:key;}
 async function loadLanguages(){
   languageList=await api('languages');
+  if(typeof refreshGlossAdditionCatalogs==='function')await refreshGlossAdditionCatalogs();
   if(activeLanguage!=='all'&&!languageList.some(l=>l.id===activeLanguage))activeLanguage=languageList.find(l=>l.id==='ordos')?.id||languageList[0]?.id||'all';
   try{localStorage.setItem(projectStorageKey('corpus-language'),activeLanguage);}catch{}
   $('language-select').innerHTML=languageOptions(true);$('language-select').value=activeLanguage;
   const sentence=$('sentence-language').value;
   $('sentence-language').innerHTML=(globalThis.CorporiumI18n?.f("e50b0ab32a0ecc",()=>[languageOptions()])??'<option value="">不限</option>'+languageOptions());$('sentence-language').value=sentence;
   renderLanguage();
+  await globalThis.CorporiumDictionaryLayers?.refresh();
 }
 function renderLanguage(){
   const lang=languageList.find(l=>l.id===activeLanguage),m=lang?JSON.parse(lang.metadata):{};

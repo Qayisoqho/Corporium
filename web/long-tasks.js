@@ -13,7 +13,7 @@
  window.corporiumLongTaskActive=()=>active;
  async function execute(kind,request,title){
   const background=kind==='dictionary';
-  if(!background){
+  if(!background&&kind!=='sentence-index'){
   await window.corporiumFlushSurvey?.();
   await window.corporiumFlushNotes?.();
   const savingMorpheme=kind==='operation'&&request.operation==='morpheme-save'&&request.body?.id;
@@ -68,6 +68,12 @@
  ]);
  api=async function(path,body){
   const url=new URL(path,'http://corporium.local/'),name=url.pathname.slice(1),params=Object.fromEntries(url.searchParams);
+  const sentenceField=params.field||'all';
+  if(!body&&['entries','example-library','example-groups-library'].includes(name)&&params.q&&params.warnings!=='true'&&(['ipa','translation','notes','form','morpheme','gloss','all','original','layers','writings'].includes(sentenceField)||/^(layer|writing):/.test(sentenceField))){
+   const language=params.language||activeLanguage;
+   const status=await normalApi('sentence-index-status?'+new URLSearchParams({field:sentenceField}));
+   if(status.pending>200)await run('sentence-index',{language,field:sentenceField},globalThis.CorporiumI18n?.ui('准备句子检索','Preparing sentence search')??'准备句子检索');
+  }
   if(!body&&name==='lexemes'){
    let spec={};try{spec=JSON.parse(params.search||'{}');}catch{return normalApi(path,body);}
    if(params.q?.trim()||spec?.conditions?.length||spec?.class_id)return run('dictionary',params,(globalThis.CorporiumI18n?.f("37e94bce460f0b",()=>[])??'检索词典'));

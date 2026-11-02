@@ -5,15 +5,21 @@ function selectFont(select,value){
   if(validFont(value)&&![...select.options].some(o=>o.value===value))select.add(new Option((globalThis.CorporiumI18n?.f("91b473bce8a48a",()=>[])??'未检测到的字体（保留设置）'),value));
   select.value=value;
 }
+function fontFaceCSS(data){
+  const face=(family,f)=>`@font-face{font-family:"${family}";src:url("${f.url}");font-style:${f.style};font-weight:${f.weight};font-display:swap}\n`;
+  return data.families.map(f=>f.faces.map(v=>face(f.id,v)).join('')).join('')+(data.builtins||[]).map(f=>face(f.family,f)).join('');
+}
+let fontScanRequest=0,fontCatalogKey='',fontsStarted=false;
 async function scanFonts(refresh=false){
+  const request=++fontScanRequest;
   const data=await api('fonts'+(refresh?'?refresh=true':''));
+  if(request!==fontScanRequest)return;
+  const key=JSON.stringify(data);if(key===fontCatalogKey)return;
   for(const key of Object.keys(availableFonts))if(key.startsWith('localfont-'))delete availableFonts[key];
-  let css='';
   for(const family of data.families){
     availableFonts[family.id]=(globalThis.CorporiumI18n?.f("35d301e1dea4a6",()=>[family.name])??family.name+'（font 文件夹）');
-    for(const face of family.faces)css+=`@font-face{font-family:"${family.id}";src:url("${face.url}");font-style:${face.style};font-weight:${face.weight};font-display:swap}\n`;
   }
-  let sheet=$('local-font-styles');if(!sheet){sheet=document.createElement('style');sheet.id='local-font-styles';document.head.append(sheet);}sheet.textContent=css;
+  let sheet=$('local-font-styles');if(!sheet){sheet=document.createElement('style');sheet.id='local-font-styles';document.head.append(sheet);}sheet.textContent=fontFaceCSS(data);fontCatalogKey=key;
   for(const select of document.querySelectorAll('#language-ipa-font,#language-annotation-font,.language-font,#writing-font,#layer-font,.orthography-font,.global-font')){
     const value=select.value;select.innerHTML=(select.classList.contains('global-font')?(globalThis.CorporiumI18n?.f("0d9f8338a13c51",()=>[])??'<option value="">默认字体</option>'):'')+fontChoices();selectFont(select,value);
   }
@@ -26,8 +32,9 @@ let fontsReady;
 window.corporiumFontsReady=new Promise(resolve=>{fontsReady=resolve;});
 window.addEventListener('DOMContentLoaded',()=>{
   const panel=document.createElement('details');panel.className='font-panel';
-  panel.innerHTML=(globalThis.CorporiumI18n?.f("52f6d4efc1fe0a",()=>[])??'<summary>自定义字体</summary><p>将字体文件或文件夹放入 font，再点击扫描。支持 TTF、OTF、WOFF，包含子文件夹；同一家族的字形合并显示。</p><button id="scan-fonts">扫描 font 文件夹</button><p id="font-scan-status" role="status"></p><p id="font-scan-list" class="preserve-lines"></p><p id="font-scan-errors" class="preserve-lines" role="alert"></p>');
+  panel.innerHTML=(globalThis.CorporiumI18n?.f("52f6d4efc1fe0a",()=>[])??'<summary>自定义字体</summary><p>将字体文件或文件夹放入 font，再点击扫描。支持 TTF、OTF、WOFF，包含子文件夹；同一家族的字形合并显示。同名覆盖后重新扫描即可更新，返回窗口也会自动检查，无需清空缓存或重选字体。</p><button id="scan-fonts">扫描 font 文件夹</button><p id="font-scan-status" role="status"></p><p id="font-scan-list" class="preserve-lines"></p><p id="font-scan-errors" class="preserve-lines" role="alert"></p>');
   document.querySelector('.theme-panel').append(panel);
   $('scan-fonts').onclick=async()=>{const b=$('scan-fonts');b.disabled=true;try{await scanFonts(true);}catch(e){$('font-scan-status').textContent=e.message;}finally{b.disabled=false;}};
-  scanFonts().catch(e=>$('font-scan-status').textContent=e.message).finally(fontsReady);
+  fontsStarted=true;scanFonts().catch(e=>$('font-scan-status').textContent=e.message).finally(fontsReady);
 });
+window.addEventListener('focus',()=>{if(fontsStarted&&!document.hidden)scanFonts().catch(e=>$('font-scan-status').textContent=e.message);});

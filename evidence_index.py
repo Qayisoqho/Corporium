@@ -97,6 +97,54 @@ class Query:
 _lock=threading.RLock()
 _indexes=OrderedDict()
 
+# A broad evidence scan can exceed the leaf index's budget and otherwise
+# thrash on every repeated filter. Keep a bounded, serialized completed result
+# only when the request's independent observer proves the exact DB snapshot.
+_results=OrderedDict()
+RESULT_LIMIT=16*1024**2
+result_bytes=0
+
+
+def result_key(db,lid,catalog,needle,case):
+    if needle is None:return None
+    import grammar_audit_cache
+    snapshot=grammar_audit_cache.CURRENT.get()
+    if snapshot is None or snapshot.db is not db or not db.in_transaction or not snapshot.stable():return None
+    version=db.execute('SELECT version FROM analysis_state WHERE id=1').fetchone()
+    if version is None or not snapshot.stable():return None
+    signature=hashlib.sha256(json.dumps(catalog,ensure_ascii=False,sort_keys=True).encode('utf-8')).digest()
+    return (str(snapshot.path),snapshot.signature,version[0],lid,signature,needle,bool(case))
+
+
+def load_result(key):
+    if key is None:return None
+    with _lock:
+        saved=_results.get(key)
+        if saved is None:return None
+        _results.move_to_end(key)
+    long_tasks.checkpoint(None,'正在检索词条及关联例句…')
+    # Callers may modify their field lists and owner sets independently.
+    return json.loads(saved)
+
+
+def store_result(db,key,lid,catalog,needle,case,fields,hits,owners):
+    global result_bytes
+    if key is None or result_key(db,lid,catalog,needle,case)!=key:return
+    value=dict(fields=fields,hits=sorted(hits),owners=[[kind,rid,sorted(ids)] for (kind,rid),ids in owners.items()])
+    raw=json.dumps(value,ensure_ascii=False,separators=(',',':')).encode('utf-8')
+    if len(raw)>RESULT_LIMIT:return
+    long_tasks.checkpoint()
+    if result_key(db,lid,catalog,needle,case)!=key:return
+    with _lock:
+        previous=_results.pop(key,None)
+        if previous is not None:result_bytes-=len(previous)
+        # Superseded project snapshots are useless, even if the budget is ample.
+        for old in list(_results):
+            if old[0]==key[0] and old[1:3]!=key[1:3]:result_bytes-=len(_results.pop(old))
+        while _results and (result_bytes+len(raw)>RESULT_LIMIT or len(_results)>=4):
+            _,old=_results.popitem(last=False);result_bytes-=len(old)
+        _results[key]=raw;result_bytes+=len(raw)
+
 
 @contextmanager
 def query(db,lid,catalog,needle,case):

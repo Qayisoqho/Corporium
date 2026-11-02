@@ -134,6 +134,11 @@ def _mutate(db,action,b,lid):
         value=word_structure.template(b.get('template',{}))
         db.execute('INSERT INTO morph_class_templates VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body',(xid,json.dumps(value,ensure_ascii=False)))
     if old and old['name']!=name:
+        if kind=='usage_tag':
+            for layer in db.execute("SELECT id,dictionary_field FROM annotation_layers WHERE language_id=? AND source='dictionary'",(lid,)).fetchall():
+                field=layer['dictionary_field']
+                if field.startswith('tag:') and TAG_NAMES.get(field[4:],field[4:])==old['name']:
+                    db.execute('UPDATE annotation_layers SET dictionary_field=?,revision=revision+1 WHERE id=?',('tag:'+name,layer['id']))
         if kind=='grammar':db.execute('UPDATE grammar_tags SET category=?,revision=revision+1 WHERE language_id=? AND category=?',(name,lid,old['name']))
         elif kind!='morph':
             for table in ('lexemes','morphemes'):

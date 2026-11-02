@@ -13,6 +13,29 @@ class DictionaryUnlinkTests(unittest.TestCase):
 
     def refs(self,x):return self.api('lexeme-examples?id='+x['id'])['items']
 
+    def test_unlink_all_both_sources_forms_targets_and_undo(self):
+        x=self.entry();other=self.api('lexeme-save',dict(headword='other',body={}))
+        sources=[self.source(kind,[('went','old'),('goes','old')]) for kind in ('corpus','independent')]
+        for src in sources:self.link(src,x)
+        independent=sources[1];detail=self.detail(independent)
+        self.api('segmentation-link',dict(**self.args(independent),word=1,key='@word',link_revision=0,lexeme_id=other['id'],lexeme_revision=other['revision']))
+        before=self.api('undo-state')['generation'];texts=[copy.deepcopy(self.detail(src)['body']['words']) for src in sources]
+        result=self.api('lexeme-unlink',dict(all=True,lexeme_id=x['id'],revision=x['revision'],confirmed=True))
+        self.assertEqual(result['count'],2);self.assertEqual(self.api('undo-state')['generation'],before+1)
+        self.assertFalse(self.refs(x));self.assertFalse(self.api('dictionary-examples?id='+x['id']))
+        self.assertEqual(len(self.api('dictionary-examples?id='+other['id'])),1)
+        self.assertEqual([[w['gloss'] for w in self.detail(src)['body']['words']] for src in sources],[[w['gloss'] for w in words] for words in texts])
+        self.undo();self.assertEqual(len(self.refs(x)),1);self.assertEqual(len(self.api('dictionary-examples?id='+x['id'])),1)
+        self.undo(True);self.assertFalse(self.refs(x))
+
+    def test_unlink_all_morpheme_and_rejects_unconfirmed_or_stale_scope(self):
+        x=self.api('morpheme-save',dict(form='went',body=dict(gloss='PST')))
+        src=self.source('corpus',[('went','old')]);self.api('segmentation-link',dict(**self.args(src),word=0,key='@word',link_revision=0,lexeme_id=x['id'],lexeme_revision=x['revision']))
+        request=dict(all=True,lexeme_id=x['id'],revision=x['revision'],confirmed=True)
+        for extra in [dict(confirmed=False),dict(revision=999),dict(_language='all-other')]:
+            self.assertEqual(self.call('/api/lexeme-unlink',{**request,**extra})[0],400);self.assertTrue(self.refs(x))
+        self.assertEqual(self.api('lexeme-unlink',request)['count'],1);self.assertFalse(self.refs(x))
+
     def test_batch_freezes_both_sentences_one_undo_and_redo(self):
         x=self.entry();srcs=[self.source('corpus',[('went','old'),('extra',str(i))]) for i in range(2)]
         for src in srcs:self.link(src,x)
@@ -88,5 +111,5 @@ class DictionaryUnlinkTests(unittest.TestCase):
             src=self.source(kind,[('go','DIRECT')]);self.link(src,x,sid='direct',fid='')
             draft=copy.deepcopy(x);draft['body']['usages'][0]['senses'].pop()
             status,result=self.call('/api/lexeme-save',draft)
-            self.assertEqual(status,400);self.assertIn('重新编号不会自动转移关联',result['error'])
+            self.assertEqual(status,400);self.assertIn('稳定身份不会按编号自动转移',result['error'])
             self.assertEqual(self.get(x)['body'],x['body']);self.assertEqual(self.gloss(src),'DIRECT')

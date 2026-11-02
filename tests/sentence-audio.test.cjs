@@ -29,3 +29,10 @@ test('loading immediately pauses the carousel; cancellation and rejected clip lo
  s.context.stopSentenceAudio();resolve({});await pending;assert.deepEqual(states(),[true,false]);assert.equal(s.audio.paused,true);
  s.context.originalApi=async()=>({});await s.play();assert.deepEqual(states(),[true,false,true,false]);assert.equal(s.alerts.length,1);
 });
+
+test('sentence playback uses the fresh clip text context and releases the binding when stopped',async()=>{
+ const s=await setup(true),volume=require('../web/playback-volume.js');let bound=null,released=null;
+ s.context.CorporiumVolume={sentence:volume.sentence,bind(media,context){assert.equal(media,s.audio);bound=context;},unbind(media){released=media;}};
+ s.holder.dataset.audioEntry='corpus-a';s.holder._clips[0].text_id='old-text';s.context.originalApi=async()=>({'corpus-a':[{...s.holder._clips[0],text_id:'moved-text'}]});
+ await s.play();assert.equal(bound.key,'sentence:corpus-a');assert.equal(bound.parent,'text:moved-text');s.context.stopSentenceAudio();assert.equal(released,s.audio);
+});

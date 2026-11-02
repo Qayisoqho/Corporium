@@ -45,6 +45,8 @@ def prepare(db,dbpath,include_media=False,update=lambda *a:None):
             target.execute('DROP VIEW IF EXISTS dictionary_targets');target.commit()
             import word_analysis_memory
             word_analysis_memory.drop_triggers(target);target.commit()
+            import sentence_search_index
+            sentence_search_index.drop(target);target.commit()
         with closing(sqlite3.connect(snapshot)) as source:
             source.row_factory=sqlite3.Row
             all_assets=assets(source);required=set(object_media.backup_assets(source))

@@ -48,6 +48,12 @@
  }
  function ui(zh,en){return english?en:zh;}
  function phrase(value){return english?(own(catalog().phrases,value)??value):value;}
+ // Built-in role names are persisted codes. Keep arbitrary existing role text
+ // unchanged while presenting these standard choices in the UI language.
+ const roles={'发言人':'Speaker','调查人':'Fieldworker','记录人':'Recorder','转写人':'Transcriber','翻译人':'Translator','标注人':'Annotator','校对人':'Reviewer','其他合作者':'Other contributors'};
+ function roleLabel(value){return english?(own(roles,value)??value):value;}
+ function setRoleInput(input,value){input.value=roleLabel(value);input.dataset.roleSource=value;input.dataset.roleDisplay=input.value;}
+ function roleInputValue(input){const value=input.value.trim();if(value===input.dataset.roleDisplay)return input.dataset.roleSource;return english?(Object.keys(roles).find(key=>roles[key]===value)??value):value;}
  let indices=null;
  function termIndices(){
   if(indices)return indices;
@@ -112,5 +118,5 @@
  function registerView(name,adapter){views.set(name,adapter);return adapter;}
  function captureView(workspace){return Object.fromEntries([...views].filter(([name])=>name.split(':')[0]===workspace).map(([name,adapter])=>[name,adapter.capture()]));}
  async function restoreView(state){for(const [name,value] of Object.entries(state||{})){const adapter=views.get(name);if(adapter)await adapter.restore(value,()=>true);}}
- globalThis.CorporiumI18n={locale,english,f,term,ui,phrase,ipa,reference,localizeStatic,persist,valid,expand,registerView,captureView,restoreView,has:id=>Object.hasOwn(catalog().messages,id)};
+ globalThis.CorporiumI18n={locale,english,f,term,ui,phrase,roleLabel,setRoleInput,roleInputValue,ipa,reference,localizeStatic,persist,valid,expand,registerView,captureView,restoreView,has:id=>Object.hasOwn(catalog().messages,id)};
 })();

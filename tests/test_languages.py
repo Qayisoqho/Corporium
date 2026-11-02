@@ -118,6 +118,9 @@ class LanguageTests(unittest.TestCase):
         tid=self.seed()
         before=self.call('/api/entries')[1]['items'][0]['translation']
         with server.connect() as db:
+            # A pre-language database cannot contain modern search projections
+            # whose trusted triggers refer to the columns removed below.
+            server.sentence_search_index.drop(db)
             db.execute('DROP TABLE languages')
             db.execute('DROP TABLE undo_scopes')
             db.execute('DROP INDEX texts_language')

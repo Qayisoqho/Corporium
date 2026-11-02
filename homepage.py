@@ -35,6 +35,6 @@ def overview(db):
             item.update(text_id=r['text_id'],position=r['position'],owner_language=r['language_id'],source=r['title'],ipa=b.get('ipa',''),original=' '.join(w.get('form','') for w in b.get('words',[])))
         else:
             r=db.execute('SELECT * FROM dictionary_examples WHERE id=?',(item['id'],)).fetchone();b=json.loads(r['body']);targets=b.get('targets',[])
-            item.update(lexeme_id=targets[0]['lexeme_id'] if targets else None,owner_language=r['language_id'],source=b.get('source','') or '独立例句',ipa=b.get('ipa',''),original=b.get('original','') or ' '.join(w.get('form','') for w in b.get('words',[])))
+            item.update(lexeme_id=targets[0]['lexeme_id'] if targets else None,owner_language=r['language_id'],source=b.get('source','') or '独立例句',source_default=not bool(b.get('source')),ipa=b.get('ipa',''),original=b.get('original','') or ' '.join(w.get('form','') for w in b.get('words',[])))
     random.shuffle(samples)
     return dict(counts=counts,samples=samples)

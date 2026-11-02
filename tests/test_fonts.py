@@ -3,6 +3,7 @@ import shutil
 import unittest
 from pathlib import Path
 import font_catalog
+from urllib.parse import urlparse,parse_qs
 
 class FontTests(unittest.TestCase):
     def test_nested_discovery_invalid_file_and_safe_access(self):
@@ -17,7 +18,7 @@ class FontTests(unittest.TestCase):
                 self.assertEqual(data['file_count'],1)
                 self.assertEqual(data['families'][0]['name'],'Junicode')
                 self.assertEqual(len(data['errors']),1)
-                fid=data['families'][0]['faces'][0]['url'].split('=')[1]
+                fid=parse_qs(urlparse(data['families'][0]['faces'][0]['url']).query)['id'][0]
                 self.assertTrue(font_catalog.font_file(fid)[0])
                 with self.assertRaises(ValueError):font_catalog.font_file('../server.py')
                 self.assertTrue(font_catalog.valid_font(data['families'][0]['id']))

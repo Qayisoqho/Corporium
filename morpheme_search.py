@@ -27,5 +27,10 @@ class MorphemeIndex(SearchIndex):
         return {'fields':[{'id':'all','name':'语素全部内容'}]+[{'id':k,'name':v} for k,v in self.fields.items()], 'classes':[]}
 
 def catalog(db,lid):
+    import material_search_index
+    cached=material_search_index.catalog(db,'morpheme',lid)
+    if cached is not None:return cached
     rows=[{**dict(r),'body':json.loads(r['body'])} for r in db.execute("SELECT * FROM morphemes WHERE ?='all' OR language_id=?",(lid,lid))]
-    return MorphemeIndex(db,lid,rows,catalog_only=True).catalog()
+    result=MorphemeIndex(db,lid,rows,catalog_only=True).catalog()
+    material_search_index.catalog(db,'morpheme',lid,result)
+    return result

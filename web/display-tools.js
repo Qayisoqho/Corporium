@@ -51,7 +51,7 @@ function glossEditParts(text,gloss=true){
  parts.push(text.slice(start));return parts;
 }
 
-function lexemeLabel(x){return esc(x.headword)+(x.body?.homonym_number?'<sub>'+esc(x.body.homonym_number)+'</sub>':'');}
+function lexemeLabel(x){return rich(x.headword)+(x.body?.homonym_number?'<sub>'+esc(x.body.homonym_number)+'</sub>':'');}
 function lexemePlainLabel(x){return x.headword+(x.body?.homonym_number?String(x.body.homonym_number).replace(/[0-9]/g,n=>'₀₁₂₃₄₅₆₇₈₉'[+n]):'');}
 // Shared by text titles and dictionary headwords; only clipped text pans on hover/focus.
 function setupSidebarTitlePan(host,{row,mask,text}){

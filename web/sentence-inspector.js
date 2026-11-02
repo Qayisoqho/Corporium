@@ -94,7 +94,7 @@ function createSentenceInspector(main){
  };
  document.addEventListener('click',e=>{
   const word=e.target.closest('.editable-example .words:not(.inline-words)>.word');
-  if(!word||word.matches('.punctuation-unit,.phonological-boundary')||e.target.closest('a,input,select,textarea,[data-judgment-edit]'))return;
+  if(!word||word.matches('.punctuation-unit,.phonological-boundary')||e.target.closest('a,input,select,textarea,[data-judgment-edit],[data-layer-open]'))return;
   const card=word.closest('.editable-example'),index=[...word.parentElement.children].indexOf(word);if(!card.dataset.exampleId)return;
   e.preventDefault();e.stopImmediatePropagation();void safe(()=>open({kind:card.dataset.exampleKind,id:card.dataset.exampleId,word:index},activeTab,undefined,card))();
  },true);

@@ -9,6 +9,17 @@ function setup(){
  vm.createContext(s);vm.runInContext(source,s);return {api:s.window.CorporiumVocabulary,node};
 }
 const data=()=>({id:'run',statistics:{words:7,types:4,sentences:3,morpheme_words:5,root_words:5,rows:[{title:'A',words:4,types:3,sentences:1,excluded:0},{title:'B',words:2,types:2,sentences:1,excluded:0}]},vocabulary:{view:'overview',rows:[],page:1,pages:1,total:4,order:'frequency',items:[]}});
+test('MPW shows its numerator and chosen denominator without changing ordinary token counts',()=>{
+ const {api,node}=setup(),d=data();d.statistics.mpw={morphemes:10,words:8,value:1.25,separate_clitics:true,clitic_words:1};
+ api.render(d,{reload(){},card(){},source(){}});
+ assert.match(node('analysis-summary').innerHTML,/1.250/);
+ assert.match(node('analysis-summary').innerHTML,/>7 <small>/);
+ const info=node('analysis-results').children[1].children.at(-1).innerHTML;
+ assert.match(info,/10 ÷/);assert.match(info,/8 =/);
+ assert.match(info,/附着成分单独计词/);
+ assert.equal(node('analysis-mpw-clitics').checked,false);
+ d.statistics.mpw.value=null;api.render(d,{reload(){},card(){},source(){}});assert.match(node('analysis-summary').innerHTML,/— <small>MPW/);
+});
 test('overview shows union type count and per-text types without summing them',()=>{
  const {api,node}=setup(),d=data();d.statistics.rows.push({kind:'independent',title:'独立例句库',words:1,types:1,sentences:1,excluded:0});api.render(d,{reload(){},card(){},source(){}});
  assert.match(node('analysis-summary').innerHTML,/>4<\/button>/);

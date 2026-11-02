@@ -7,7 +7,7 @@
  function decode(s){if(s[0]!=='&')return s;const name=s.slice(1,-1);if(name in entities)return entities[name];if(/^#x[0-9a-f]+$/i.test(name))return String.fromCodePoint(parseInt(name.slice(2),16));if(/^#\d+$/.test(name))return String.fromCodePoint(Number(name.slice(1)));return s;}
  function htmlTokens(html){return [...html.matchAll(/<[^>]*>|&(?:#\d+|#x[\da-f]+|[a-z]+);|[^<&]+|[<&]/giu)].map(m=>m[0]);}
  function glyphs(raw,gloss){
-  const chars=Array.from(raw),pattern=gloss?/#(?:sub|sup|super)\[([^\[\]]*)\]/g:/#sub\[([^\[\]]*)\]/g;
+  const chars=Array.from(raw),pattern=/#(?:sub|sup|super)\[([^\[\]]*)\]/g;
   const glyph=[];let at=0,cp=0;
   for(const m of raw.matchAll(pattern)){
    const start=cp+Array.from(raw.slice(at,m.index)).length,end=start+Array.from(m[0]).length;
@@ -75,16 +75,17 @@
   if(overlay.key===u.key||overlay.key==='@word'||fragments.length&&fragments.every(f=>sources.some(s=>s.start<=f.start&&f.end<=s.end)))return [[0,length]];
   // A custom group gloss has no positional correspondence to its member labels.
   // Only project fragments whose concatenation is the actually displayed value.
-  const joiner=['','…'].find(j=>fragments.map(f=>f.text).join(j)===value);if(joiner===undefined)return [];
+  const visible=glyphs(value),plain=visible.map(g=>g.text).join('');
+  const joiner=['','…'].find(j=>fragments.map(f=>f.text).join(j)===plain);if(joiner===undefined)return [];
   let at=0;const out=[];
-  for(const f of fragments){for(const s of sources){const a=Math.max(f.start,s.start),z=Math.min(f.end,s.end);if(a<z)out.push([at+a-f.start,at+z-f.start]);}at+=Array.from(f.text).length+Array.from(joiner).length;}
+  for(const f of fragments){for(const s of sources){const a=Math.max(f.start,s.start),z=Math.min(f.end,s.end);if(a<z)out.push([visible[at+a-f.start].start,visible[at+z-f.start-1].end]);}at+=Array.from(f.text).length+Array.from(joiner).length;}
   return out;
  }
  function unit(w,u,lid){
   if(!u||u===w)return pair(w,lid);
-  if(!w.morph_colors?.length&&!w.redup_colors?.length)return pair({...u,gloss:u.display_gloss??u.gloss},lid);
+  if(!w.morph_colors?.length&&!w.redup_colors?.length)return pair({...u,form:u.display_form??u.form,gloss:u.display_gloss??u.gloss},lid);
   const owner=w.morphemes?.find(m=>m.key===u.key||m.members?.includes(u.key)),color=w.morph_colors?.find(c=>c.key===(owner?.key||u.key)),tone=color?.tone||'base';
-  const form=String(u.form||''),gloss=String(u.display_gloss??u.gloss??''),ranges=[{tone,form:[[0,Array.from(form).length]],gloss:[[0,Array.from(gloss).length]]}];
+  const form=String(u.display_form??u.form??''),gloss=String(u.display_gloss??u.gloss??''),ranges=[{tone,form:[[0,Array.from(form).length]],gloss:[[0,Array.from(gloss).length]]}];
   for(const overlay of w.redup_colors||[])ranges.push({tone:'reduplication',form:unitOverlay(u,overlay,'form',form),gloss:unitOverlay(u,overlay,'gloss',gloss)});
   return {form:decorate(form,rich(form),ranges,'form'),gloss:decorate(gloss,richGloss(gloss,lid),ranges,'gloss')};
  }

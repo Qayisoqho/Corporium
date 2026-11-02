@@ -120,7 +120,7 @@ class SurveyTests(unittest.TestCase):
         self.assertEqual(self.undo()[0],200);self.assertEqual(self.state()['nodes'][0]['body']['notes'],[])
 
     def test_template_files_lifecycle_and_portable_writing_type(self):
-        typ=self.call('/api/writing-save',dict(name='调查音标',font='Junicode'))[1]
+        typ=self.call('/api/writing-save',dict(name='调查音标',font='Junicode',space_before=75,space_after=0))[1]
         root=self.node(body=dict(content=[dict(text='a',type_id=typ['id'],bold=True)],notes=[dict(text='不导出笔记')],status='done'))
         child=self.node('调查问题',root,'question');self.example(child)
         code,result=self.survey('template-file',action='save',node_id=root,name='../自定义模板')
@@ -135,6 +135,8 @@ class SurveyTests(unittest.TestCase):
         nodes=self.state(lid)['nodes'];self.assertEqual(len(nodes),2)
         self.assertEqual(nodes[0]['body']['status'],'unasked');self.assertEqual(nodes[0]['body']['notes'],[])
         self.assertNotEqual(nodes[0]['body']['content'][0]['type_id'],typ['id'])
+        imported=self.call('/api/writing-types?language='+lid)[1]['items'][0]
+        self.assertEqual(imported['space_before'],75);self.assertEqual(imported['space_after'],0)
         self.assertTrue(all(n['evidence_count']==0 for n in nodes))
         self.assertEqual(self.survey('template-file',action='delete',id=ident,confirmed=True)[0],200)
         self.assertFalse((folder/(ident+'.json')).exists());self.assertTrue((folder/'deleted'/(ident+'.json')).exists())

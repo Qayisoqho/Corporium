@@ -23,7 +23,7 @@ class AuditSpeedTests(unittest.TestCase):
         from urllib.parse import urlencode
         code,r=self.call('/api/grammar-audit?'+urlencode(dict(language='ordos',reuse='0',**q)));self.assertEqual(code,200,r);return r
 
-    def test_new_tag_alias_rename_ignore_and_delete_reclassify_without_source_scan(self):
+    def test_tag_only_edits_reuse_facts_and_rename_rescans_changed_sources(self):
         self.seed('#pass([], (([home-x],[house-PL]),([p],[1SG.nom]),([l],[NOM.GEN]),([z],[all])), [])')
         self.audit()
         for mode in ('delete','wal'):
@@ -35,8 +35,14 @@ class AuditSpeedTests(unittest.TestCase):
                     current=self.audit()
                 self.assertEqual(current,self.fresh())
                 for values in [dict(description='description',category='number'),dict(symbol='plural',aliases=['PL']),dict(symbol='plural',aliases=['PL','NOM'])]:
+                    with server.connect(audit=False) as db:before=[tuple(r) for r in db.execute('SELECT id,body FROM entries ORDER BY id')]
                     code,_=self.call('/api/grammar-save',{**tag,**values});self.assertEqual(code,200)
-                    with (patch.object(grammar,'analyze',side_effect=AssertionError('tag edit rescanned source')) if mode=='delete' else nullcontext()):current=self.audit(lower='true')
+                    with server.connect(audit=False) as db:changed=before!=[tuple(r) for r in db.execute('SELECT id,body FROM entries ORDER BY id')]
+                    # Registered-label renaming now rewrites recognized old tags.
+                    # Reusing pre-rename source facts would return stale content.
+                    guard=patch.object(grammar,'analyze',wraps=grammar.analyze) if changed else patch.object(grammar,'analyze',side_effect=AssertionError('tag-only edit rescanned source')) if mode=='delete' else nullcontext()
+                    with guard as analyzed:current=self.audit(lower='true')
+                    if changed:self.assertTrue(analyzed.called)
                     self.assertEqual(current,self.fresh(lower='true'))
                     tag=next(t for t in self.call('/api/grammar-tags?language=ordos')[1] if t['id']==tag['id'])
                 code,_=self.call('/api/grammar-delete',{**tag,'confirmed':True});self.assertEqual(code,200)

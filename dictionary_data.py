@@ -6,6 +6,7 @@ import annotations
 import morphology
 import segmentation
 import gloss_inheritance
+import display_spacing
 
 TABLES=('writing_types','dictionary_examples')
 
@@ -14,6 +15,7 @@ def initialize(db):
     CREATE TABLE IF NOT EXISTS dictionary_examples(id TEXT PRIMARY KEY,language_id TEXT NOT NULL,body TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1);
     CREATE INDEX IF NOT EXISTS writing_language ON writing_types(language_id);
     CREATE INDEX IF NOT EXISTS examples_language ON dictionary_examples(language_id);''')
+    display_spacing.initialize(db, 'writing_types')
 
 def types(db,lid,catalog_only=False):
     items=[dict(r) for r in db.execute('SELECT * FROM writing_types WHERE language_id=? ORDER BY position,name,id',(lid,))]
@@ -33,7 +35,7 @@ def resolve(db,body,catalog=None):
         if o.get('type_id'):
             row=catalog.get(o['type_id']) if catalog is not None else db.execute('SELECT * FROM writing_types WHERE id=?',(o['type_id'],)).fetchone()
             if row:
-                o.update(label=row['name'],font=row['font']);positions[o['id']]=row['position']
+                o.update(label=row['name'],font=row['font'],**display_spacing.values(dict(row)));positions[o['id']]=row['position']
     body['orthographies']=sorted(body.get('orthographies',[]),key=lambda o:positions.get(o['id'],10001))
     return body
 
@@ -98,6 +100,7 @@ def mutate(db,action,b,lid):
             if changed:
                 morphology.word_structure.writings(data)
                 db.execute('UPDATE morphemes SET body=?,revision=revision+1 WHERE id=?',(json.dumps(data,ensure_ascii=False),m['id']))
+        if replacement:db.execute("UPDATE annotation_layers SET dictionary_field=?,revision=revision+1 WHERE source='dictionary' AND dictionary_field=? AND language_id=?",('writing:'+replacement,'writing:'+xid,lid))
         import quick_edit
         quick_edit.writing_replace(db,xid,replacement)
         db.execute('DELETE FROM writing_types WHERE id=?',(xid,));validate(db)
@@ -110,7 +113,8 @@ def mutate(db,action,b,lid):
         position=b.get('position',0)
         if not isinstance(position,int) or not 0<=position<=10000:raise ValueError('显示顺序须为 0–10000 的整数')
         if db.execute('SELECT 1 FROM writing_types WHERE language_id=? AND name=? AND id<>?',(lid,name,xid)).fetchone():raise ValueError('该书写类型名称已存在')
-        db.execute('INSERT INTO writing_types VALUES(?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET name=excluded.name,font=excluded.font,position=excluded.position,revision=writing_types.revision+1',(xid,lid,name,font,position))
+        spacing=display_spacing.values(b,old)
+        db.execute('INSERT INTO writing_types(id,language_id,name,font,position,revision,space_before,space_after) VALUES(?,?,?,?,?,1,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,font=excluded.font,position=excluded.position,space_before=excluded.space_before,space_after=excluded.space_after,revision=writing_types.revision+1',(xid,lid,name,font,position,spacing['space_before'],spacing['space_after']))
         if b.get('adopt'):
             for x in db.execute('SELECT * FROM dictionary_targets WHERE language_id=?',(lid,)).fetchall():
                 body=json.loads(x['body']);changed=False

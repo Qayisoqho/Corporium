@@ -9,7 +9,7 @@ COLORED_TYPES={'affix','clitic','infix','circumfix','connector','multipart'}
 def plain_map(raw):
     """Mirror corpus.plain/clean while retaining source code-point positions."""
     text=[];positions=[];at=0
-    for match in re.finditer(r'#sub\[([^\[\]]*)\]',raw):
+    for match in re.finditer(r'#(?:sub|sup|super)\[([^\[\]]*)\]',raw):
         text.extend(raw[at:match.start()]);positions.extend((i,i+1) for i in range(at,match.start()))
         text.extend(match[1]);positions.extend([(match.start(),match.end())]*len(match[1]));at=match.end()
     text.extend(raw[at:]);positions.extend((i,i+1) for i in range(at,len(raw)))

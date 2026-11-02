@@ -48,7 +48,8 @@ class EvidenceIntegrationTests(unittest.TestCase):
 
     def compare(self,db,needle,case=False):
         rows=self.rows(db);spec=dict(field='all',case=case)
-        full=dictionary_search.SearchIndex(db,'ordos',rows).prepare(spec)
+        with patch('sentence_search_index.available',return_value=False):
+            full=dictionary_search.SearchIndex(db,'ordos',rows).prepare(spec)
         indexed=dictionary_search.SearchIndex(db,'ordos',rows,search_spec=spec,query=needle).prepare(spec)
         expected=[r['id'] for r in rows if full.matches(r,needle)]
         self.assertEqual([r['id'] for r in rows if indexed.matches(r,needle)],expected)

@@ -4,6 +4,7 @@ import copy
 import uuid
 import font_catalog
 import gloss_inheritance
+import display_spacing
 
 TABLES=('annotation_layers','annotation_cells')
 def initialize(db):
@@ -15,12 +16,16 @@ def initialize(db):
         db.execute('ALTER TABLE annotation_layers ADD COLUMN size INTEGER NOT NULL DEFAULT 100')
     if 'anchor' not in {r[1] for r in db.execute('PRAGMA table_info(annotation_layers)')}:
         db.execute("ALTER TABLE annotation_layers ADD COLUMN anchor TEXT NOT NULL DEFAULT 'word'")
+    display_spacing.initialize(db, 'annotation_layers')
+    columns={r[1] for r in db.execute('PRAGMA table_info(annotation_layers)')}
+    for name,definition in [('source',"TEXT NOT NULL DEFAULT 'manual'"),('dictionary_field',"TEXT NOT NULL DEFAULT ''")]:
+        if name not in columns:db.execute('ALTER TABLE annotation_layers ADD COLUMN '+name+' '+definition)
 
 SENTENCE='@sentence'
 
 def valid_cell(cell,words,definitions):
     layer=next((l for l in definitions if l['id']==cell['layer_id']),None)
-    return bool(layer and (cell['unit_id']==SENTENCE if layer.get('anchor','word')!='word' else cell['unit_id'] in words))
+    return bool(layer and layer.get('source','manual')!='dictionary' and (cell['unit_id']==SENTENCE if layer.get('anchor','word')!='word' else cell['unit_id'] in words))
 
 def attach(body,words,definitions,cells):
     values={(c['unit_id'],c['layer_id']):c['value'] for c in cells}
@@ -64,6 +69,10 @@ def get(db,kind,rid):
     for i,w in enumerate(words):w['protected']=w['id'] in protected or bool(body['words'][i].get('redup_id') or body['words'][i].get('morph_groups') or body['words'][i].get('infix_confirmation'))
     live={w['id'] for w in words};allowed={l['id'] for l in defs}
     result=dict(kind=kind,id=rid,body=body,language_id=lid,owner_language=scope,revision=revision,words=words,layers=defs,cells=cells,orphaned=[c for c in cells if not valid_cell(c,live,defs)])
+    if any(l.get('source')=='dictionary' for l in defs):
+        import dictionary_layers,corpus
+        projected=dictionary_layers.project(db,corpus.analyze(copy.deepcopy(body)),kind,rid,lid,defs)
+        result['dictionary_layers']={w['id']:[{**l,'unit_id':w['id']} for l in projected['words'][i].get('extra_layers',[]) if l.get('derived')] for i,w in enumerate(words)}
     if kind=='independent':
         import example_numbering
         result['library_number']=example_numbering.number(db,lid,rid)
@@ -160,6 +169,9 @@ def enrich(db,body,kind,rid):
         body['library_number']=data['library_number']
         languages.annotate(body,lid,{lid:language})
     attach(body,[w['id'] for w in data['words']],data['layers'],data['cells'])
+    for w,unit in zip(body.get('words',[]),data['words']):
+        derived={l['id']:l for l in data.get('dictionary_layers',{}).get(unit['id'],[])}
+        w['extra_layers']=[derived.get(l['id'],l) for l in w.get('extra_layers',[])]
     import morpheme_colors
     morpheme_colors.attach(db,body,kind,rid,data['language_id'])
     import code_switching
@@ -188,11 +200,15 @@ def mutate(db,action,b,lid):
         anchor=b.get('anchor',old['anchor'] if old else 'word')
         if anchor not in ('word','ipa','translation'):raise ValueError('附加行位置无效')
         if old and old['anchor']!=anchor and db.execute('SELECT 1 FROM annotation_cells WHERE layer_id=?',(old['id'],)).fetchone():raise ValueError('已有内容的层不能改换对应单位；请新建附加行')
+        import dictionary_layers
+        source,field=dictionary_layers.configuration(db,b,old,lid,anchor)
         xid=b.get('id') or str(uuid.uuid4())
         size=b.get('size',100)
         if not isinstance(size,int) or not 50<=size<=200:raise ValueError('字号比例须在 50% 到 200% 之间')
+        spacing=display_spacing.values(b,old,internal=True)
         db.execute('INSERT INTO annotation_layers(id,language_id,name,font,style,position,visible,searchable,revision,size) VALUES(?,?,?,?,?,?,?,?,1,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,font=excluded.font,style=excluded.style,position=excluded.position,visible=excluded.visible,searchable=excluded.searchable,size=excluded.size,revision=annotation_layers.revision+1',(xid,lid,name,font,style,position,int(bool(b.get('visible',True))),int(bool(b.get('searchable',True))),size))
-        db.execute('UPDATE annotation_layers SET anchor=? WHERE id=?',(anchor,xid))
+        db.execute('UPDATE annotation_layers SET anchor=?,space_before=?,space_after=?,line_spacing=? WHERE id=?',(anchor,spacing['space_before'],spacing['space_after'],spacing['line_spacing'],xid))
+        db.execute('UPDATE annotation_layers SET source=?,dictionary_field=? WHERE id=?',(source,field,xid))
         return {'ok':True,'id':xid}
     data=get(db,b['kind'],b['id'])
     if data['revision']!=b.get('revision'):raise ValueError('例句已修改，请重新打开标注层编辑器')
@@ -228,13 +244,30 @@ def search_catalog(db,lid):
 class SearchFields:
     """Query-local custom values shared by sentence and survey searches."""
     def __init__(self,db,lid,q):
+        if not db.in_transaction:db.execute('BEGIN')
         import corpus,long_tasks
         from collections import defaultdict
         self.db=db;self.field=q.get('field','all');self.query=q.get('q','');self.case=q.get('case')=='true';self.mode=q.get('mode') or ('exact' if q.get('exact')=='true' else 'contains')
         self.cells=defaultdict(list);self.links=defaultdict(set);self.targets={};self.types={};self.defs={}
+        self.analysis_cache=None
+        self.cached_table=None
+        self.full_references=False
         if not self.query.strip() or self.field not in ('all','layers','writings') and not self.field.startswith(('layer:','writing:')):return
         catalog=search_catalog(db,lid)
         if self.field.startswith(('layer:','writing:')) and self.field not in {f['id'] for f in catalog['fields']}:raise ValueError('自定义检索字段已删除或不属于当前语言，请重新选择')
+        import material_search_index,sentence_search_index
+        if material_search_index.available(db) and sentence_search_index.available(db):
+            try:
+                with material_search_index.preparing(db):
+                    material_search_index.refresh_custom(db)
+                    sql,args=material_search_index.custom_hits(db,self.field,self.query,self.case,self.mode,lid,details=True)
+                    self.cached_table='custom_query_'+uuid.uuid4().hex
+                    self.cached_labels={f['id']:f['name'] for f in catalog['fields']}
+                    db.execute('CREATE TEMP TABLE '+self.cached_table+' AS '+sql,args)
+                    db.execute('CREATE INDEX '+self.cached_table+'_owners ON '+self.cached_table+'(kind,id)')
+                return
+            except material_search_index.Unavailable:
+                self.cached_table=None
         if self.field in ('all','layers') or self.field.startswith('layer:'):
             self.defs={r['id']:dict(r) for r in db.execute("SELECT * FROM annotation_layers WHERE ?='all' OR language_id=?",(lid,lid)) if (self.field.startswith('layer:') or r['searchable']) and (not self.field.startswith('layer:') or r['id']==self.field[6:])}
             for c in long_tasks.steps(db.execute("SELECT c.* FROM annotation_cells c JOIN annotation_layers l ON l.id=c.layer_id WHERE ?='all' OR l.language_id=?",(lid,lid))) if self.defs else ():
@@ -252,6 +285,7 @@ class SearchFields:
             if self.targets:
                 for r in long_tasks.steps(db.execute('SELECT u.entry_id,l.lexeme_id,COALESCE(p.position,u.position) word_position FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id LEFT JOIN corpus_units p ON p.id=u.parent_id WHERE u.active=1')):
                     if r['lexeme_id'] in self.targets:self.links[r['entry_id']].add((r['lexeme_id'],r['word_position']))
+        self.full_references=bool(self.targets or any(d.get('source')=='dictionary' for d in self.defs.values()))
 
     def hit(self,value):
         from corpus import normalize
@@ -259,6 +293,10 @@ class SearchFields:
         return a==b if self.mode=='exact' else a.startswith(b) if self.mode=='prefix' else a.endswith(b) if self.mode=='suffix' else b in a
 
     def values(self,kind,rid,body,lid):
+        if self.cached_table is not None:
+            found=[dict(field=r['field'],label=self.cached_labels[r['field']],text=r['display'],word=r['word'] if r['word']>=0 else None)
+              for r in self.db.execute('SELECT field,word,display FROM '+self.cached_table+' WHERE kind=? AND id=?',(kind,rid))]
+            return list({(v['field'],v['text'],v.get('word')):v for v in found}.values())
         found=[];cells=self.cells.get((kind,rid),[])
         if cells:
             definitions=[v for v in self.defs.values() if v['language_id']==lid]
@@ -269,16 +307,31 @@ class SearchFields:
         if kind=='independent' and self.targets and any(t.get('lexeme_id') in self.targets for t in body.get('targets',[])):
             from corpus import analyze
             from segmentation import decorate_refs
-            analyzed=analyze(copy.deepcopy(body));decorate_refs(analyzed)
+            if self.analysis_cache is None:
+                from corpus import WordAnalysisCache
+                self.analysis_cache=WordAnalysisCache()
+            analyzed=analyze(copy.deepcopy(body),cache=self.analysis_cache);decorate_refs(analyzed)
             targets={(t.get('lexeme_id'),(t.get('segmentation_ref') or {}).get('word')) for t in analyzed.get('targets',[]) if not t.get('segmentation_review')}
         for xid,position in targets:
             if xid in self.targets and self.targets[xid][0]==lid:found.extend(dict(v,word=position) for v in self.targets[xid][1])
+        derived=[v for v in self.defs.values() if v.get('source')=='dictionary' and v['language_id']==lid]
+        if derived:
+            import dictionary_layers,corpus
+            if self.analysis_cache is None:self.analysis_cache=corpus.WordAnalysisCache()
+            projected=dictionary_layers.project(self.db,corpus.analyze(copy.deepcopy(body),cache=self.analysis_cache),kind,rid,lid,derived,linked_only=True)
+            for i,w in enumerate(projected.get('words',[])):
+                for layer in w.get('extra_layers',[]):
+                    if layer.get('derived') and any(s['values'] for s in layer['segments']):
+                        text=dictionary_layers.text(layer);english=dictionary_layers.text(layer,'en')
+                        if self.hit(text) or self.hit(english):found.append(dict(field='layer:'+layer['id'],label=layer['name'],text=text,word=i))
         return list({(v['field'],v['text'],v.get('word')):v for v in found}.values())
 
 
 def search(db,q,*,ids_only=False):
     """Paginate empty searches in SQL; analyze only visible hits in filtered searches."""
+    if not db.in_transaction:db.execute('BEGIN')
     from corpus import analyze,QueryMatcher,normalize
+    import sentence_search_index
     source=q.get('source','all');lid=q.get('language','all');query=q.get('q','');field=q.get('field','all');mode=q.get('mode','contains');case=q.get('case')=='true'
     if source not in ('all','corpus','independent'):raise ValueError('例句来源无效')
     branches=[];args=[]
@@ -297,10 +350,20 @@ def search(db,q,*,ids_only=False):
     import grammaticality
     extra,values=grammaticality.filter_sql(q,'q.body','q.language_id');sql+=extra+(" AND q.kind='independent'" if extra else '');args.extend(values)
     page=max(1,int(q.get('page',1)))
+    indexed=None
     if not normalize(query,case) and field!='reduplication':
         if ids_only:return {'ids':[r[0] for r in db.execute('SELECT id FROM ('+sql+')',args)]}
         total=db.execute('SELECT COUNT(*) FROM ('+sql+')',args).fetchone()[0];pages=max(1,(total+19)//20);page=min(page,pages)
         visible=list(db.execute('SELECT * FROM ('+sql+') ORDER BY source_order,ordering,position LIMIT 20 OFFSET ?',[*args,(page-1)*20]))
+    elif (indexed := sentence_search_index.search(db,sql,args,field,query,case,mode,page,20,ids_only=ids_only,custom_language=lid,include_original=True)) is not None:
+        if ids_only:return indexed
+        total=indexed['total'];page=indexed['page'];pages=max(1,(total+19)//20)
+        keys=indexed['keys']
+        if keys:
+            marks=','.join('(?,?)' for _ in keys);pairs=[v for r in keys for v in (r['kind'],r['id'])]
+            found={(r['kind'],r['id']):r for r in db.execute('SELECT * FROM ('+sql+') WHERE (kind,id) IN ('+marks+')',args+pairs)}
+            visible=[found[(r['kind'],r['id'])] for r in keys]
+        else:visible=[]
     else:
         custom=SearchFields(db,lid,q)
         def hit(value):
@@ -309,7 +372,10 @@ def search(db,q,*,ids_only=False):
         matches=[]
         matcher=QueryMatcher(query,field,mode=mode,case=case)
         for r in gloss_inheritance.iter_rows(db,db.execute('SELECT * FROM ('+sql+') ORDER BY source_order,ordering,position',args),lightweight=True):
-            b=gloss_inheritance.load(db,r['kind'],r['id'],r['body'],metadata=False,lightweight=True);_,found=matcher(b)
+            # Dictionary values need current independent target references as
+            # well as effective gloss text. The lightweight text-only resolver
+            # intentionally does not retarget those references.
+            b=gloss_inheritance.load(db,r['kind'],r['id'],r['body'],metadata=False,lightweight=not (r['kind']=='independent' and custom.full_references));_,found=matcher(b)
             if field in ('all','original'):found=found or hit(b.get('original',''))
             if not found:found=bool(custom.values(r['kind'],r['id'],b,r['language_id']))
             if found:matches.append(r)
@@ -321,7 +387,7 @@ def search(db,q,*,ids_only=False):
         item={k:r[k] for k in ('kind','id','language_id','owner_language','title','text_id','position')};item['body']=b
         if r['kind']=='independent':item['lexeme_id']=b['targets'][0]['lexeme_id'] if b.get('targets') else None
         items.append(item)
-    stats=code_switching.summary(db,sql,args,None if not normalize(query,case) and field!='reduplication' else {(r['kind'],r['id']) for r in matches})
+    stats=indexed['code_summary'] if indexed is not None else code_switching.summary(db,sql,args,None if not normalize(query,case) and field!='reduplication' else {(r['kind'],r['id']) for r in matches})
     return dict(items=items,total=total,page=page,pages=pages,code_summary=stats)
 
 

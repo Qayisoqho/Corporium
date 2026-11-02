@@ -69,13 +69,13 @@ class EvidenceReadTests(unittest.TestCase):
         with evidence_index._lock:evidence_index._indexes.clear()
         with patch.object(gloss,'revisions',wraps=gloss.revisions) as versions:
             expected=self.search('家')
-            self.assertTrue(versions.called)
+            self.assertFalse(versions.called)  # Recipe dirty queues replace per-owner version scans.
         with server.connect(audit=False) as db:
             statements=[];db.set_trace_callback(statements.append)
             with patch.object(gloss,'load',side_effect=AssertionError('validated document needs no render')):
                 actual=lexicon.list_lexemes(db,'ordos','家',page_size='all',summary=True)
         self.assertEqual(actual,expected)
-        self.assertTrue(any('SELECT b.owner_id,b.id,b.revision' in s for s in statements))
+        self.assertFalse(any('SELECT b.owner_id,b.id,b.revision' in s for s in statements))
         self.assertFalse(any('SELECT b.*' in s or 'SELECT id,position FROM corpus_units' in s for s in statements))
 
     def test_only_changed_documents_prepare_full_bindings_after_local_override(self):
@@ -85,7 +85,7 @@ class EvidenceReadTests(unittest.TestCase):
         prepared=[];prefetch=gloss.prefetch
         def observe(db,kind,ids,**kwargs):
             ids=list(ids)
-            if kwargs.get('changed_only'):prepared.extend((kind,rid) for rid in ids)
+            prepared.extend((kind,rid) for rid in ids)
             return prefetch(db,kind,ids,**kwargs)
         with patch.object(gloss,'prefetch',side_effect=observe):result=self.search('新住所')
         self.assertEqual({r['id'] for r in result['items']},{x['id'],other['id']})
@@ -95,6 +95,7 @@ class EvidenceReadTests(unittest.TestCase):
         e,ex,x,other=self.shared_fixture();self.search('家');self.change(x,'新住所')
         self.assertEqual({r['id'] for r in self.search('新住所')['items']},{x['id'],other['id']})
 
+    @patch('sentence_search_index.available',new=lambda db:False)
     def test_partial_cache_and_eviction_during_a_batch_keep_hits_and_field_catalog(self):
         e,ex,x=self.fixture()
         with server.connect(audit=False) as db:
@@ -109,8 +110,11 @@ class EvidenceReadTests(unittest.TestCase):
             # 100-row batch, including reuse of a hit after another is evicted.
             for key in list(index.records)[::3]:index.discard(key)
             index.limit=max(index.bytes//2,4096)
-        self.assertEqual(self.search('特有证据104'),expected)
-        self.assertEqual(self.search('特有证据104'),expected)
+        # Exercise leaf-document eviction even when the completed-result cache
+        # could now answer this unchanged query without visiting that index.
+        with patch.object(evidence_index,'load_result',return_value=None):
+            self.assertEqual(self.search('特有证据104'),expected)
+            self.assertEqual(self.search('特有证据104'),expected)
         self.assertLessEqual(index.bytes,index.limit)
 
     def test_cached_evidence_follows_override_restore_undo_and_redo(self):

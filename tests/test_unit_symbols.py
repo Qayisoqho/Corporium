@@ -38,11 +38,14 @@ class UnitSymbolTests(unittest.TestCase):
         self.assertEqual(code,400);self.assertIn('音系单位边界',r['error'])
         audit=self.call('/api/grammar-audit?language=ordos')[1]
         self.assertEqual(audit['unknown'],[]);self.assertEqual(audit['counts'],{})
-        # Old evidence is retained but flagged for review, never silently deleted.
+        # Dictionary evidence remains; the retired audit no longer emits link items.
         with server.connect() as db:
             db.execute("INSERT INTO lexical_links VALUES('legacy',?,?,NULL,NULL,'','ordos',1)",(e['words'][1]['unit_id'],x['id']))
         self.assertTrue(self.call('/api/lexeme-examples?id='+x['id'])[1]['items'][0]['needs_review'])
-        self.assertEqual(self.call('/api/grammar-audit?language=ordos')[1]['counts']['link'],1)
+        audit=self.call('/api/grammar-audit?language=ordos')[1]
+        self.assertNotIn('link',audit['counts'])
+        self.assertFalse(any(item['issue']=='link' for item in audit['items']))
+        with server.connect(audit=False) as db:self.assertIsNotNone(db.execute("SELECT id FROM lexical_links WHERE id='legacy'").fetchone())
         for value in ['a#','#a','#.','#sub[x]']:
             self.assertEqual(corpus.boundary_count(value),0)
         self.assertEqual(corpus.boundary_count(' \\#\\# '),2)

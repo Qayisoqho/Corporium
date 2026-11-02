@@ -13,14 +13,23 @@ function readGlossAddition(host){
  return {gloss_addition:host?.querySelector('.sense-gloss-addition')?.value||'',show_gloss_addition:host?.querySelector('.sense-show-addition')?.checked??true};
 }
 const senseAdditionBindings=new WeakMap();
-function mountGlossAddition(input,s={},tags=[],onchange=()=>{}){
+function mountGlossAddition(input,s={},tags=[],onchange=()=>{},language=null){
  senseAdditionBindings.get(input)?.();
  input.parentElement.parentElement.querySelector(':scope > .sense-addition-controls')?.remove();
  const box=document.createElement('div');box.className='sense-addition-controls';
  const t=v=>globalThis.CorporiumI18n?.phrase(v)??v;
  box.innerHTML=`<label>${esc(t('附加标签'))}<input class="sense-gloss-addition" value="${esc(s.gloss_addition||'')}" placeholder="${esc(t('点号分隔，如 LOC.PL'))}"></label><label>${esc(t('已登记的语法标签'))}<select class="sense-addition-picker"><option value="">${esc(t('选择标签以附加'))}</option>${tags.map(tag=>`<option value="${esc(tag.symbol)}">${esc(tag.symbol+(tag.description?' · '+tag.description:''))}</option>`).join('')}</select></label><label class="sense-addition-toggle"><input type="checkbox" class="sense-show-addition" ${s.show_gloss_addition===false?'':'checked'}>${esc(t('显示附加标签'))}</label><output class="sense-addition-preview"></output>`;
  input.closest('label').after(box);const extra=box.querySelector('input'),picker=box.querySelector('select'),show=box.querySelector('input[type=checkbox]');
- const refresh=()=>{box.querySelector('output').textContent='→ '+senseGloss({short_gloss:input.value,gloss_addition:extra.value,show_gloss_addition:show.checked});};
+ const lid=()=>language||input.closest('dialog')?.querySelector('#lexeme-language,#morpheme-language')?.value||tags[0]?.language_id||activeLanguage;
+ const refresh=()=>{box.querySelector('output').innerHTML='→ '+richGloss(senseGloss({short_gloss:input.value,gloss_addition:extra.value,show_gloss_addition:show.checked}),lid());};
+ box.refreshGrammar=async()=>{
+  const language=lid(),metadata=languageList.find(l=>l.id===language)?.metadata||'{}',signature=JSON.stringify([language,JSON.parse(metadata).glossary||{}]);
+  if(box.grammarSignature===signature){refresh();return;}box.grammarSignature=signature;
+  const current=await api('grammar-tags?language='+encodeURIComponent(language));if(!box.isConnected||lid()!==language||box.grammarSignature!==signature)return;
+  const selected=picker.value;picker.innerHTML='<option value="">'+esc(t('选择标签以附加'))+'</option>'+current.map(tag=>'<option value="'+esc(tag.symbol)+'">'+esc(tag.symbol+(tag.description?' · '+tag.description:''))+'</option>').join('');picker.value=selected;refresh();
+ };
  picker.onchange=()=>{if(!picker.value)return;const parts=extra.value.split('.').map(p=>p.trim()).filter(Boolean);if(!parts.some(p=>p.toLowerCase()===picker.value.toLowerCase()))parts.push(picker.value);extra.value=parts.join('.');picker.value='';extra.dispatchEvent(new Event('input',{bubbles:true}));};
  box.addEventListener('input',()=>{refresh();onchange();});input.addEventListener('input',refresh);senseAdditionBindings.set(input,()=>{input.removeEventListener?.('input',refresh);box.remove();});refresh();return box;
 }
+
+async function refreshGlossAdditionCatalogs(){await Promise.all([...document.querySelectorAll('.sense-addition-controls')].map(box=>box.refreshGrammar?.()));}

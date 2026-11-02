@@ -135,6 +135,7 @@ def check_revision(row,value):
     if row['revision']!=value:raise ValueError('记录已变化，请刷新后重试')
 
 def listing(db,lid,q='',page=1,status='',search=None,page_size=30,order=''):
+    if not db.in_transaction:db.execute('BEGIN')
     import entry_dates
     if order and order not in entry_dates.ORDERS:raise ValueError('语素排序方式无效')
     ordering=entry_dates.sql_order(order,'m') if order else 'm.form COLLATE NOCASE,m.number,m.id'

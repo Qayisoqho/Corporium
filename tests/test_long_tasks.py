@@ -120,7 +120,9 @@ class LongTaskTests(unittest.TestCase):
         self.seed()
         with server.connect(audit=False) as db:
             result=project_backup.prepare(db,server.DB)
-            expected={r[0]:db.execute('SELECT COUNT(*) FROM "'+r[0]+'"').fetchone()[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            # Search projections are rebuildable and intentionally omitted from
+            # portable snapshots; every other table still compares exactly.
+            expected={r[0]:db.execute('SELECT COUNT(*) FROM "'+r[0]+'"').fetchone()[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT GLOB 'sentence_search_*' AND name NOT GLOB 'gloss_search_*' AND name NOT GLOB 'material_search_*' AND name NOT GLOB 'projection_search_*'")}
         path=language_exchange.staged(server.DB,result['token'],'project-backup')
         target=Path(self.temp.name)/'restored.sqlite3'
         from restore_backup import restore

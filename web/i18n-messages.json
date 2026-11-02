@@ -5391,6 +5391,12 @@
     }
   },
   "phrases": {
+    "正在更新句子检索索引…": "Updating the sentence search index…",
+    "正在更新有效标注检索索引…": "Updating effective gloss search…",
+    "正在更新附加层与书写检索索引…": "Updating layer and writing search…",
+    "正在更新词典关联例证检索索引…": "Updating linked evidence search…",
+    "检索组合身份冲突": "Search projection identity conflict",
+    "不支持的检索字段": "Unsupported search field",
     "请选择当前语言的书写类型": "Choose a writing type in the current language.",
     "请选择当前语言的自定义标注层": "Choose a custom tier in the current language.",
     "匹配到的重叠分析含跨词格或失效基底，请在本句形态分析中确认基底": "The matching reduplication analysis has a cross-word or outdated base. Confirm the base in this sentence’s morphological analysis.",
@@ -7490,7 +7496,7 @@
     "例如 格、数、时体、词类": "E.g. case, number, tense/aspect, POS",
     "别名（每行一个，不区分大小写）": "Aliases (one per line, case-insensitive)",
     "例如 GENITIVE": "E.g. GENITIVE",
-    "定义和别名不会改写原句。登记后统一显示为小型大写；大小写变体无需重复添加别名。与普通词义同形的标签请结合上下文核对。": "Definitions and aliases do not rewrite source sentences. Registered labels display in small capitals. Case variants need no separate alias. Check labels that share a spelling with ordinary glosses in context.",
+    "定义和别名不会改写原句。登记后统一显示为小型大写；大小写变体无需重复添加别名。与普通词义同形的标签请结合上下文核对。": "New definitions and aliases recognize existing glosses automatically. Renaming a label updates recognized occurrences and can be undone. Registered labels display in small capitals. Case variants need no separate alias. Check labels that share a spelling with ordinary glosses in context.",
     "保存定义": "Save definition",
     "标签已保存，但检查刷新失败：⟦0⟧": "Label saved, but check results could not refresh: ⟦0⟧",
     "此缩写表由“标签与检查”中的定义生成，请在标签库中编辑。": "This abbreviation list comes from Labels & checks. Edit definitions in the label inventory.",
@@ -8252,7 +8258,7 @@
     "表名": "Table name",
     "分类栏目（用 | 分开，例如：数 | 格 | 有生性）": "Category columns (separate with |, e.g. number | case | animacy)",
     "表格备注": "Table notes",
-    "新形式默认继承义项": "Default inherited sense for new forms",
+    "整表继承义项": "Inherited sense for this table",
     "新形式使用独立标注": "Use custom glosses for new forms",
     "原默认义项已不存在，请调整": "The original default sense no longer exists. Adjust it.",
     "请填写 1–12 个非空栏目名称。": "Enter 1–12 nonempty column names.",
@@ -8957,7 +8963,7 @@
     "附加标注已修改，请重新打开": "Additional annotations changed. Reopen them.",
     "标注层设置已变化，请重新打开": "Tier settings changed. Reopen them.",
     "仍有标注引用此层，请先撤销标注内容或删除该层": "Annotations still reference this tier. Undo the annotations or delete the tier first.",
-    "例句来源无效": "Invalid example source",
+    "例句来源无效": "Invalid sentence source",
     "例句不属于当前语言": "The example does not belong to the current language",
     "词格对应关系无效": "Invalid word cell correspondence",
     "删除有内容或关联的词格需要确认": "Confirm deletion of word cells with content or links",
@@ -10321,7 +10327,7 @@
     "新建文件夹": "New folder",
     "[aria-label=\"变形表名称\"]": "[aria-label=\"Paradigm name\"]",
     "[aria-label=\"变形表所属用法\"]": "[aria-label=\"Paradigm POS group\"]",
-    "[aria-label=\"新形式默认继承义项\"]": "[aria-label=\"Default inherited sense for new forms\"]",
+    "[aria-label=\"整表继承义项\"]": "[aria-label=\"Inherited sense for this table\"]",
     "正在读取分析结果…": "Loading analysis results…",
     "语料范围无效": "Invalid scope",
     "分布维度无效": "Invalid grouping dimension",
@@ -10589,9 +10595,37 @@
     "移除形态表": "Remove table",
     "保留空表": "Keep empty table",
     "取消保存": "Cancel saving",
-    "模板行可留空。↑↓ 按列移动；←→ 在文字边缘切格；Tab 下一格，Enter 下一行。": "Template rows may stay empty. Up/Down keep the column; Left/Right switch fields at text edges. Tab: next cell. Enter: next row."
+    "模板行可留空。↑↓ 按列移动；←→ 在文字边缘切格；Tab 下一格，Enter 下一行。": "Template rows may stay empty. Up/Down keep the column; Left/Right switch fields at text edges. Tab: next cell. Enter: next row.",
+    "行前、行后间距须留空或填写 -300–300 的数字（%）": "Leave spacing before and after blank, or enter a number from -300 to 300 (%).",
+    "每行一个词；词形和 gloss 之间用 Tab 分隔。支持下标 #sub[…]，上标 #sup[…] 或 #super[…]；编辑时保留源码。": "One word per line; separate the form and gloss with a Tab. Use #sub[…] for subscripts and #sup[…] or #super[…] for superscripts; retain the source notation while editing.",
+    "标注层内容来源无效": "Invalid annotation tier content source",
+    "词典信息层须选择逐词位置": "Dictionary tiers must use the per-word position",
+    "请选择本语言可用的词典字段": "Choose a dictionary field available in this language",
+    "已有手动内容的层不能改为词典信息层，请新建标注层": "A tier with manual content cannot become a dictionary tier. Create a new tier instead.",
+    "词典信息层为只读，不能导入手动内容": "Dictionary tiers are read only and cannot accept imported manual content",
+    "例句数量超出范围": "Too many sentences in one request",
+    "字体文件已更新，请重新扫描": "The font file has changed. Rescan the font folder.",
+    "词条或语言范围已变化，请重新打开": "The entry or language scope has changed. Reopen it.",
+    "条目类型已变化，请重新打开": "The entry type has changed. Reopen it.",
+    "请确认解除全部句子关联": "Confirm unlinking all sentence links.",
+    "请选择有效的语素边界标记": "Choose a valid morpheme boundary marker.",
+    "同一词格请选择整词分析或逐语素补全，不能同时采用": "Choose either whole-word analysis or morpheme-by-morpheme completion for this word cell.",
+    "重叠分析需要目标句子": "Reduplication analysis requires a target sentence.",
+    "MPW：附着成分单独计词": "MPW: count clitics as separate words",
+    "MPW = 形式行语素小格总数 ÷ 词数。勾选后，以 = 或 ＝ 连接的每个附着成分另计一个词，语素总数不变；空格、标点和纯边界格不计。": "MPW = morpheme cells in the form row divided by words. When selected, each clitic joined with = or ＝ adds one word; the morpheme count stays the same. Empty, punctuation and boundary-only slots are excluded.",
+    "语素小格总数": "Morpheme cells",
+    "MPW 计算词数": "Words used for MPW",
+    "附着成分单独计词": "Clitics counted as separate words",
+    "附着成分与词缀同等计词": "Clitics counted like affixes",
+    "附着成分另计词数": "Additional words when clitics are separate",
+    "内部行距须留空或填写 -300–300 的数字（%）": "Internal line spacing must be blank or a number from -300 to 300 (%).",
+    "附着成分计词选项无效": "Invalid clitic word-count option."
   },
   "backend": {
+    "正在更新有效标注检索索引…": "Updating effective gloss search…",
+    "正在更新附加层与书写检索索引…": "Updating layer and writing search…",
+    "正在更新词典关联例证检索索引…": "Updating linked evidence search…",
+    "检索组合身份冲突": "Search projection identity conflict",
     "请选择当前语言的书写类型": "Choose a writing type in the current language.",
     "请选择当前语言的自定义标注层": "Choose a custom tier in the current language.",
     "自定义检索字段已删除或不属于当前语言，请重新选择": "The custom search field was deleted or belongs to another language. Select it again.",
@@ -10638,7 +10672,7 @@
     "附加标注已修改，请重新打开": "Additional annotations changed. Reopen them.",
     "标注层设置已变化，请重新打开": "Tier settings changed. Reopen them.",
     "仍有标注引用此层，请先撤销标注内容或删除该层": "Annotations still reference this tier. Undo the annotations or delete the tier first.",
-    "例句来源无效": "Invalid example source",
+    "例句来源无效": "Invalid sentence source",
     "例句不属于当前语言": "The example does not belong to the current language",
     "词格对应关系无效": "Invalid word cell correspondence",
     "删除有内容或关联的词格需要确认": "Confirm deletion of word cells with content or links",
@@ -12178,7 +12212,23 @@
     "范围句数": "Scope sentences",
     "字段": "Field",
     "创建时间": "Created at",
-    "修改时间": "Modified at"
+    "修改时间": "Modified at",
+    "行前、行后间距须留空或填写 -300–300 的数字（%）": "Leave spacing before and after blank, or enter a number from -300 to 300 (%).",
+    "标注层内容来源无效": "Invalid annotation tier content source",
+    "词典信息层须选择逐词位置": "Dictionary tiers must use the per-word position",
+    "请选择本语言可用的词典字段": "Choose a dictionary field available in this language",
+    "已有手动内容的层不能改为词典信息层，请新建标注层": "A tier with manual content cannot become a dictionary tier. Create a new tier instead.",
+    "词典信息层为只读，不能导入手动内容": "Dictionary tiers are read only and cannot accept imported manual content",
+    "例句数量超出范围": "Too many sentences in one request",
+    "字体文件已更新，请重新扫描": "The font file has changed. Rescan the font folder.",
+    "词条或语言范围已变化，请重新打开": "The entry or language scope has changed. Reopen it.",
+    "条目类型已变化，请重新打开": "The entry type has changed. Reopen it.",
+    "请确认解除全部句子关联": "Confirm unlinking all sentence links.",
+    "请选择有效的语素边界标记": "Choose a valid morpheme boundary marker.",
+    "同一词格请选择整词分析或逐语素补全，不能同时采用": "Choose either whole-word analysis or morpheme-by-morpheme completion for this word cell.",
+    "重叠分析需要目标句子": "Reduplication analysis requires a target sentence.",
+    "内部行距须留空或填写 -300–300 的数字（%）": "Internal line spacing must be blank or a number from -300 to 300 (%).",
+    "附着成分计词选项无效": "Invalid clitic word-count option."
   },
   "messages": {
     "9ad6d8c888c8c3": {
@@ -12303,7 +12353,7 @@
     },
     "e7d862d49d2ad2": {
       "zh": "<label>参与角色<input id=\"analysis-collaborator-role\" list=\"analysis-role-options\" placeholder=\"不限，可输入自定义角色\"><datalist id=\"analysis-role-options\"><option value=\"发言人\"><option value=\"转写人\"><option value=\"标注人\"><option value=\"校对人\"></datalist></label>",
-      "en": "<label>Contributor roles<input id=\"analysis-collaborator-role\" list=\"analysis-role-options\" placeholder=\"Any role; custom roles allowed\"><datalist id=\"analysis-role-options\"><option value=\"发言人\"><option value=\"转写人\"><option value=\"标注人\"><option value=\"校对人\"></datalist></label>"
+      "en": "<label>Contributor roles<input id=\"analysis-collaborator-role\" list=\"analysis-role-options\" placeholder=\"Any role; custom roles allowed\"><datalist id=\"analysis-role-options\"><option value=\"Speaker\"><option value=\"Transcriber\"><option value=\"Annotator\"><option value=\"Reviewer\"></datalist></label>"
     },
     "1920ea917737dc": {
       "zh": "已不存在的合作者（请取消选择）",
@@ -13782,8 +13832,8 @@
       "en": "<h2>Manage semantic classes</h2><p>Choose a parent to change the hierarchy; drag the handle to reorder siblings.</p><label>Existing classes<select id=\"semantic-existing\"></select></label><button id=\"semantic-new\">＋ New class</button><form id=\"semantic-form\"><label>Name<input id=\"semantic-name\" required></label><label>Parent class<select id=\"semantic-parent\"></select></label><label>Sibling order<input id=\"semantic-position\" type=\"number\" step=\"1\" value=\"0\" required></label><button type=\"submit\">Save class</button></form><label>On deletion, handle subclasses by<select id=\"semantic-delete-mode\"><option value=\"promote\">Move subclasses up one level</option><option value=\"subtree\">Delete all subclasses</option></select></label><button id=\"semantic-delete\" class=\"danger\">Delete current class</button><p id=\"semantic-error\" role=\"alert\"></p>"
     },
     "a12dd6bdc917e4": {
-      "zh": "<h3>管理排序方案</h3><label>已有方案<select id=\"order-existing\"></select></label><button id=\"order-new\">＋ 新建方案</button><form id=\"order-form\"><label>名称<input id=\"order-name\" required></label><label>字母顺序<textarea id=\"order-alphabet\" rows=\"7\" spellcheck=\"false\" placeholder=\"b g a&#10;或 a b c ch d\"></textarea></label><small>以空格或换行分隔。支持 ch 等多字符单位，优先最长匹配。未列字符排在已列字符之后；共同前缀中短词在前。</small><label><input id=\"order-case\" type=\"checkbox\"> 区分大小写</label><button type=\"submit\">保存方案</button><button type=\"button\" id=\"order-preview\">预览实际词条顺序</button></form><div class=\"dictionary-org-actions\"><button id=\"order-copy\">复制当前方案</button><button id=\"order-delete\" class=\"danger\">删除当前方案</button></div><p id=\"order-error\" role=\"alert\"></p><p id=\"order-preview-info\"></p><ol id=\"order-preview-list\"></ol>",
-      "en": "<h3>Sorting schemes</h3><label>Existing schemes<select id=\"order-existing\"></select></label><button id=\"order-new\">＋ New scheme</button><form id=\"order-form\"><label>Name<input id=\"order-name\" required></label><label>Alphabetical order<textarea id=\"order-alphabet\" rows=\"7\" spellcheck=\"false\" placeholder=\"b g a\nor a b c ch d\"></textarea></label><small>Separate units with spaces or line breaks. Multicharacter units such as ch use longest-match priority. Unlisted characters follow listed ones; shorter words precede longer words sharing the same prefix.</small><label><input id=\"order-case\" type=\"checkbox\"> Case-sensitive</label><button type=\"submit\">Save scheme</button><button type=\"button\" id=\"order-preview\">Preview actual entry order</button></form><div class=\"dictionary-org-actions\"><button id=\"order-copy\">Copy current scheme</button><button id=\"order-delete\" class=\"danger\">Delete current scheme</button></div><p id=\"order-error\" role=\"alert\"></p><p id=\"order-preview-info\"></p><ol id=\"order-preview-list\"></ol>"
+      "zh": "<h3>管理排序方案</h3><label>已有方案<select id=\"order-existing\"></select></label><button id=\"order-new\">＋ 新建方案</button><form id=\"order-form\"><label>名称<input id=\"order-name\" required></label><label>字母顺序<textarea id=\"order-alphabet\" rows=\"7\" spellcheck=\"false\" placeholder=\"b g a&#10;或 a b c ch d\"></textarea></label><small>以空格或换行分隔。附标组合（如 p p̄ b ḇ）及 ch 等多字符单位按完整单位、最长优先匹配。未列字符排在已列字符之后；共同前缀中短词在前。保存后立即用于当前词条列表。</small><label><input id=\"order-case\" type=\"checkbox\"> 区分大小写</label><button type=\"submit\">保存并使用</button><button type=\"button\" id=\"order-preview\">预览实际词条顺序</button></form><div class=\"dictionary-org-actions\"><button id=\"order-copy\">复制当前方案</button><button id=\"order-delete\" class=\"danger\">删除当前方案</button></div><p id=\"order-error\" role=\"alert\"></p><p id=\"order-preview-info\"></p><ol id=\"order-preview-list\"></ol>",
+      "en": "<h3>Sorting schemes</h3><label>Existing schemes<select id=\"order-existing\"></select></label><button id=\"order-new\">＋ New scheme</button><form id=\"order-form\"><label>Name<input id=\"order-name\" required></label><label>Alphabetical order<textarea id=\"order-alphabet\" rows=\"7\" spellcheck=\"false\" placeholder=\"b g a\nor a b c ch d\"></textarea></label><small>Separate units with spaces or line breaks. Diacritic combinations (e.g. p p̄ b ḇ) and multicharacter units such as ch use longest-match priority. Unlisted characters follow listed ones; shorter words precede longer words sharing the same prefix. Saving applies the scheme to the current entry list.</small><label><input id=\"order-case\" type=\"checkbox\"> Case-sensitive</label><button type=\"submit\">Save and use</button><button type=\"button\" id=\"order-preview\">Preview actual entry order</button></form><div class=\"dictionary-org-actions\"><button id=\"order-copy\">Copy current scheme</button><button id=\"order-delete\" class=\"danger\">Delete current scheme</button></div><p id=\"order-error\" role=\"alert\"></p><p id=\"order-preview-info\"></p><ol id=\"order-preview-list\"></ol>"
     },
     "74c895fd8c0737": {
       "zh": "<option value=\"semantic\">语义类</option>",
@@ -13818,8 +13868,8 @@
       "en": "Delete semantic class “⟦0⟧”? Entries are retained. You can undo this."
     },
     "d2d80206e974dd": {
-      "zh": "排序方案已保存",
-      "en": "Sorting scheme saved"
+      "zh": "排序方案已保存并使用",
+      "en": "Sorting scheme saved and applied"
     },
     "5db111e76ea5b9": {
       "zh": "共 ⟦0⟧ 个词条，展示前 50 个",
@@ -15090,8 +15140,8 @@
       "en": "⟦0⟧ · Styles: ⟦1⟧"
     },
     "52f6d4efc1fe0a": {
-      "zh": "<summary>自定义字体</summary><p>将字体文件或文件夹放入 font，再点击扫描。支持 TTF、OTF、WOFF，包含子文件夹；同一家族的字形合并显示。</p><button id=\"scan-fonts\">扫描 font 文件夹</button><p id=\"font-scan-status\" role=\"status\"></p><p id=\"font-scan-list\" class=\"preserve-lines\"></p><p id=\"font-scan-errors\" class=\"preserve-lines\" role=\"alert\"></p>",
-      "en": "<summary>Custom font</summary><p>Place font files or folders in font, then scan. Supports TTF, OTF, and WOFF in subfolders. Styles from one family are grouped together.</p><button id=\"scan-fonts\">Scan font folder</button><p id=\"font-scan-status\" role=\"status\"></p><p id=\"font-scan-list\" class=\"preserve-lines\"></p><p id=\"font-scan-errors\" class=\"preserve-lines\" role=\"alert\"></p>"
+      "zh": "<summary>自定义字体</summary><p>将字体文件或文件夹放入 font，再点击扫描。支持 TTF、OTF、WOFF，包含子文件夹；同一家族的字形合并显示。同名覆盖后重新扫描即可更新，返回窗口也会自动检查，无需清空缓存或重选字体。</p><button id=\"scan-fonts\">扫描 font 文件夹</button><p id=\"font-scan-status\" role=\"status\"></p><p id=\"font-scan-list\" class=\"preserve-lines\"></p><p id=\"font-scan-errors\" class=\"preserve-lines\" role=\"alert\"></p>",
+      "en": "<summary>Custom font</summary><p>Place font files or folders in font, then scan. Supports TTF, OTF, and WOFF in subfolders. Styles from one family are grouped together. Rescan after replacing a file with the same name; returning to this window also checks for changes. No cache clearing or font reselection is needed.</p><button id=\"scan-fonts\">Scan font folder</button><p id=\"font-scan-status\" role=\"status\"></p><p id=\"font-scan-list\" class=\"preserve-lines\"></p><p id=\"font-scan-errors\" class=\"preserve-lines\" role=\"alert\"></p>"
     },
     "25132162c88856": {
       "zh": "例句文字须为字符串",
@@ -15986,8 +16036,8 @@
       "en": "<p class=\"empty\">No items to review under these filters. Candidates are found using text rules; this does not establish linguistic correctness.</p>"
     },
     "db07a07d6da75b": {
-      "zh": "<h2>语法标签定义</h2><form id=\"grammar-form\"><label>语言<select id=\"grammar-language\"></select></label><label>标签<input id=\"grammar-symbol\" required placeholder=\"例如 GEN\"></label><label>解释<input id=\"grammar-description\" placeholder=\"例如 属格\"></label><label>分类<input id=\"grammar-category\" placeholder=\"例如 格、数、时体、词类\"></label><label>别名（每行一个，不区分大小写）<textarea id=\"grammar-aliases\" rows=\"3\" placeholder=\"例如 GENITIVE\"></textarea></label><label>备注<textarea id=\"grammar-notes\" rows=\"3\"></textarea></label><p>定义和别名不会改写原句。登记后统一显示为小型大写；大小写变体无需重复添加别名。与普通词义同形的标签请结合上下文核对。</p><p id=\"grammar-error\" role=\"alert\"></p><button type=\"submit\" class=\"primary\" id=\"grammar-save\">保存定义</button></form>",
-      "en": "<h2>Grammatical-label definitions</h2><form id=\"grammar-form\"><label>Language<select id=\"grammar-language\"></select></label><label>Label<input id=\"grammar-symbol\" required placeholder=\"E.g. GEN\"></label><label>Meaning<input id=\"grammar-description\" placeholder=\"E.g. genitive\"></label><label>Category<input id=\"grammar-category\" placeholder=\"E.g. case, number, tense/aspect, POS\"></label><label>Aliases (one per line, case-insensitive)<textarea id=\"grammar-aliases\" rows=\"3\" placeholder=\"E.g. GENITIVE\"></textarea></label><label>Notes<textarea id=\"grammar-notes\" rows=\"3\"></textarea></label><p>Definitions and aliases do not rewrite source sentences. Registered labels display in small capitals. Case variants need no separate alias. Check labels that share a spelling with ordinary glosses in context.</p><p id=\"grammar-error\" role=\"alert\"></p><button type=\"submit\" class=\"primary\" id=\"grammar-save\">Save definition</button></form>"
+      "zh": "<h2>语法标签定义</h2><form id=\"grammar-form\"><label>语言<select id=\"grammar-language\"></select></label><label>标签<input id=\"grammar-symbol\" required placeholder=\"例如 GEN\"></label><label>解释<input id=\"grammar-description\" placeholder=\"例如 属格\"></label><label>分类<input id=\"grammar-category\" placeholder=\"例如 格、数、时体、词类\"></label><label>别名（每行一个，不区分大小写）<textarea id=\"grammar-aliases\" rows=\"3\" placeholder=\"例如 GENITIVE\"></textarea></label><label>备注<textarea id=\"grammar-notes\" rows=\"3\"></textarea></label><p>新增定义和别名会自动识别已有标注；标签改名会同步更新已识别的旧标签，可撤销。登记后统一显示为小型大写；大小写变体无需重复添加别名。与普通词义同形的标签请结合上下文核对。</p><p id=\"grammar-error\" role=\"alert\"></p><button type=\"submit\" class=\"primary\" id=\"grammar-save\">保存定义</button></form>",
+      "en": "<h2>Grammatical-label definitions</h2><form id=\"grammar-form\"><label>Language<select id=\"grammar-language\"></select></label><label>Label<input id=\"grammar-symbol\" required placeholder=\"E.g. GEN\"></label><label>Meaning<input id=\"grammar-description\" placeholder=\"E.g. genitive\"></label><label>Category<input id=\"grammar-category\" placeholder=\"E.g. case, number, tense/aspect, POS\"></label><label>Aliases (one per line, case-insensitive)<textarea id=\"grammar-aliases\" rows=\"3\" placeholder=\"E.g. GENITIVE\"></textarea></label><label>Notes<textarea id=\"grammar-notes\" rows=\"3\"></textarea></label><p>New definitions and aliases recognize existing glosses automatically. Renaming a label updates recognized occurrences and can be undone. Registered labels display in small capitals. Case variants need no separate alias. Check labels that share a spelling with ordinary glosses in context.</p><p id=\"grammar-error\" role=\"alert\"></p><button type=\"submit\" class=\"primary\" id=\"grammar-save\">Save definition</button></form>"
     },
     "edef85db233625": {
       "zh": "标签已保存，但检查刷新失败：⟦0⟧",
@@ -19222,12 +19272,12 @@
       "en": "Select POS group"
     },
     "e3dfa4c6581b17": {
-      "zh": "<label>新形式默认继承义项<select class=\"paradigm-default-base\" aria-label=\"新形式默认继承义项\"></select></label>",
-      "en": "<label>Default inherited sense for new forms<select class=\"paradigm-default-base\" aria-label=\"Default inherited sense for new forms\"></select></label>"
+      "zh": "<label>整表继承义项<select class=\"paradigm-default-base\" aria-label=\"整表继承义项\"></select></label>",
+      "en": "<label>Inherited sense for this table<select class=\"paradigm-default-base\" aria-label=\"Inherited sense for this table\"></select></label>"
     },
     "ccd866537cade0": {
-      "zh": "新形式使用独立标注",
-      "en": "Use custom glosses for new forms"
+      "zh": "全表使用独立标注",
+      "en": "Use custom glosses for this table"
     },
     "5bc5e49b6c4510": {
       "zh": "原默认义项已不存在，请调整",
@@ -19246,8 +19296,8 @@
       "en": "Template saved with columns, row categories, and preset extra labels."
     },
     "28c998a9233fda": {
-      "zh": "<div class=\"paradigm-quick-heading\"><strong class=\"paradigm-quick-title\"></strong><label class=\"paradigm-quick-default\">新增形式沿用<select aria-label=\"新形式默认继承义项\" title=\"为新添加的形式选择基本义项；已有形式可在各行设置中修改。\"></select></label><button type=\"button\" class=\"paradigm-table-settings-toggle\" aria-expanded=\"false\">表设置</button></div><div class=\"paradigm-quick-table-settings\" hidden><label>表名<input aria-label=\"变形表名称\"></label><label>词类用法<select aria-label=\"变形表所属用法\"></select></label><button type=\"button\" class=\"paradigm-remove-table danger\">移除表格</button></div><div class=\"paradigm-scroll\"><table><colgroup><col class=\"pq-category-col\"><col class=\"pq-form-col\"><col class=\"pq-gloss-col\"><col class=\"pq-preview-col\"><col class=\"pq-tools-col\"></colgroup><thead><tr><th>⟦0⟧</th><th>词形</th><th title=\"沿用基本义项时只填附加标签；也可在行设置中改为独立标注。\">标注</th><th>最终标注</th><th aria-label=\"行设置\"></th></tr></thead><tbody></tbody></table></div>",
-      "en": "<div class=\"paradigm-quick-heading\"><strong class=\"paradigm-quick-title\"></strong><label class=\"paradigm-quick-default\">New forms inherit<select aria-label=\"Default inherited sense for new forms\" title=\"Choose a base sense for newly added forms. Change existing forms in their row settings.\"></select></label><button type=\"button\" class=\"paradigm-table-settings-toggle\" aria-expanded=\"false\">Table settings</button></div><div class=\"paradigm-quick-table-settings\" hidden><label>Table name<input aria-label=\"Paradigm name\"></label><label>POS group<select aria-label=\"Paradigm POS group\"></select></label><button type=\"button\" class=\"paradigm-remove-table danger\">Remove table</button></div><div class=\"paradigm-scroll\"><table><colgroup><col class=\"pq-category-col\"><col class=\"pq-form-col\"><col class=\"pq-gloss-col\"><col class=\"pq-preview-col\"><col class=\"pq-tools-col\"></colgroup><thead><tr><th>⟦0⟧</th><th>Word form</th><th title=\"When inheriting a base sense, enter only extra labels. Select a custom gloss in row settings if needed.\">Gloss</th><th>Final gloss</th><th aria-label=\"Row settings\"></th></tr></thead><tbody></tbody></table></div>"
+      "zh": "<div class=\"paradigm-quick-heading\"><strong class=\"paradigm-quick-title\"></strong><label class=\"paradigm-quick-default\">全表继承<select aria-label=\"整表继承义项\" title=\"选择义项会应用到本表已有和新增形式；各行可再改为独立标注。\"></select></label><button type=\"button\" class=\"paradigm-table-settings-toggle\" aria-expanded=\"false\">表设置</button></div><div class=\"paradigm-quick-table-settings\" hidden><label>表名<input aria-label=\"变形表名称\"></label><label>词类用法<select aria-label=\"变形表所属用法\"></select></label><button type=\"button\" class=\"paradigm-remove-table danger\">移除表格</button></div><div class=\"paradigm-scroll\"><table><colgroup><col class=\"pq-category-col\"><col class=\"pq-form-col\"><col class=\"pq-gloss-col\"><col class=\"pq-preview-col\"><col class=\"pq-tools-col\"></colgroup><thead><tr><th>⟦0⟧</th><th>词形</th><th title=\"沿用基本义项时只填附加标签；也可在行设置中改为独立标注。\">标注</th><th>最终标注</th><th aria-label=\"行设置\"></th></tr></thead><tbody></tbody></table></div>",
+      "en": "<div class=\"paradigm-quick-heading\"><strong class=\"paradigm-quick-title\"></strong><label class=\"paradigm-quick-default\">Table inherits<select aria-label=\"Inherited sense for this table\" title=\"Applies to existing and new forms in this table. Individual rows can use custom glosses afterwards.\"></select></label><button type=\"button\" class=\"paradigm-table-settings-toggle\" aria-expanded=\"false\">Table settings</button></div><div class=\"paradigm-quick-table-settings\" hidden><label>Table name<input aria-label=\"Paradigm name\"></label><label>POS group<select aria-label=\"Paradigm POS group\"></select></label><button type=\"button\" class=\"paradigm-remove-table danger\">Remove table</button></div><div class=\"paradigm-scroll\"><table><colgroup><col class=\"pq-category-col\"><col class=\"pq-form-col\"><col class=\"pq-gloss-col\"><col class=\"pq-preview-col\"><col class=\"pq-tools-col\"></colgroup><thead><tr><th>⟦0⟧</th><th>Word form</th><th title=\"When inheriting a base sense, enter only extra labels. Select a custom gloss in row settings if needed.\">Gloss</th><th>Final gloss</th><th aria-label=\"Row settings\"></th></tr></thead><tbody></tbody></table></div>"
     },
     "f97fc3067cdee7": {
       "zh": "类别",
@@ -22114,12 +22164,12 @@
       "en": "[aria-label=\"Paradigm POS group\"]"
     },
     "cb3be87993c0a8": {
-      "zh": "[aria-label=\"新形式默认继承义项\"]",
-      "en": "[aria-label=\"Default inherited sense for new forms\"]"
+      "zh": "[aria-label=\"整表继承义项\"]",
+      "en": "[aria-label=\"Inherited sense for this table\"]"
     },
     "d6eeea71e81140": {
-      "zh": "[aria-label=\"新形式默认继承义项\"]",
-      "en": "[aria-label=\"Default inherited sense for new forms\"]"
+      "zh": "[aria-label=\"整表继承义项\"]",
+      "en": "[aria-label=\"Inherited sense for this table\"]"
     },
     "01580cb198ead2": {
       "zh": "层次",

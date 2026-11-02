@@ -238,6 +238,11 @@ class ExampleGroupTests(unittest.TestCase):
     def test_group_reads_and_search_previews_do_not_write(self):
         g=self.create()
         with server.connect(audit=False) as db:
+            # Reads can prepare disposable search keys. Every research/undo
+            # source row must still be identical after the preview.
+            before={t:[tuple(r) for r in db.execute('SELECT * FROM '+t)] for t in server.journal.TABLES}
+            revision=server.journal.workspace_revision(db)
             example_groups.detail(db,'ordos',g['id'])
             example_groups.library(db,'ordos',{'q':'共同语境'})
-            self.assertEqual(db.total_changes,0)
+            self.assertEqual({t:[tuple(r) for r in db.execute('SELECT * FROM '+t)] for t in before},before)
+            self.assertEqual(server.journal.workspace_revision(db),revision)

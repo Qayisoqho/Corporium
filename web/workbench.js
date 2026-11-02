@@ -24,7 +24,14 @@
  let toolsHidden=false;try{toolsHidden=localStorage.getItem('corporium-tools-hidden')==='true';}catch{}
  function tools(){toolbarRow.hidden=toolsHidden;toolToggle.textContent=toolsHidden?(globalThis.CorporiumI18n?.f("6083d5b7698e53",()=>[])??'展开工具'):(globalThis.CorporiumI18n?.f("197adefbe26c04",()=>[])??'收起工具');toolToggle.setAttribute('aria-expanded',String(!toolsHidden));}tools();toolToggle.onclick=()=>{toolsHidden=!toolsHidden;tools();try{localStorage.setItem('corporium-tools-hidden',String(toolsHidden));}catch{}};
  const textActions=corpusWorkspace.querySelector('header .actions'),more=document.createElement('details');more.className='workbench-menu';more.innerHTML=(globalThis.CorporiumI18n?.f("4e5a02ef0f1ffb",()=>[])??'<summary>文本操作</summary><div class="workbench-menu-items"></div>');
- textActions.append(more);for(const b of [...textActions.children])if(b!==more&&b.id!=='add')more.lastElementChild.append(b);
+ textActions.classList.add('text-reading-actions');textActions.append(more);for(const b of [...textActions.children])if(b!==more&&b.id!=='add')more.lastElementChild.append(b);
+ const textVolume=document.createElement('span');textVolume.id='text-playback-volume';textVolume.hidden=true;more.before(textVolume);
+ const refreshTextVolume=window.CorporiumVolume.mountInline(textVolume,()=>selected?{key:'text:'+selected,label:globalThis.CorporiumI18n?.ui('文本音量','Text volume')??'文本音量'}:null);
+ let textVolumeRequest=0;
+ async function syncTextVolume(){const ticket=++textVolumeRequest,id=selected;textVolume.hidden=true;if(!id)return;try{const result=await api('text-audio?id='+encodeURIComponent(id));if(ticket!==textVolumeRequest||selected!==id)return;textVolume.hidden=!result.has_audio;refreshTextVolume();}catch{/* Playback controls remain usable if discovery fails. */}}
+ const selectVolumeText=selectText;selectText=async function(...args){textVolumeRequest++;textVolume.hidden=true;await selectVolumeText(...args);};
+ const loadVolumeTexts=loadTexts;loadTexts=async function(...args){await loadVolumeTexts(...args);void syncTextVolume();};
+ document.addEventListener('corporium-alignment-changed',syncTextVolume);void syncTextVolume();
  const searchFilters=document.createElement('details');searchFilters.className='workbench-search-options';searchFilters.innerHTML=(globalThis.CorporiumI18n?.f("b5a7f930ac5d1f",()=>[])??'<summary>检索选项</summary>');const filters=corpusWorkspace.querySelector('.search .filters');filters.before(searchFilters);searchFilters.append(filters);
  // Keep abbreviations directly accessible; document editing belongs to text actions.
  makeDialog('text-reading-dialog',(globalThis.CorporiumI18n?.f("e15a9ba384ece7",()=>[])??'<h2>文本信息与阅读设置</h2><label id="text-reading-target">文本<select id="text-reading-text" aria-label="选择要编辑元信息的文本"></select></label><p id="text-reading-empty" role="status"></p><div id="text-reading-settings"></div>'));
@@ -84,7 +91,7 @@
    // punctuation checkbox, without taking commands from another group member.
    for(const head of entry?.querySelectorAll('.entry-head')||[]){if(head.closest('.example-group-member,.entry,.lex-example')!==entry)continue;for(const control of [...head.querySelectorAll('button')])items.append(control);if(head.classList.contains('example-group-member-actions')){const number=head.querySelector('.example-source-number');if(number)commands.prepend(number);head.remove();}}
    if(items.children.length)commands.append(menu);
-   if(section.closest('#timeline-workspace')){const ipa=section.querySelector(':scope > .ipa, :scope > .language-body > .ipa');if(ipa){const row=document.createElement('div');row.className='sentence-reading-head';ipa.before(row);row.append(ipa,commands);if(section.closest('#timeline-workspace'))for(const control of section.querySelectorAll(':scope > .sentence-audio, :scope > .collaborator-badge'))commands.prepend(control);}}
+   if(section.closest('#timeline-workspace')){const ipa=section.querySelector(':scope > .ipa, :scope > .language-body > .ipa');if(ipa){const row=document.createElement('div');row.className='sentence-reading-head';ipa.before(row);row.append(CorporiumLineSpacing.readingLines(ipa),commands);if(section.closest('#timeline-workspace'))for(const control of section.querySelectorAll(':scope > .sentence-audio, :scope > .collaborator-badge'))commands.prepend(control);}}
   }sentenceInspector.markOrigin();}
  new MutationObserver(records=>{if(records.some(r=>[...r.addedNodes].some(n=>n.nodeType===1&&(n.matches('.editable-example,.inline-tools')||n.querySelector('.editable-example,.inline-tools')))))simplifySentences();}).observe(main,{childList:true,subtree:true});
  // Keep menus open after a first click: destructive commands use double-click confirmation.

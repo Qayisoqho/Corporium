@@ -135,12 +135,13 @@
       if (!l || !Array.isArray(l.values) || l.values.length !== words.length) throw Error((globalThis.CorporiumI18n?.f("b34a4044edb020",()=>[])??'附加行须与词格一一对应'));
       const layerType = {...type.gloss, font: family(l.font, fonts.gloss), pt: type.gloss.pt * finite(l.size,100,50,200,(globalThis.CorporiumI18n?.f("bec7ba8cf917d8",()=>[])??'附加层字号')) / 100};
       layerType.pt=finite(l.pt,options.basePt*finite(l.size,100,50,200,(globalThis.CorporiumI18n?.f("f0de775e92862c",()=>[])??'附加层字号'))/100,3,96,(globalThis.CorporiumI18n?.f("342bc49971392a",()=>[])??'附加层字号'));
+      layerType.line_spacing=l.line_spacing;layerType.space_before=l.space_before;layerType.space_after=l.space_after;
       if(l.variant){layerType.bold=l.variant.includes('bold');layerType.italic=l.variant.includes('italic');}
       return {name: stringField(l.name), type: layerType, values: l.values.map(v => {
         const r = runs(v, {}); if (/[\r\n\t\u2028\u2029]/u.test(plainRuns(r))) throw Error((globalThis.CorporiumI18n?.f("0b1bfcc4128be1",()=>[])??'附加行包含换行')); return r;
       })};
     });
-    const sentenceLayers=(item.sentenceLayers||[]).filter(l=>l.visible!==false).map(l=>({anchor:l.anchor==='translation'?'translation':'ipa',value:runs(l.value||''),type:{font:family(l.font,fonts.gloss),pt:finite(l.pt,options.basePt,3,96,(globalThis.CorporiumI18n?.f("4f630805a851f6",()=>[])??'附加层字号')),bold:!!l.bold,italic:!!l.italic}}));
+    const sentenceLayers=(item.sentenceLayers||[]).filter(l=>l.visible!==false).map(l=>({anchor:l.anchor==='translation'?'translation':'ipa',value:runs(l.value||''),type:{line_spacing:l.line_spacing,space_before:l.space_before,space_after:l.space_after,font:family(l.font,fonts.gloss),pt:finite(l.pt,options.basePt,3,96,(globalThis.CorporiumI18n?.f("4f630805a851f6",()=>[])??'附加层字号')),bold:!!l.bold,italic:!!l.italic}}));
     let group = null;
     if (item.group) {
       if (typeof item.group.key !== 'string' || !item.group.key) throw Error((globalThis.CorporiumI18n?.f("b191722076d44c",()=>[])??'例句组缺少身份'));
@@ -163,7 +164,9 @@
     const columnsWidth=[labelWidth,...widths,...(trailingWidth?[trailingWidth]:[])];
     const totalWidth = wordWidth+trailingWidth,span=widths.length+(trailingWidth?1:0);
     const common = 'border:none;vertical-align:top;padding:0pt 6pt 0pt 0pt;mso-padding-alt:0pt 6pt 0pt 0pt';
-    const p = (content, s, nowrap = false) => '<p style="margin:0pt;mso-margin-top-alt:0pt;mso-margin-bottom-alt:0pt;page-break-after:avoid;line-height:normal;' + (nowrap ? 'white-space:nowrap;' : '') + esc(style(s)) + '">' + content + '</p>';
+    const spacing=s=>[['space_before','top'],['space_after','bottom']].map(([key,side])=>typeof s[key]==='number'&&Number.isFinite(s[key])&&s[key]>=-300&&s[key]<=300?`margin-${side}:${s[key]*s.pt/100}pt;mso-margin-${side}-alt:${s[key]*s.pt/100}pt;`:'').join('');
+    const internal=s=>typeof s.line_spacing==='number'&&Number.isFinite(s.line_spacing)&&s.line_spacing>=-300&&s.line_spacing<=300?`line-height:${Math.max(0,1.35+s.line_spacing/100)*s.pt}pt;mso-line-height-rule:exactly;`:'';
+    const p = (content, s, nowrap = false) => '<p style="margin:0pt;mso-margin-top-alt:0pt;mso-margin-bottom-alt:0pt;page-break-after:avoid;line-height:normal;' + (nowrap ? 'white-space:nowrap;' : '') + esc(style(s)) + ';' + spacing(s) + internal(s) + '">' + content + '</p>';
     const cell = (content, s, attr = '', nowrap = false, width) => '<td' + attr + (width ? ' width="'+Math.round(width*96/72)+'"' : '') + (nowrap ? ' nowrap="nowrap"' : '') + ' style="' + common + (width ? ';width:'+width+'pt' : '') + (nowrap ? ';white-space:nowrap;mso-wrap-style:none' : '') + '">' + p(content, s, nowrap) + '</td>';
     const blank = () => cell('&#160;', x.type.label, '', false, labelWidth);
     const full = (content, s, prefix = false) => '<tr style="page-break-inside:avoid">' + (prefix ? cell(esc(x.prefix) || '&#160;', x.type.label, '', true, labelWidth) : blank()) + cell(content, s, ' colspan="' + span + '"', false, totalWidth-labelWidth) + '</tr>';

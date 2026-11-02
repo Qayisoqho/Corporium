@@ -46,6 +46,33 @@ class TimelineTests(unittest.TestCase):
         code,r=self.call('/api/timeline-detail?language=ordos&id='+self.sid+'&start=0&end=1000')
         self.assertEqual(code,200,r);self.assertFalse(r['complete']);self.assertEqual(len(r['intervals']),2)
 
+    def test_volume_context_and_text_audio_discovery_follow_alignment(self):
+        url='/api/text-audio?language=ordos&id='+self.tid
+        self.assertEqual(self.call(url)[1],{'has_audio':False})
+        interval=self.add(entry=1)
+        self.assertEqual(self.call(url)[1],{'has_audio':True})
+        clips=self.call('/api/timeline-clips?ids='+self.eids[1])[1][self.eids[1]]
+        self.assertEqual(clips[0]['text_id'],self.tid)
+        self.assertEqual(self.call('/api/text-audio?language=other&id='+self.tid)[0],400)
+        self.assertEqual(self.call('/api/text-audio?id=missing')[1],{'has_audio':False})
+        self.mutation('delete-interval',interval_id=interval['id'],confirmed=True)
+        self.assertEqual(self.call(url)[1],{'has_audio':False})
+        self.undo();self.assertEqual(self.call(url)[1],{'has_audio':True})
+        with server.connect() as db:db.execute("UPDATE texts SET language_id='other' WHERE id=?",(self.tid,))
+        self.assertEqual(self.call(url)[1],{'has_audio':False})
+
+    def test_text_audio_discovery_ignores_unplayable_ranges_and_silent_video(self):
+        self.add(-500,-100)
+        url='/api/text-audio?language=ordos&id='+self.tid
+        self.assertEqual(self.call(url)[1],{'has_audio':False})
+        self.add(2500,3000)
+        self.assertEqual(self.call(url)[1],{'has_audio':False})
+        self.add(0,100)
+        self.assertEqual(self.call(url)[1],{'has_audio':True})
+        with server.connect() as db:
+            db.execute("UPDATE timeline_media SET metadata=json_set(metadata,'$.streams',json('[{\"type\":\"video\"}]'))")
+        self.assertEqual(self.call(url)[1],{'has_audio':False})
+
     def test_selected_interval_survives_viewport_but_not_deletion(self):
         interval=self.add()
         url='/api/timeline-detail?id='+self.sid+'&language=ordos&start=10000&end=20000&selected_interval='+interval['id']

@@ -5,7 +5,7 @@ function setup(){
  const c={window:{stopSentenceAudio(){}},document:{hidden:false,addEventListener:(type,fn)=>listeners[type]=fn},performance:{now:()=>now},$:node,
   setTimeout(fn,delay){const id=++identity;timers.set(id,{at:now+delay,fn});return id;},clearTimeout:id=>timers.delete(id),
   sentenceAudioMarkup:()=>'',applyLanguageTypography(){},languageList:[],validFont:()=>true,scheduleHomeFit(){},matchMedia:()=>({matches:true}),showHome(){throw Error('Unexpected sample fetch');}};
- vm.createContext(c);vm.runInContext(source.split('\n')[0]+'\n'+source.slice(source.indexOf('function stopHomeTimer()'),source.indexOf('async function showHome()')),c);
+ c.esc=String;vm.createContext(c);require('./display-scripts-helpers.js')(c);vm.runInContext(source.split('\n')[0]+'\n'+source.slice(source.indexOf('function stopHomeTimer()'),source.indexOf('async function showHome()')),c);
  const run=s=>vm.runInContext(s,c);
  run("homeVisible=true;homeData={samples:[0,1,2].map(id=>({id,kind:'corpus',ipa:'ipa',translation:'translation',language_name:'Language'}))};drawHomeExample();scheduleHome();");
  return {c,holder,run,timers,state:()=>run('({index:homeIndex,remaining:homeRemaining,playing:homeAudioPlaying})'),

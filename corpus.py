@@ -148,8 +148,13 @@ class Parser:
         raise ParseError('仅支持圆括号元组、方括号内容和双引号字符串')
 
 
+def script_spelling(text):
+    """Compare the two superscript spellings without rewriting stored source."""
+    return re.sub(r'#sup\[([^\[\]]*)\]',r'#super[\1]',text)
+
+
 def plain(text):
-    text = re.sub(r'#sub\[([^\[\]]*)\]', r'\1', text)
+    text = re.sub(r'#(?:sub|sup|super)\[([^\[\]]*)\]', r'\1', text)
     return re.sub(r'\\([\\"\[\]#~?])', r'\1', text)
 
 
@@ -287,7 +292,7 @@ def _analyze(entry):
             word['morphemes']=[];issue=str(exc);word['group_reviews']=word.get('morph_groups',[])
         if issue:warnings.append(f'第 {n+1} 词：'+issue)
         for key in ('form', 'gloss'):
-            if '#' in re.sub(r'#sub\[[^\[\]]*\]', '', word[key]):
+            if '#' in re.sub(r'#(?:sub|sup|super)\[[^\[\]]*\]', '', word[key]):
                 warnings.append(f'第 {n+1} 词：含未支持的 Typst 命令，保留源码显示')
     return _finish_analysis(entry,warnings)
 
@@ -296,7 +301,7 @@ def _finish_analysis(entry,warnings):
     import reduplication
     reduplication.decorate(entry,warnings)
     for key in ('ipa', 'translation'):
-        if '#' in entry[key]:
+        if '#' in re.sub(r'#(?:sub|sup|super)\[[^\[\]]*\]', '', entry[key]):
             warnings.append(f'{key} 含 Typst 命令，保留源码显示')
     if entry.get('orphaned_morphology'):warnings.append('有无法定位原词的旧形态组合，请在形态分析中核对')
     entry['warnings'] = warnings
@@ -384,7 +389,7 @@ def match(entry, query, field, exact=False, case=False, mode=None, *, _gloss_cac
             continue
         values = ([clean(w['form'])] if field == 'form' else
                   [m['form'] for m in analyze({'ipa':'','translation':'','words':[dict(w)]})['words'][0]['morphemes']] if field == 'morpheme' else
-                  split_gloss_morphemes(clean(w['gloss']))[0] + re.findall(r'#sub\[([^]]*)\]', w['gloss']) if field == 'gloss' else
+                  split_gloss_morphemes(clean(w['gloss']))[0] + re.findall(r'#(?:sub|sup|super)\[([^]]*)\]', w['gloss']) if field == 'gloss' else
                   [plain(w['form']), plain(w['gloss'])] if field == 'all' else [])
         if any(hit(v) for v in values):
             indices.append(i)
@@ -409,7 +414,7 @@ class QueryMatcher:
         if field=='all':result=any(hit(plain(word[k])) for k in ('form','gloss'))
         elif boundary_count(word['form']):result=False
         elif field=='form':result=hit(clean(word['form']))
-        else:result=any(hit(v) for v in split_gloss_morphemes(clean(word['gloss']))[0]+re.findall(r'#sub\[([^]]*)\]',word['gloss']))
+        else:result=any(hit(v) for v in split_gloss_morphemes(clean(word['gloss']))[0]+re.findall(r'#(?:sub|sup|super)\[([^]]*)\]',word['gloss']))
         size=256+4*sum(map(len,key))
         if self.max_entries>0 and size<=self.max_bytes:
             while self.hits and (len(self.hits)>=self.max_entries or self.bytes+size>self.max_bytes):

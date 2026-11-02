@@ -8,7 +8,12 @@
   const key='formatted-'+(++sequence);records.set(key,{body,kind,id,label});
   return html.replace(/<(section|article)\b/,'<$1 data-formatted-source="'+key+'"');
  }
- window.CorporiumFormattedCopy={stamp};
+ window.CorporiumFormattedCopy={stamp,updateDictionaryLayers(item){
+  const positions=new Map(item.words.map((w,i)=>[w.id,i]));
+  for(const record of records.values())if(record.kind===item.kind&&record.id===item.id)for(const [uid,rows] of Object.entries(item.values)){
+   const word=record.body.words?.[positions.get(uid)];if(!word)continue;const values=new Map((word.extra_layers||[]).filter(l=>!l.derived).map(l=>[l.id,l]));for(const row of rows)values.set(row.id,row);word.extra_layers=(item.layers||[...values.values()]).filter(l=>(l.anchor||'word')==='word'&&values.has(l.id)).map(l=>values.get(l.id));
+  }
+ }};
  const previous=renderEditableExample;
  renderEditableExample=function(body,kind,id){return stamp(previous(body,kind,id),body,kind,id,kind==='corpus'&&Number.isInteger(body.position)?'('+body.position+')':'');};
  const visible=el=>!!el?.getClientRects().length&&getComputedStyle(el).visibility!=='hidden';
@@ -54,8 +59,8 @@
   const judgment=source.kind==='independent'?window.CorporiumGrammaticality?.item(body,lid):null;
   return {key:card.dataset.formattedSource,sourceId:source.kind+':'+source.id,label:labelFor(card,index),metadata,group:groupInfo,judgment:{symbol:judgment?.symbol||''},
    body:{ipa:forms(body.ipa),translation:forms(body.translation),notes:body.notes||'',words:(body.words||[]).map(w=>({form:forms(w.form),gloss:phonologicalBoundary(w.form)?[]:gloss(w.gloss)}))},
-   layers:[...layers].map(([key,l])=>({name:l.name,font:l.font||'Junicode',size:l.size||100,variant:l.style||'regular',values:(body.words||[]).map(w=>{const value=(w.extra_layers||[]).find(x=>(x.id||x.name)===key)?.value||'';return l.style==='small-caps'?[{text:value,smallCaps:true}]:forms(value);})})),
-   sentenceLayers:(body.sentence_layers||[]).filter(l=>l.visible&&l.value).map(l=>({anchor:l.anchor,font:l.font||'Junicode',pt:11*(l.size||100)/100,bold:['bold','bolditalic'].includes(l.style),italic:['italic','bolditalic'].includes(l.style),value:forms(l.value)})),
+   layers:[...layers].map(([key,l])=>({space_before:l.space_before,space_after:l.space_after,line_spacing:l.line_spacing,name:l.name,font:l.font||'Junicode',size:l.size||100,variant:l.style||'regular',values:(body.words||[]).map(w=>{const value=(w.extra_layers||[]).find(x=>(x.id||x.name)===key)?.value||'';const projected=(w.extra_layers||[]).find(x=>(x.id||x.name)===key);const text=projected?.derived?window.CorporiumDictionaryLayers.text(projected):value;return l.style==='small-caps'?[{text,smallCaps:true}]:projected?.dictionary_field==='short_gloss'?gloss(text):forms(text);})})),
+   sentenceLayers:(body.sentence_layers||[]).filter(l=>l.visible&&l.value).map(l=>({space_before:l.space_before,space_after:l.space_after,line_spacing:l.line_spacing,anchor:l.anchor,font:l.font||'Junicode',pt:11*(l.size||100)/100,bold:['bold','bolditalic'].includes(l.style),italic:['italic','bolditalic'].includes(l.style),value:forms(l.value)})),
    localJudgment:local?(local.innerText||'').trim().replace(/^(?:本处判断|Local judgment)[:：]\s*/,''):''};
  }
  function updateControls(){

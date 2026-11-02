@@ -44,14 +44,49 @@ class QuickEditTests(unittest.TestCase):
         self.assertEqual(self.undo()[0],200)
         self.assertEqual(self.api('quick-edit-settings')['selected'],[a['id'],b['id']])
 
-    def test_blank_structure_rows_are_omitted_but_partial_rows_rejected(self):
+    def test_blank_structure_rows_are_omitted_without_mutating_input(self):
         body=dict(word_structure=dict(memberships=[dict(id='empty-class')],analyses=[dict(id='empty-analysis',default=True,level='unspecified',components=[dict(id='empty-component',form=' ')])]))
         original=copy.deepcopy(body)
         saved=self.api('lexeme-save',dict(headword='test',body=body))
         self.assertEqual(saved['body']['word_structure'],dict(memberships=[],analyses=[]))
         self.assertEqual(body,original)
-        for partial in (dict(memberships=[dict(notes='保留')]),dict(analyses=[dict(components=[dict(readings=['ma'])])])):
-            self.assertEqual(self.call('/api/lexeme-save',dict(headword='partial',body=dict(word_structure=partial)))[0],400)
+
+    def test_unclassified_modules_preserve_notes_parts_and_identity_when_saved_again(self):
+        # A deleted class leaves an unclassified module. A class is optional;
+        # notes and local principal parts must survive subsequent saves.
+        for index,member in enumerate((dict(notes='保留'),dict(title='本地主要部分',notes='调查备注',parts=[dict(label='过去式',form='went',notes='词形备注')]))):
+            with self.subTest(member=member):
+                body=dict(word_structure=dict(memberships=[member]));original=copy.deepcopy(body)
+                saved=self.api('lexeme-save',dict(headword='local-module-'+str(index),body=body))
+                stored=saved['body']['word_structure']['memberships'][0]
+                self.assertEqual(stored['class_id'],'');self.assertEqual(stored['notes'],member['notes'])
+                self.assertEqual(body,original)
+                if member.get('parts'):
+                    self.assertEqual(stored['parts'][0]['form'],'went');self.assertEqual(stored['parts'][0]['notes'],'词形备注')
+                before=copy.deepcopy(stored);request=copy.deepcopy(saved)
+                request['body']['word_structure']['memberships'][0]['notes']='修改备注'
+                changed=self.api('lexeme-save',request)['body']['word_structure']['memberships'][0]
+                self.assertEqual(changed['id'],before['id']);self.assertEqual(changed['parts'],before['parts'])
+                self.assertEqual(self.undo()[0],200)
+                restored=self.api('lexeme?id='+saved['id'])['body']['word_structure']['memberships'][0]
+                self.assertEqual(restored,before)
+                self.assertEqual(self.undo('redo')[0],200)
+                self.assertEqual(self.api('lexeme?id='+saved['id'])['body']['word_structure']['memberships'][0],changed)
+
+    def test_missing_component_form_and_unknown_class_are_rejected_without_writes(self):
+        entries=self.api('lexemes?language=ordos');generation=self.api('undo-state')['generation']
+        cases={
+            'readings_only':dict(analyses=[dict(components=[dict(readings=['ma'])])]),
+            'gloss_only':dict(analyses=[dict(components=[dict(gloss='释义')])]),
+            'unknown_class':dict(memberships=[dict(class_id='missing-class',notes='保留')]),
+        }
+        for name,structure in cases.items():
+            with self.subTest(case=name):
+                request=dict(headword='invalid-'+name,body=dict(word_structure=structure));original=copy.deepcopy(request)
+                code,result=self.call('/api/lexeme-save',request)
+                self.assertEqual(code,400,result);self.assertEqual(request,original)
+                self.assertEqual(self.api('lexemes?language=ordos'),entries)
+                self.assertEqual(self.api('undo-state')['generation'],generation)
 
     def test_inherit_writings_on_assign_and_saved_response_revision(self):
         _,x=self.fixture();t=self.api('writing-save',dict(name='汉字',font='Junicode'))

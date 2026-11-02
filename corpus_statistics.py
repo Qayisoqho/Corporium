@@ -41,7 +41,7 @@ def normalize(scope):
     return dict(mode=mode,text_ids=sorted(set(ids)) if mode=='texts' else [],include_dictionary=include if mode=='texts' else mode in ('language','dictionary'),include_independent=independent if mode=='texts' else mode in ('language','independent'))
 
 
-def calculate(db,lid,scope,*,case=True,selection=None):
+def calculate(db,lid,scope,*,case=True,selection=None,separate_clitics=False):
     import grammaticality
     from vocabulary_statistics import Collector
     vocabulary=Collector(db,case,selection)
@@ -50,6 +50,11 @@ def calculate(db,lid,scope,*,case=True,selection=None):
         item=grammaticality.selected(body.get('grammaticality',''),catalogs[body.get('language_id') or language]);key=(body.get('language_id') or language,item['id'])
         row=judgments.setdefault(key,dict(language_id=key[0],id=item['id'],name=item['name'],symbol=item['symbol'],sentences=0,words=0));row['sentences']+=1;row['words']+=count
     word_counter=WordCounter()
+    import mpw_statistics
+    mpw=mpw_statistics.Counter(word_counter,separate_clitics);mpw_rows={}
+    def record_mpw(key,words):
+        values=mpw.record(words);total=mpw_rows.setdefault(key,[0,0,0])
+        for i,field in enumerate(('morphemes','word_slots','clitic_words')):total[i]+=values[field]
     texts={r['id']:dict(r) for r in db.execute("SELECT id,title FROM texts WHERE ?='all' OR language_id=?",(lid,lid))}
     mode=scope['mode'];chosen=set(scope['text_ids']) if mode=='texts' else set(texts) if mode=='language' else set()
     if not chosen<=texts.keys():raise ValueError('所选文本已删除或不属于当前语言，请重新选择')
@@ -57,7 +62,18 @@ def calculate(db,lid,scope,*,case=True,selection=None):
     if include:
         lexemes=db.execute("SELECT COUNT(*) FROM lexemes WHERE ?='all' OR language_id=?",(lid,lid)).fetchone()[0]
         # Active references only. One sentence may be cited by many units/entries.
-        for r in long_tasks.steps(db.execute("SELECT DISTINCT e.id FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id JOIN lexemes x ON x.id=l.lexeme_id JOIN entries e ON e.id=u.entry_id JOIN texts t ON t.id=e.text_id WHERE u.active=1 AND (?='all' OR x.language_id=?) AND COALESCE(NULLIF(json_extract(e.body,'$.language_id'),''),t.language_id)=x.language_id",(lid,lid))):
+        # Establish each referenced sentence/language once before reading its
+        # JSON. Dense references otherwise parse that same sentence per link.
+        # Keep references before units: the automatic plan can otherwise scan
+        # every unlinked unit instead of using links_lexeme and unit identities.
+        for r in long_tasks.steps(db.execute("""SELECT DISTINCT e.id FROM (
+            SELECT u.entry_id,x.language_id FROM lexemes x
+            CROSS JOIN lexical_links l ON l.lexeme_id=x.id
+            CROSS JOIN corpus_units u ON u.id=l.unit_id
+            WHERE u.active=1 AND (?='all' OR x.language_id=?)
+            GROUP BY u.entry_id,x.language_id
+            ) refs JOIN entries e ON e.id=refs.entry_id JOIN texts t ON t.id=e.text_id
+            WHERE COALESCE(NULLIF(json_extract(e.body,'$.language_id'),''),t.language_id)=refs.language_id""",(lid,lid))):
             referenced.add(r['id'])
     rows={tid:dict(id=tid,title=texts[tid]['title'],kind='text',sentences=0,words=0,excluded=0) for tid in texts if tid in chosen}
     corpus_sentences=corpus_words=excluded=overlap=0
@@ -69,6 +85,7 @@ def calculate(db,lid,scope,*,case=True,selection=None):
     for r in long_tasks.steps(corpus_rows()):
         body=json.loads(r['body']);words=body.get('words',[])
         count=vocabulary.record(r['id'],body,body.get('language_id') or r['language_id'],r['text_id'],word_counter)
+        record_mpw(r['text_id'],words)
         row=rows.setdefault(r['text_id'],dict(id=r['text_id'],title=r['title'],kind='dictionary_reference',sentences=0,words=0,excluded=0))
         row['sentences']+=1;row['words']+=count;row['excluded']+=len(words)-count
         corpus_sentences+=1;corpus_words+=count;excluded+=len(words)-count
@@ -80,10 +97,14 @@ def calculate(db,lid,scope,*,case=True,selection=None):
             body=json.loads(r['body'])
             if not all_independent and not body.get('targets'):continue
             words=body.get('words',[]);count=vocabulary.record('independent:'+r['id'],body,body.get('language_id') or r['language_id'],None,word_counter)
+            record_mpw('@independent',words)
             judgment(body,r['language_id'],count)
             independent['sentences']+=1;independent['words']+=count;independent['excluded']+=len(words)-count
     result=dict(words=corpus_words+independent['words'],sentences=corpus_sentences+independent['sentences'],texts=len(rows),lexemes=lexemes,
                 excluded=excluded+independent['excluded'],dictionary_included=include,dictionary_corpus_sentences=len(referenced),overlap_sentences=overlap,
                 corpus_sentences=corpus_sentences,independent_sentences=independent['sentences'],rows=list(rows.values())+([independent] if include or all_independent else []),grammaticality=list(judgments.values()))
     result['_vocabulary']=vocabulary.finish(result);result['_hits']=vocabulary.hits
+    result['mpw']=mpw.finish()
+    for row in result['rows']:
+        row['mpw']=mpw_statistics.result(*mpw_rows.get('@independent' if row['kind']=='independent' else row['id'],(0,0,0)),separate_clitics)
     return result

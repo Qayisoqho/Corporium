@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),crypto=require('node:crypto');
-function setup(){const c={crypto,esc:v=>String(v??'').replace(/[&<>"']/g,v=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[v])),richGloss:v=>String(v).replaceAll('<','&lt;'),usageLabel:u=>u.pos||''};vm.createContext(c);vm.runInContext(fs.readFileSync('web/sense-gloss.js','utf8'),c);vm.runInContext(fs.readFileSync('web/paradigms.js','utf8').split('(()=>{')[0],c);return c;}
+function setup(){const c={crypto,esc:v=>String(v??'').replace(/[&<>"']/g,v=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[v])),richGloss:v=>String(v).replaceAll('<','&lt;'),usageLabel:u=>u.pos||''};vm.createContext(c);require('./display-scripts-helpers.js')(c);vm.runInContext(fs.readFileSync('web/sense-gloss.js','utf8'),c);vm.runInContext(fs.readFileSync('web/paradigms.js','utf8').split('(()=>{')[0],c);return c;}
 function body(){return {usages:[{id:'u',pos:'V',senses:[{id:'base',short_gloss:'go'}]}],variants:[{id:'past',form:'went'},{id:'part',form:'gone'}],paradigms:[{id:'t',title:'Verb',usage_id:'u',dimensions:['Tense','Number','Person'],rows:[{id:'r',labels:['Past','Any','Any'],state:'filled',realizations:[{id:'f',form_id:'past',meanings:[{id:'m',short_gloss:'go.PST',definition:'past'},{id:'m2',short_gloss:'go.PST',definition:'other'}]}]},{id:'missing',labels:['X','X','X'],state:'missing',realizations:[]},{id:'empty',labels:['Y','Y','Y'],state:'unfilled',realizations:[]}]}]};}
 test('manual pickers keep ambiguous form meanings distinct and filter by concrete form',()=>{const c=setup(),b=body(),before=JSON.stringify(b);assert.deepEqual(Array.from(c.paradigmUsages(b,'past')[0].senses,s=>s.id),['base','m','m2']);assert.deepEqual(Array.from(c.paradigmUsages(b,'part')[0].senses,s=>s.id),['base']);assert.deepEqual(Array.from(c.paradigmUsages(b,'')[0].senses,s=>s.id),['base']);assert.equal(c.paradigmUsages(b)[0].senses[1].paradigm_form_id,'past');assert.equal(JSON.stringify(b),before);});
 test('a template produces fresh identities and copies layout without meanings or forms',()=>{const c=setup(),t=body().paradigms[0],a=c.paradigmFromTemplate(t),b=c.paradigmFromTemplate(t);assert.notEqual(a.id,b.id);assert.equal(a.template_id,t.id);assert.notEqual(a.rows[0].id,b.rows[0].id);assert.equal(a.rows.every(r=>r.state==='unfilled'&&r.realizations.length===0),true);assert.equal(a.dimensions.length,3);a.dimensions[0]='Changed';assert.equal(t.dimensions[0],'Tense');a.rows[0].labels[0]='Changed';assert.equal(t.rows[0].labels[0],'Past');});
@@ -30,6 +30,17 @@ test('template snapshots keep row presets without capturing base-sense identitie
  const c=setup(),t=body().paradigms[0];t.default_base_sense_id='base';t.rows[0].gloss_addition='NOM';
  const copy=c.paradigmFromTemplate(t);assert.equal(copy.rows[0].gloss_addition,'NOM');assert.equal(copy.default_base_sense_id,undefined);
  copy.rows[0].gloss_addition='ACC';assert.equal(t.rows[0].gloss_addition,'NOM');
+});
+test('selecting a table base converts existing form meanings and preserves identity and extra labels',()=>{
+ const c=setup(),base={id:'new-sense',short_gloss:'go'},m={id:'existing',base_sense_id:'',short_gloss:'',definition:'keep',notes:'note'};
+ const value=c.paradigmInheritMeaning(m,base,'PST');
+ assert.equal(value.gloss_mode,'inherit');assert.equal(value.base_sense_id,'new-sense');assert.equal(value.gloss_addition,'PST');assert.equal(value.short_gloss,'');assert.equal(value.id,m.id);assert.equal(value.notes,m.notes);assert.equal(m.base_sense_id,'');
+ assert.equal(c.paradigmInheritMeaning({...m,short_gloss:'go.PST'},base).gloss_addition,'PST');
+ assert.equal(c.paradigmInheritMeaning({...m,short_gloss:'DAT.SG'},base).gloss_addition,'DAT.SG');
+ assert.equal(c.paradigmInheritMeaning({...value,gloss_addition:'CUSTOM'},base,'PL').gloss_addition,'CUSTOM');
+ assert.equal(c.paradigmInheritMeaning({...m,short_gloss:'pron.3sg.dat'},{id:'person',short_gloss:'pron.3'}).gloss_addition,'sg.dat');
+ assert.throws(()=>c.paradigmInheritMeaning(m,undefined),/请选择/);
+ assert.throws(()=>c.paradigmInheritMeaning(m,{id:'empty',short_gloss:''}),/请选择/);
 });
 test('digit-final glosses append their next label directly in senses and tables',()=>{
  const c=setup();assert.equal(c.paradigmCompose('pron.3','sg.dat'),'pron.3sg.dat');assert.equal(c.senseGloss({short_gloss:'pron.3',gloss_addition:'SG.DAT'}),'pron.3SG.DAT');

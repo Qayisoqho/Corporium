@@ -85,6 +85,7 @@ async function edit(row,focus=false){
  holder.querySelector('label').hidden=true;holder.querySelector('[data-format="highlight"]').textContent=(globalThis.CorporiumI18n?.f("d07a05aff599ee",()=>[])??'亮');holder.querySelector('[data-format="plain"]').textContent=(globalThis.CorporiumI18n?.f("2da52c79f6e539",()=>[])??'清');holder.querySelector('[data-list]').textContent='•';holder.querySelector('[data-apply-writing]').textContent=(globalThis.CorporiumI18n?.f("7d04b3c88caf5e",()=>[])??'应用');
  for(const button of holder.querySelectorAll('.survey-rich-tools button'))button.setAttribute('aria-label',button.title||button.textContent);
  CorporiumRichText.bind(holder,model.writing_types);
+ holder.querySelector('[data-apply-writing]').title=globalThis.CorporiumI18n?.ui('将所选书写类型应用于选中文字','Apply the selected writing type to selected text')??'将所选书写类型应用于选中文字';
  const title=holder.querySelector('input'),editor=holder.querySelector('[contenteditable]'),lid=language;
  const d=new NoteDraft(row,()=>({title:title.value,body:CorporiumRichText.read(editor)}),payload=>write(payload,lid),status);d.holder=holder;draft=d;
  holder.addEventListener('compositionstart',()=>{d.composing=true;clearTimeout(timer);});
@@ -159,7 +160,26 @@ const previousWorkspace=setWorkspace;setWorkspace=async function(name){if(name!=
 const previousLanguage=switchLanguage;let languageQueue=Promise.resolve();switchLanguage=function(id){const task=languageQueue.then(async()=>{await settle();await previousLanguage(id);if(language!==activeLanguage){draft=null;language='';request++;if(workspace==='dictionary'&&opened)await reload(undefined);}layout();});languageQueue=task.catch(()=>{});return task;};
 const previousUndo=undoCommand;undoCommand=async function(kind){await settle();await previousUndo(kind);if(workspace==='dictionary'&&opened)await reload(activeId);else{draft=null;language='';request++;}};
 const previousHome=showHome;showHome=async function(...args){try{await settle();return await previousHome(...args);}catch(error){message.textContent=error.message;}};
-const previousApi=api;api=async function(path,body){if(['export-language','backup','language-package-export'].includes(path.split('?')[0]))await settle();return previousApi(path,body);};
+async function syncWritingTypes(lid,change){
+ const sequence=request,d=draft;
+ const [fresh,row]=await Promise.all([originalApi('fieldwork-notes?'+new URLSearchParams({language:lid})),d?originalApi('fieldwork-notes?'+new URLSearchParams({language:lid,id:d.row.id})):null]);
+ if(sequence!==request||language!==lid||activeLanguage!==lid||draft!==d)return;
+ model=fresh;
+ if(d){d.row=row;updateHeader(row);CorporiumRichText.updateTypes(d.holder,model.writing_types,change);}
+}
+const previousApi=api;api=async function(path,body){
+ const action=path.split('?')[0],lid=body?._language||activeLanguage;
+ const writing=!!body&&['writing-save','writing-delete'].includes(action)&&language===lid;
+ if(writing||['export-language','backup','language-package-export'].includes(action))await settle();
+ if(!writing)return previousApi(path,body);
+ const inert=list.inert;list.inert=true;
+ try{
+  const result=await previousApi(path,body);
+  try{await syncWritingTypes(lid,action==='writing-delete'?{[body.id]:body.replacement_id||''}:{});}
+  catch(error){message.textContent=(globalThis.CorporiumI18n?.ui('书写类型已保存，笔记同步失败；请重新打开笔记面板。','Writing types were saved, but notes could not refresh. Reopen the notes panel.')??'书写类型已保存，笔记同步失败；请重新打开笔记面板。')+' '+error.message;}
+  return result;
+ }finally{list.inert=inert;}
+};
 window.corporiumFlushNotes=settle;window.corporiumNotesDirty=()=>!!(draft?.dirty||draft?.saving||actionPromise);
 window.addEventListener('beforeunload',e=>{if(window.corporiumNotesDirty()){e.preventDefault();e.returnValue='';}});
 layout();if(workspace==='dictionary'&&opened)void reload(undefined).catch(e=>{message.textContent=e.message;});

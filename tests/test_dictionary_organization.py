@@ -1,5 +1,6 @@
 import json
 import unittest
+import unicodedata
 from pathlib import Path
 from urllib.parse import urlencode
 import server
@@ -42,6 +43,24 @@ class OrganizationTests(unittest.TestCase):
         self.assertEqual(self.call('/api/lexeme?id='+w['id'])[1]['body']['semantic_classes'],[])
         self.assertEqual(self.undo()[0],200)
         self.assertEqual(self.call('/api/lexeme?id='+w['id'])[1]['body']['semantic_classes'],[leaf['id']])
+
+    def test_diacritic_scheme_actual_word_preview_list_and_pagination(self):
+        alphabet='p p̄ b ḇ m t ṯ d ḏ n k ḵ g ḡ ṇ s z j r l w ’ h'
+        expected=['pa','p̄a','ba','ḇa','ma','ta','ṯa','da','ḏa','na','ka','ḵeéḵa','ga','ḡa','ṇa','sa','za','ja','ra','la','wa','’a','ha']
+        for word in reversed(expected):self.word(word)
+        order=self.action('order-save',name='附标排序',alphabet=alphabet)
+        self.assertEqual([r['headword'] for r in self.action('preview',alphabet=alphabet)['items']],expected)
+        actual=[]
+        for page in range(1,4):
+            code,result=self.call('/api/lexemes?'+urlencode(dict(language='ordos',sort_order=order['id'],page=page,page_size=10)))
+            self.assertEqual(code,200,result);actual.extend(r['headword'] for r in result['items'])
+        self.assertEqual(actual,expected)
+        key=org.sort_key(alphabet)
+        for word in expected:
+            self.assertEqual(key(word),key(unicodedata.normalize('NFD',word)))
+            self.assertEqual(key(word),key(word.upper()))
+        self.assertEqual(sorted(reversed(expected),key=org.sort_key(unicodedata.normalize('NFD',alphabet))),expected)
+        self.assertEqual(key('ḵeéḵa')[0],(0,11))
 
     def test_batch_stale_failure_rolls_back_and_cross_language_rejected(self):
         c=self.action('class-save',name='类');a=self.word('a');b=self.word('b')

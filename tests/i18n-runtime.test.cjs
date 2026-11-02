@@ -16,6 +16,19 @@ test('Chinese remains byte-for-byte equivalent and storage restrictions do not b
  const c=runtime('zh-CN',true);assert.equal(c.CorporiumI18n.f('m',[2,'保存']),'共 2 条，名称：保存');
  assert.equal(c.document.documentElement.lang,'zh-CN');assert.equal(c.CorporiumI18n.valid('fr'),null);
 });
+test('standard collaborator roles display in English while sentence assignments keep canonical values',()=>{
+ const i=runtime('en').CorporiumI18n,input={value:'',dataset:{}};
+ i.setRoleInput(input,'发言人');assert.equal(input.value,'Speaker');assert.equal(i.roleInputValue(input),'发言人');
+ input.value='Transcriber';assert.equal(i.roleInputValue(input),'转写人');
+ i.setRoleInput(input,'Field notes 保存');assert.equal(input.value,'Field notes 保存');assert.equal(i.roleInputValue(input),'Field notes 保存');
+ i.setRoleInput(input,'Speaker');assert.equal(i.roleInputValue(input),'Speaker','An existing literal user role must not be rewritten');
+ const zh=runtime('zh-CN').CorporiumI18n;zh.setRoleInput(input,'发言人');assert.equal(input.value,'发言人');assert.equal(zh.roleInputValue(input),'发言人');
+});
+test('English analysis role suggestions contain translated labels without changing saved role codes',()=>{
+ const c=runtime('en');c.CorporiumMessages=JSON.parse(fs.readFileSync('web/i18n-messages.json','utf8'));
+ const html=c.CorporiumI18n.f('e7d862d49d2ad2');assert.doesNotMatch(html,/[\u3400-\u9fff]/u);assert.match(html,/value="Speaker"/);
+ const input={value:'Speaker',dataset:{}};assert.equal(c.CorporiumI18n.roleInputValue(input),'发言人');
+});
 test('lazy interpolation evaluates once and a missing catalog entry does not evaluate arguments before fallback',()=>{
  const c=runtime('en');c.calls=0;
  assert.equal(vm.runInContext("CorporiumI18n.f('m',()=>[++calls,'测试'])",c),'Name: 测试; count: 1');assert.equal(c.calls,1);

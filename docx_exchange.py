@@ -165,6 +165,7 @@ def plan(db,dbpath,b,lid):
     for key,target in mappings.items():
         if target is None:continue
         if not isinstance(target,str) or target not in known or known[target]['anchor']!=source[key]['anchor'] or target in used:raise ValueError('附加标注层映射无效、重复或不属于当前语言')
+        if known[target].get('source')=='dictionary':raise ValueError('词典信息层为只读，不能导入手动内容')
         used.add(target)
     atoms=[]
     for si,s in enumerate(data['sentences']):
@@ -313,7 +314,8 @@ def export(db,b,lid):
     if not row:raise ValueError('请选择当前语言的一个文本')
     limit=b.get('words_per_table',0)
     if type(limit) is not int or not 0<=limit<=30:raise ValueError('每段词格上限无效')
-    defs=annotations.layers(db,lid);meta=json.loads(db.execute('SELECT metadata FROM languages WHERE id=?',(lid,)).fetchone()[0]);sentences=[]
+    import dictionary_layers
+    defs=dictionary_layers.export_definitions(db,annotations.layers(db,lid));meta=json.loads(db.execute('SELECT metadata FROM languages WHERE id=?',(lid,)).fetchone()[0]);sentences=[]
     positions={};cells_by_entry={}
     for u in db.execute("SELECT u.entry_id,u.id,u.position FROM corpus_units u JOIN entries e ON e.id=u.entry_id WHERE e.text_id=? AND u.kind='word' AND u.active=1",(tid,)):positions.setdefault(u['entry_id'],{})[u['id']]=u['position']
     for c in db.execute("SELECT c.* FROM annotation_cells c JOIN entries e ON e.id=c.record_id WHERE e.text_id=? AND c.owner_kind='corpus'",(tid,)):
@@ -326,6 +328,12 @@ def export(db,b,lid):
         body=gloss_inheritance.load(db,'corpus',r['id'],r['body'],metadata=False,lightweight=True)
         if body.get('language_id') and body['language_id']!=lid:raise ValueError('文本含其他语言的句子，请先按语言拆分后导出')
         cells=cells_by_entry.get(r['id'],{})
+        if any(d.get('source')=='dictionary' for d in defs):
+            import dictionary_layers,corpus,copy
+            projected=dictionary_layers.project(db,corpus.analyze(copy.deepcopy(body)),'corpus',r['id'],lid,defs)
+            for index,word in enumerate(projected['words']):
+                for layer in word.get('extra_layers',[]):
+                    if layer.get('derived'):cells[index,layer['id']]=dictionary_layers.text(layer,b.get('ui_language','zh-CN'))
         literal={k:body.get(k,'') for k in ('ipa','translation','notes','original')};literal['words']=[dict(form=w['form'],gloss=w['gloss']) for w in body['words']]
         sentences.append(dict(body=literal,cells=cells))
     if not sentences:raise ValueError('文本没有句子；如需空白文档，请在 Word 导入窗口下载模板')

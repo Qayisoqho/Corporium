@@ -1,6 +1,7 @@
 import long_tasks
 """Field-aware dictionary search. Index user-visible values, never storage IDs."""
 import json
+import re
 import gloss_inheritance
 import unicodedata
 from collections import defaultdict,OrderedDict
@@ -10,6 +11,8 @@ import annotations
 import evidence_index
 import dictionary_targets
 import paradigms
+import material_search_index
+import sentence_search_index
 from itertools import islice
 
 HIDDEN_KEYS=frozenset(('gloss_mode','gloss_addition','show_gloss_addition','default_base_sense_id','status','id','font','font_variant','language_id','parent_id','targets','revision','segmentation_ref','token_id','annotation_id','gloss_frozen','gloss_sources','gloss_revision','_gloss_active_bindings'))
@@ -30,6 +33,55 @@ def descendants(rows,root):
         more={r['id'] for r in rows if r.get('parent_id') in ids}-ids
         if not more:return ids
         ids.update(more)
+
+class EvidencePrefilter:
+    """Conservative negatives for the simple all-field evidence predicate.
+
+    Native JSON encoding exposes decoded Unicode leaves without building their
+    path/value document. Mapped names and translated enums can be absent from
+    the source; retain those candidates for the original complete matcher.
+    """
+    def __init__(self,index,needle,case):
+        self.needle=needle
+        self.normalize=lambda v:unicodedata.normalize('NFC',v) if case else unicodedata.normalize('NFC',v).casefold()
+        translated=[*ENUMS.values(),*categories.TAG_NAMES.values(),'是','否']
+        self.enabled=not any(c in needle for c in ('"','\\')) and not any(ord(c)<32 for c in needle) and not any(needle in self.normalize(v) for v in translated)
+        names=[*index.names.items(),*index.people.items()]
+        for identifier,tag in index.tags.items():
+            names.append((identifier,' '.join([tag.get('symbol',''),tag.get('description',''),*tag.get('aliases',[])])))
+        self.identifiers={identifier for identifier,value in names if needle in self.normalize(value)}
+        # A numeric leaf can change spelling when JSON is decoded. Only reuse
+        # raw JSON if this needle cannot match any Python numeric spelling.
+        self.raw_text_only=any(c not in '0123456789+-.einfna' for c in needle)
+        keys={k for k in LABELS if k.endswith('_id') and k not in HIDDEN_KEYS}
+        string=r'"(?:[^"\\]|\\.)*"'
+        # Canonical JSON has no whitespace between keys and punctuation.
+        # A key begins after { or ,; quotes inside values are escaped and
+        # cannot masquerade as one of these reference properties.
+        self.references=re.compile(r'(?:\{|,)\s*(?:'+'|'.join(re.escape(json.dumps(k)) for k in sorted(keys))+r')\s*:\s*('+string+r')')
+        self.collections=re.compile(r'(?:\{|,)\s*"(?:features|semantic_classes|speakers)"\s*:\s*(\[\s*(?:'+string+r'(?:\s*,\s*'+string+r')*)?\s*\])')
+        self.samples=0;self.candidates=0;self.broad=False
+
+    def raw_allowed(self,body,source):
+        return self.enabled and self.raw_text_only and '\\' not in source and not any(k in body for k in ('gloss','senses','usages','paradigms'))
+
+    def possible(self,body,source=None):
+        if not self.enabled:return True
+        if source is None:source=json.dumps(paradigms.project(body),ensure_ascii=False,separators=(',',':'))
+        possible=self.needle in self.normalize(source)
+        if not possible and self.identifiers:
+            possible=any(json.loads(m[1]) in self.identifiers for m in self.references.finditer(source))
+            if not possible:
+                possible=any(identifier in self.identifiers for m in self.collections.finditer(source) if len(m[1])>2 for identifier in json.loads(m[1]))
+        self.samples+=1;self.candidates+=possible
+        # Broad queries cannot gain from a negative prefilter. Avoid encoding
+        # every later sentence twice when the first sample mostly passes.
+        if self.samples==64 and self.candidates>=48:self.enabled=False;self.broad=True
+        return possible
+
+    def visible_word_hit(self,body):
+        return any(self.needle in self.normalize(word[key]) for word in body.get('words',[]) if isinstance(word,dict) for key in ('form','gloss') if isinstance(word.get(key),str))
+
 
 def needs_examples(spec,query=None):
     """Keep example/media/class searches complete; entry-only predicates stay local."""
@@ -66,6 +118,7 @@ def example_rows(db,rows,kind,index):
 
 class SearchIndex:
     def __init__(self,db,lid,rows,catalog_only=False,search_spec=None,query=None):
+        if not db.in_transaction:db.execute('BEGIN')
         self.rows=rows;self.fields={p:label(p) for p in BASE_PATHS};self.paths={}
         self.classes=categories.listing(db,lid)
         self.classes += [{**dict(r),'kind':'semantic'} for r in db.execute("SELECT * FROM semantic_classes WHERE ?='all' OR language_id=? ORDER BY position,name",(lid,lid))]
@@ -110,16 +163,36 @@ class SearchIndex:
         self.evidence_case=bool((search_spec or {}).get('case',False))
         normalize=lambda v:unicodedata.normalize('NFC',v) if self.evidence_case else unicodedata.normalize('NFC',v).casefold()
         self.evidence_needle=normalize(query.strip()) if simple_query else None
+        prefilter=EvidencePrefilter(self,self.evidence_needle,self.evidence_case) if self.evidence_needle is not None else None
         self.evidence_hits=set()
+        catalog=(self.names,self.tags,self.types,self.people)
+        result_key=evidence_index.result_key(db,lid,catalog,self.evidence_needle,self.evidence_case)
+        projected=material_search_index.available(db) and sentence_search_index.available(db)
+        cached_result=None if projected else evidence_index.load_result(result_key)
         self.word_values=OrderedDict();self.word_value_bytes=0
+        self.word_sequences=OrderedDict();self.word_sequence_bytes=0
+        self.word_sequence_probes=0;self.word_sequence_hits=0;self.word_sequences_enabled=True
         # Only possible layer matches need a per-sentence identity check. A
         # negative Unicode-aware scan avoids thousands of empty unit lookups.
         layer_candidates=None
-        if self.evidence_needle is not None:
+        self.example_documents=defaultdict(lambda:defaultdict(set))
+        self.material_evidence=None
+        if projected:
+            try:
+                if needs_examples(search_spec,query):
+                    with material_search_index.preparing(db):
+                        self.material_evidence=material_search_index.Evidence(db,self,lid)
+                cached_result={'fields':{},'hits':[],'owners':[]}
+            except material_search_index.Unavailable:
+                projected=False;self.material_evidence=None
+                cached_result=evidence_index.load_result(result_key)
+        if not projected and self.evidence_needle is not None and cached_result is None:
             layer_candidates=set()
             for cell in long_tasks.steps(db.execute('SELECT owner_kind,record_id,value FROM annotation_cells')):
                 if cell['value'].strip() and self.evidence_needle in normalize(cell['value']):layer_candidates.add((cell['owner_kind'],cell['record_id']))
-        self.example_documents=defaultdict(lambda:defaultdict(set))
+        if cached_result is not None:
+            self.fields.update(cached_result['fields']);self.evidence_hits.update(cached_result['hits'])
+            self.example_owners.update({(kind,rid):set(ids) for kind,rid,ids in cached_result['owners']})
         layer_definitions=defaultdict(list)
         for layer in db.execute('SELECT * FROM annotation_layers'):layer_definitions[layer['language_id']].append(dict(layer))
         def add_example(kind,rid,source,owners,scope,index=None,lookup=None):
@@ -135,7 +208,21 @@ class SearchIndex:
                 hit,fields=cached;self.fields.update(fields);doc={}
             else:
                 body=gloss_inheritance.load(db,kind,rid,source,metadata=False,changed_only=index is not None)
-                if index is not None:
+                raw=None
+                if index is not None and kind=='corpus' and prefilter.raw_allowed(body,source) and not gloss_inheritance.bindings(db,kind,rid,changed_only=True):
+                    # No live gloss changed, JSON strings have no escapes, and
+                    # the example needs no dictionary-gloss composition. Its
+                    # source already contains every possibly matching leaf.
+                    raw=source
+                if index is not None and kind=='corpus' and not prefilter.possible(body,raw):
+                    # This negative is query-specific. Do not cache it as an
+                    # empty, query-independent document in the leaf index.
+                    hit=False;doc={}
+                elif index is not None and kind=='corpus' and prefilter.broad and prefilter.visible_word_hit(body):
+                    # For a broad query a visible form/gloss is already an
+                    # exact positive proof. Keep this query-specific too.
+                    hit=True;doc={}
+                elif index is not None:
                     # Collect values independently of this query, so another
                     # query can use the same derived index without walking JSON.
                     fields={}
@@ -161,9 +248,8 @@ class SearchIndex:
                         elif cell['value'].strip() and self.evidence_needle in normalize(cell['value']):self.evidence_hits.update(owners)
         for m in db.execute("SELECT record_id,body FROM object_media WHERE kind='lexeme' AND (?='all' OR language_id=?)",(lid,lid)):
             self.extra[m['record_id']]['media'].append(json.loads(m['body']))
-        if needs_examples(search_spec,query):
+        if needs_examples(search_spec,query) and cached_result is None:
             from contextlib import nullcontext
-            catalog=(self.names,self.tags,self.types,self.people)
             with evidence_index.query(db,lid,catalog,self.evidence_needle,self.evidence_case) if self.evidence_needle is not None else nullcontext(None) as index:
                 for e,lookup in example_rows(db,db.execute("SELECT e.id,e.body,e.language_id,(SELECT json_group_array(DISTINCT json_extract(value,'$.lexeme_id')) FROM json_each(e.body,'$.targets')) owners FROM dictionary_examples e WHERE ?='all' OR e.language_id=?",(lid,lid)),'independent',index):
                     add_example('independent',e['id'],e['body'],json.loads(e['owners']),e['language_id'],index,lookup)
@@ -179,8 +265,9 @@ class SearchIndex:
                     batch=ids[start:start+400]
                     for e,lookup in example_rows(db,db.execute('SELECT e.id,e.body,t.language_id FROM entries e JOIN texts t ON t.id=e.text_id WHERE e.id IN ('+','.join('?' for _ in batch)+')',batch),'corpus',index):
                         add_example('corpus',e['id'],e['body'],owners[e['id']],e['language_id'],index,lookup)
+            evidence_index.store_result(db,result_key,lid,catalog,self.evidence_needle,self.evidence_case,self.fields,self.evidence_hits,self.example_owners)
         for m in db.execute("SELECT m.kind,m.record_id,m.body,a.name FROM object_media m JOIN timeline_media a ON a.id=m.asset_id WHERE ?='all' OR m.language_id=?",(lid,lid)):
-            owners={m['record_id']} if m['kind']=='lexeme' else self.example_owners.get(('independent',m['record_id']),set())
+            owners={m['record_id']} if m['kind']=='lexeme' else self.material_evidence.owners('independent',m['record_id']) if self.material_evidence is not None else self.example_owners.get(('independent',m['record_id']),set())
             for xid in owners:
                 self.extra[xid]['media'].append({'name':m['name'],**(json.loads(m['body']) if m['kind']=='independent' else {})})
         for r in rows:
@@ -214,7 +301,7 @@ class SearchIndex:
             elif isinstance(v,(str,int,float,bool)) and v!='':add(path)
         for body in bodies:walk(body)
 
-    def document(self,row,include_extra=True,prefix=(),all_only=False,field_catalog=None):
+    def document(self,row,include_extra=True,prefix=(),all_only=False,field_catalog=None,project=True):
         out=defaultdict(list)
         def add(path,value):
             if value is None or value=='':return
@@ -234,6 +321,25 @@ class SearchIndex:
             key=path[-1] if path else ''
             if isinstance(v,list):
                 if all_only and path==('examples','words'):
+                    # Repeated word arrays still had to repeat Python leaf/path
+                    # bookkeeping for every sentence. Serialize this bounded
+                    # input in the native encoder, then reuse its exact leaves.
+                    sequence=json.dumps(v,ensure_ascii=False,sort_keys=True).encode('utf8') if self.word_sequences_enabled and 1<len(v)<=256 else None
+                    if sequence is not None and len(sequence)>4*1024**2:sequence=None
+                    saved=self.word_sequences.get(sequence) if sequence is not None else None
+                    if sequence is not None:
+                        self.word_sequence_probes+=1;self.word_sequence_hits+=saved is not None
+                        if self.word_sequence_probes>=128 and self.word_sequence_hits*16<self.word_sequence_probes:
+                            self.word_sequences_enabled=False;self.word_sequences.clear();self.word_sequence_bytes=0
+                            if saved is None:sequence=None
+                    if saved is not None:
+                        if sequence in self.word_sequences:self.word_sequences.move_to_end(sequence)
+                        values,fields,_=saved
+                        self.fields.update(fields)
+                        if field_catalog is not None:field_catalog.update(fields)
+                        out['all'].extend(values);return
+                    sequence_start=len(out['all']);sequence_parent=field_catalog
+                    if sequence is not None:field_catalog={}
                     for word in v:
                         visible={k:x for k,x in word.items() if k not in HIDDEN_KEYS} if isinstance(word,dict) else word
                         # Most untouched corpus slots contain only these scalar
@@ -259,6 +365,16 @@ class SearchIndex:
                             self.fields.update(fields)
                             if field_catalog is not None:field_catalog.update(fields)
                         out['all'].extend(values)
+                    if sequence is not None:
+                        fields=field_catalog;field_catalog=sequence_parent
+                        if field_catalog is not None:field_catalog.update(fields)
+                        values=tuple(dict.fromkeys(out['all'][sequence_start:]));del out['all'][sequence_start:]
+                        out['all'].extend(values)
+                        size=len(sequence)+256+sum(128+4*len(v) for v in values)+sum(256+4*(len(k)+len(v)) for k,v in fields.items())
+                        if size<=4*1024**2:
+                            while self.word_sequences and (self.word_sequence_bytes+size>4*1024**2 or len(self.word_sequences)>=256):
+                                _,(_,_,cost)=self.word_sequences.popitem(last=False);self.word_sequence_bytes-=cost
+                            self.word_sequences[sequence]=(values,fields,size);self.word_sequence_bytes+=size
                     return
                 if key=='features':
                     out['_grammar_classes'].extend(self.tags[fid].get('category','') for fid in v if fid in self.tags)
@@ -290,7 +406,7 @@ class SearchIndex:
                 if key in ('entry_type','affix_function','affix_position','variation','status','level','condition_types','state') or path==('relation','type'):value=ENUMS.get(value,value)
                 if key=='type' and 'tags' in path:value=categories.TAG_NAMES.get(value,value)
                 add(path,value)
-        walk({'headword':row['headword'],**paradigms.project(row['body'])},prefix)
+        walk({'headword':row['headword'],**(paradigms.project(row['body']) if project else row['body'])},prefix)
         if include_extra:
             for k,v in self.extra[row['id']].items():walk(v,(k,))
             for field,values in getattr(self,'example_documents',{}).get(row['id'],{}).items():out[field].extend(values)
@@ -341,7 +457,8 @@ class SearchIndex:
                 if any((u.get('subclass')==name and u.get('pos')==parent.get('name')) if parent else u.get('pos')==name for u in b.get('usages',[])):matched.add(c['id'])
             elif kind=='form' and any(v.get('kind')==name for v in b.get('variants',[])):matched.add(c['id'])
             elif kind=='usage_tag' and name in [categories.TAG_NAMES.get(t['type'],t['type']) for t in categories.usage_tags(b)]:matched.add(c['id'])
-            elif kind=='grammar' and name in doc.get('_grammar_classes',[]):matched.add(c['id'])
+            elif kind=='grammar' and (name in doc.get('_grammar_classes',[]) or
+                    getattr(self,'material_evidence',None) is not None and row['id'] in self.material_evidence.matching('_grammar_classes','exact',name,True)):matched.add(c['id'])
         return bool(matched & self.class_ids)
 
     def matches(self,row,query=''):
@@ -352,10 +469,12 @@ class SearchIndex:
             return v if s.get('case',False) else v.casefold()
         def match(field,op,value):
             values=(norm(v) for v in doc.get(field,[]) if v.strip());needle=norm(value)
-            if op=='empty':return not any(v.strip() for v in doc.get(field,[]))
-            if op=='present':return any(v.strip() for v in doc.get(field,[]))
-            if op=='not_contains':return not any(needle in v for v in values)
-            return any(v==needle if op=='exact' else v.startswith(needle) if op=='prefix' else v.endswith(needle) if op=='suffix' else needle in v for v in values)
+            evidence=getattr(self,'material_evidence',None)
+            external=evidence is not None and row['id'] in evidence.matching(field,op,value,s.get('case',False))
+            if op=='empty':return not (external or any(v.strip() for v in doc.get(field,[])))
+            if op=='present':return external or any(v.strip() for v in doc.get(field,[]))
+            if op=='not_contains':return not (external or any(needle in v for v in values))
+            return external or any(v==needle if op=='exact' else v.startswith(needle) if op=='prefix' else v.endswith(needle) if op=='suffix' else needle in v for v in values)
         evidence_hit=(getattr(self,'evidence_needle',None)==norm(query.strip()) and bool(s.get('case',False))==getattr(self,'evidence_case',None) and row['id'] in getattr(self,'evidence_hits',()) and s.get('field','all')=='all' and not s.get('conditions') and not s.get('class_id'))
         if query.strip() and not evidence_hit and not match(s.get('field','all'),'contains',query.strip()):return False
         checks=[match(c['field'],c.get('op','contains'),c.get('value','')) for c in s.get('conditions',[])]
@@ -364,6 +483,10 @@ class SearchIndex:
 
 def catalog(db,lid):
     import dictionary_data
+    cached=material_search_index.catalog(db,'lexeme',lid)
+    if cached is not None:return cached
     types={r['id']:r for r in db.execute('SELECT * FROM writing_types')}
     rows=[{**dict(r),'body':dictionary_data.resolve(db,json.loads(r['body']),types)} for r in db.execute("SELECT * FROM lexemes WHERE ?='all' OR language_id=?",(lid,lid))]
-    return SearchIndex(db,lid,rows,catalog_only=True).catalog()
+    result=SearchIndex(db,lid,rows,catalog_only=True).catalog()
+    material_search_index.catalog(db,'lexeme',lid,result)
+    return result

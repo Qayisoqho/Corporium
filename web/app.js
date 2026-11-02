@@ -45,7 +45,7 @@ let activeLanguage='ordos',languageList=[];
 let texts=[], selected='', page=1, total=0, items=[], current=null, request=0;
 const pageSize=()=>Number($('page-size').value);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function rich(s){return esc(s).replace(/#sub\[([^\[\]]*)\]/g,'<sub>$1</sub>').replace(/\\([~?\[\]#])/g,'$1')}
+function rich(s){return esc(s).replace(/#(sub|sup|super)\[([^\[\]]*)\]/g,(_,kind,text)=>{const tag=kind==='sub'?'sub':'sup';return '<'+tag+'>'+text+'</'+tag+'>';}).replace(/\\([~?\[\]#])/g,'$1')}
 async function api(path,body){const scopedPath=path+(path.includes('?')?'&':'?')+'language='+encodeURIComponent(activeLanguage);if(body)body={_language:activeLanguage,...body};const r=await fetch('/api/'+(body?path:scopedPath),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const d=await r.json();if(!r.ok)throw Error(d.error||(globalThis.CorporiumI18n?.f("d258ea4a87d0d6",()=>[])??'操作失败'));return d}
 function safe(fn){return async(...args)=>{try{await fn(...args)}catch(e){if(e.name==='AbortError')return;$('notice').textContent=e.message}}}
 function renderWord(w,lid,hit=false,context=false){
@@ -111,7 +111,7 @@ const corpusTop=document.createElement('nav');corpusTop.id='corpus-top-paginatio
 const paginationSearch=search;
 search=async function(){await paginationSearch();corpusTop.hidden=pageSize()<20;topPagination(corpusTop,page,Math.max(1,Math.ceil(total/pageSize())),async target=>{page=target;await search();});};
 
-function renderExtraLayers(w){return (w.extra_layers||[]).filter(l=>l.visible).map(l=>`<span class="extra-layer" style="${layerStyle(l)}"><small>${esc(l.name)}</small>${esc(l.value)||'&nbsp;'}</span>`).join('');}
+function renderExtraLayers(w){return (w.extra_layers||[]).filter(l=>l.visible).map(l=>l.derived&&globalThis.CorporiumDictionaryLayers?CorporiumDictionaryLayers.render(l):`<span class="extra-layer" data-line-layer="${esc(l.id)}" title="${esc(l.name)}" style="${layerStyle(l)}">${rich(l.value)||'&nbsp;'}</span>`).join('');}
 
-function layerStyle(l){return `font-family:${esc(JSON.stringify(validFont(l.font)?l.font:'Junicode'))};--layer-scale:${(l.size||100)/100};font-size:calc(.9375rem * var(--layer-scale));font-style:${['italic','bolditalic'].includes(l.style)?'italic':'normal'};font-weight:${['bold','bolditalic'].includes(l.style)?700:400};font-variant-caps:${l.style==='small-caps'?'small-caps':'normal'}`;}
-function renderSentenceLayers(e,anchor){return (e.sentence_layers||[]).filter(l=>l.anchor===anchor&&l.visible&&l.value).map(l=>`<div class="sentence-layer" style="${layerStyle(l)}"><small>${esc(l.name)}</small><div>${esc(l.value)}</div></div>`).join('');}
+function layerStyle(l,spacing='margin'){return `font-family:${esc(JSON.stringify(validFont(l.font)?l.font:'Junicode'))};--layer-scale:${(l.size||100)/100};font-size:calc(.9375rem * var(--layer-scale));font-style:${['italic','bolditalic'].includes(l.style)?'italic':'normal'};font-weight:${['bold','bolditalic'].includes(l.style)?700:400};font-variant-caps:${l.style==='small-caps'?'small-caps':'normal'};${(spacing==='none'?globalThis.CorporiumLineSpacing?.internalStyle(l):globalThis.CorporiumLineSpacing?.style(l,spacing))||''}`;}
+function renderSentenceLayers(e,anchor){return (e.sentence_layers||[]).filter(l=>l.anchor===anchor&&l.visible&&l.value).map(l=>`<div class="sentence-layer" data-line-layer="${esc(l.id)}" ${globalThis.CorporiumLineSpacing?.blockAttrs(l)||''} title="${esc(l.name)}" style="${layerStyle(l,'block')}">${rich(l.value)}</div>`).join('');}

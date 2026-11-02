@@ -3,7 +3,7 @@ const source=fs.readFileSync(require.resolve('../web/long-tasks.js'),'utf8');
 function harness(status){
  const nodes={},calls=[],dialogs=[];
  const node=id=>nodes[id]??={id,disabled:false,textContent:'',after(el){el.parent=this.parent;el.afterOutlet=id;},append(){},setAttribute(){},removeAttribute(){},addEventListener(){}};
- const context={URL,URLSearchParams,DOMException,activeLanguage:'ordos',$:node,window:{addEventListener(){}},setTimeout:fn=>{fn();},refreshUndo:async()=>calls.push(['undo']),api:async(path,body)=>{calls.push(['normal',path,body]);return {};},originalApi:async(path,body)=>{
+ const context={URL,URLSearchParams,DOMException,activeLanguage:'ordos',$:node,window:{addEventListener(){}},setTimeout:fn=>{fn();},refreshUndo:async()=>calls.push(['undo']),api:async(path,body)=>{calls.push(['normal',path,body]);return path.startsWith('sentence-index-status')?{pending:context.pendingIndex||0}:{};},originalApi:async(path,body)=>{
   calls.push([path,body]);if(path==='task-start'){if(context.startWait)await context.startWait;if(context.failStart)throw Error('start failed');return {id:'job'};}
   if(path==='task-forget'&&context.forgetWait)await context.forgetWait;
   if(path.startsWith('task-status'))return status.shift()||{state:'done',message:'done',result:{ok:true}};
@@ -11,6 +11,33 @@ function harness(status){
  },document:{body:{append(){}},createElement(tag){const d={tag,dataset:{},className:'',children:[],append(...es){this.children.push(...es);es.forEach(e=>e.parent=this);},remove(){d.removed=true;},setAttribute(){},addEventListener(){},showModal(){d.open=true;},close(){d.open=false;}};dialogs.push(d);return d;}}};
  vm.createContext(context);vm.runInContext(source,context);return {context,nodes,calls,dialogs};
 }
+test('large sentence indexes use cancellable preparation; small updates keep ordinary search and drafts',async()=>{
+ for(const pending of [0,3,201]){
+  const h=harness([]);h.context.pendingIndex=pending;
+  h.context.window.corporiumLeaveMorpheme=async()=>{throw Error('must preserve the open draft');};
+  await h.context.api('entries?q=root&field=form');
+  const starts=h.calls.filter(c=>c[0]==='task-start');assert.equal(starts.length,pending>200?1:0);
+  if(starts.length){assert.equal(starts[0][1].kind,'sentence-index');assert.equal(starts[0][1].request.field,'form');}
+  assert.ok(h.calls.some(c=>c[0]==='normal'&&c[1]==='entries?q=root&field=form'));
+  assert.ok(!h.calls.some(c=>c[0]==='undo'));assert.ok(!h.dialogs[0].open);
+ }
+});
+test('shared gloss, custom fields and default all-field search prepare through the same queue',async()=>{
+ for(const field of ['gloss','all','layers','writings','layer:one','writing:two']){
+  for(const endpoint of ['entries','example-library','example-groups-library']){
+   const h=harness([]);h.context.pendingIndex=201;
+   const path=endpoint+'?q=needle&field='+encodeURIComponent(field);
+   await h.context.api(path);
+   const starts=h.calls.filter(c=>c[0]==='task-start');assert.equal(starts.length,1);
+   assert.equal(starts[0][1].kind,'sentence-index');assert.equal(starts[0][1].request.field,field);
+   assert.ok(h.calls.some(c=>c[0]==='normal'&&c[1]===path));assert.ok(!h.calls.some(c=>c[0]==='undo'));
+  }
+ }
+ const h=harness([]);h.context.pendingIndex=201;await h.context.api('entries?q=needle');
+ assert.equal(h.calls.find(c=>c[0]==='task-start')[1].request.field,'all');
+ const warnings=harness([]);warnings.context.pendingIndex=201;await warnings.context.api('entries?q=needle&field=all&warnings=true');
+ assert.equal(warnings.calls.filter(c=>c[0]==='task-start').length,0);
+});
 test('all new read/write routes use the queue and preserve payload language',async()=>{
  const h=harness([]);
  for(const path of ['grammar-audit?source=all','analysis-result?id=r'])await h.context.api(path);

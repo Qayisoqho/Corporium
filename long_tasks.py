@@ -15,6 +15,7 @@ POOL=ThreadPoolExecutor(max_workers=1,thread_name_prefix='corporium-long-task')
 JOBS={}
 KINDS={'dictionary','auto-match','timeline','language-package','language-json','language-preview','backup'}
 KINDS.update({'operation','grammar-audit','statistics','analysis-result','analysis-export','homophones'})
+KINDS.add('sentence-index')
 ACTIVE=('queued','running','committing')
 MEMORY_LIMIT=1536*1024**2
 
@@ -116,9 +117,27 @@ def run(job):
     try:
         checkpoint(None,'正在准备任务…')
         with LOCK:job['state']='running'
+        if job['kind']=='sentence-index':
+            import server,sentence_search_index
+            field=job['request'].get('field')
+            if not sentence_search_index.supports(field):raise ValueError('不支持的检索字段')
+            with server.connect(path=job['project'],audit=False,cancellable=True) as index_db:
+                sentence_search_index.refresh(index_db,field)
+            with LOCK:job.update(state='done',progress=100,message='已完成',result={'ready':True})
+            return
         if job['kind']=='operation':
             import task_operations
             result=task_operations.run(job)
+            with LOCK:job.update(state='done',progress=100,message='已完成',result=result)
+            return
+        if job['kind']=='dictionary':
+            # Search may publish disposable keys. Keep preparation, predicates
+            # and source reads in one cancellable project-bound transaction.
+            import server,lexicon,languages
+            r=job['request'];lid=r.get('language','ordos')
+            with server.connect(path=job['project'],audit=False,cancellable=True,deferred=True) as search_db:
+                if lid!='all':languages.require(search_db,lid)
+                result=lexicon.list_lexemes(search_db,r.get('lexical_language',lid),r.get('q',''),r.get('page',1),r.get('page_size',30),category=r.get('semantic_class',''),order=r.get('sort_order',''),search=r.get('search'),summary=r.get('summary')=='1',targets=r.get('targets')=='all',counts=r.get('counts')!='0')
             with LOCK:job.update(state='done',progress=100,message='已完成',result=result)
             return
         db=sqlite3.connect(Path(job['project']).as_uri()+'?mode=ro',uri=True)
@@ -133,10 +152,7 @@ def run(job):
         r=job['request'];lid=r.get('language','ordos');kind=job['kind']
         import languages,lexicon,timeline,language_exchange,project_backup
         if lid!='all':languages.require(db,lid)
-        if kind=='dictionary':
-            checkpoint(None,'正在检索词条和关联例证…')
-            result=lexicon.list_lexemes(db,r.get('lexical_language',lid),r.get('q',''),r.get('page',1),r.get('page_size',30),category=r.get('semantic_class',''),order=r.get('sort_order',''),search=r.get('search'),summary=r.get('summary')=='1',targets=r.get('targets')=='all',counts=r.get('counts')!='0')
-        elif kind=='auto-match':
+        if kind=='auto-match':
             checkpoint(None,'正在逐句匹配词典…')
             result=lexicon.auto_link_plan(db,lid,r.get('text_id',''),r.get('ignore_symbols','-=.'),r.get('ignore_position','edges'))
         elif kind=='timeline':

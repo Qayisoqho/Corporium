@@ -46,7 +46,8 @@ class DictionaryPerformanceTests(unittest.TestCase):
             db.execute("INSERT INTO annotation_layers(id,language_id,name,font,anchor) VALUES('layer','ordos','extra','Junicode','word')")
             db.execute("INSERT INTO annotation_cells VALUES('cell','independent','ex','w0','layer','layer-only',1)")
             rows=[{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT * FROM dictionary_targets')]
-            full=dictionary_search.SearchIndex(db,'ordos',rows)
+            with patch('sentence_search_index.available',return_value=False):
+                full=dictionary_search.SearchIndex(db,'ordos',rows)
             for case in (True,False):
                 spec=dict(field='all',case=case)
                 for query in ('evidence-only','STRASSE','Straße','é','GEN','layer-only','form-001','absent'):

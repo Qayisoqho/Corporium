@@ -95,8 +95,8 @@ def transform(word,rules):
         replacements=spread([f['text'] for f in fragments],value)
         if len(spans)!=len(replacements):raise ValueError('书写标记跨越多个已关联成分，无法安全同步形式')
         for span,text in zip(spans,replacements):
-            markup=re.fullmatch(r'#sub\[[^\[\]]*\]',raw[span[0]:span[1]])
-            if markup:text='#sub['+text+']'
+            markup=re.fullmatch(r'#(sub|sup|super)\[[^\[\]]*\]',raw[span[0]:span[1]])
+            if markup:text='#'+markup[1]+'['+text+']'
             if span in edits and edits[span]!=text:raise ValueError('同一词格的多个关联产生不同形式更新，请先调整重复关联')
             edits[span]=text
     ordered=sorted(edits)

@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-function setup(){const s=fs.readFileSync('web/homophone-phonology.js','utf8'),c={entries:[],activeLanguage:'one',writing:'han',orthographyStyle:s=>s,esc:s=>String(s||'').replace(/[&<>"']/g,v=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[v])),richGloss:s=>s};c.$=()=>({value:c.writing});vm.createContext(c);vm.runInContext(s.slice(s.indexOf(' function item('),s.indexOf(' async function inspect(')),c);return c;}
+function setup(){const s=fs.readFileSync('web/homophone-phonology.js','utf8'),c={entries:[],activeLanguage:'one',writing:'han',orthographyStyle:s=>s,esc:s=>String(s||'').replace(/[&<>"']/g,v=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[v])),richGloss:s=>s};c.$=()=>({value:c.writing});vm.createContext(c);require('./display-spacing-helpers.js')(c);vm.runInContext(s.slice(s.indexOf(' function item('),s.indexOf(' async function inspect(')),c);return c;}
 test('tone rows show selected writings beside the tone, with no underlying form, IPA heading, gloss or slash separators',()=>{
  const c=setup(),r={identity:'m',form:'underlying',number:2,gloss:'gloss',writings:[{type_id:'han',text:'甲'},{type_id:'han',text:'乙'}]},types=[{id:'han',font:'TestFont'}];
  const html=c.tone({tone:{label:'55'},groups:[{reading:'ma55',items:[r,{...r,identity:'n',writings:[{type_id:'han',text:'丙'}]}]}]},types);
@@ -13,7 +13,7 @@ test('missing chosen writings do not fall back to underlying forms, and unselect
 });
 
 test('review records without the selected writing remain visible and inspectable without substituting the underlying form',()=>{
- const source=fs.readFileSync('web/homophones.js','utf8'),c={writing:'han',activeLanguage:'one',orthographyStyle:s=>s,esc:s=>String(s||''),richGloss:s=>s};c.$=()=>({value:c.writing});vm.createContext(c);vm.runInContext(source.slice(source.indexOf(' function entry('),source.indexOf(' function readPageSize(')),c);
+ const source=fs.readFileSync('web/homophones.js','utf8'),c={writing:'han',activeLanguage:'one',orthographyStyle:s=>s,esc:s=>String(s||''),richGloss:s=>s};c.$=()=>({value:c.writing});vm.createContext(c);require('./display-spacing-helpers.js')(c);vm.runInContext(source.slice(source.indexOf(' function entry('),source.indexOf(' function readPageSize(')),c);
  const row={identity:'m',form:'underlying',gloss:'meaning',writings:[],readings:[],sources:[],origin:'语素',reason:'缺少读音'};
  for(const writings of [[],[{type_id:'han',text:'  \t '}]]){
   const html=c.entry({...row,writings},[{id:'han',name:'汉字'}],true);assert.match(html,/class="homophone-entry"/);assert.match(html,/未填写所选书写/);assert.match(html,/meaning/);assert.match(html,/缺少读音/);assert.match(html,/data-homophone-morpheme="m"/);assert.doesNotMatch(html,/underlying/);

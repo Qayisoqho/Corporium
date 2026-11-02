@@ -74,6 +74,19 @@ def parse_word(form,gloss,confirmed=False,legacy_tilde=False):
     return units,ambiguous and not confirmed
 
 
+def display_forms(source,units):
+    if not re.search(r'#(?:sub|sup|super)\[',source):return
+    # Analysis uses plain offsets; displays recover the saved script notation.
+    from morpheme_colors import plain_map
+    _,mapping=plain_map(source)
+    for unit in units:
+        fragments=unit.get('fragments',[])
+        if fragments and all(0<=f['start']<f['end']<=len(mapping) for f in fragments):
+            parts=[source[mapping[f['start']][0]:mapping[f['end']-1][1]] for f in fragments]
+            unit['display_form']='…'.join(parts)
+            if 'lookup_form' in unit:unit['display_lookup_form']=''.join(parts)
+
+
 def analyze_word(word,form,gloss):
     snapshot={k:word[k] for k in ('form','gloss')}
     units,ambiguous=parse_word(form,gloss,word.get('infix_confirmation')==snapshot,word.get('_legacy_tilde',False))
@@ -81,6 +94,7 @@ def analyze_word(word,form,gloss):
         display,_=parse_word(form,re.sub(r'\\([\\"\[\]#~?])',r'\1',word['gloss']).strip(),True,word.get('_legacy_tilde',False))
         labels={u['key']:u['gloss'] for u in display}
         for u in units:u['display_gloss']=labels.get(u['key'],u['gloss'])
+    display_forms(word['form'],units)
     word['analysis_form']=form;word['segments']=units;word['group_reviews']=[]
     word['infix_ambiguous']=ambiguous
     if ambiguous:
@@ -96,6 +110,7 @@ def analyze_word(word,form,gloss):
         gloss_fragments=sorted([f for k in members for f in by_key[k]['gloss_fragments']],key=lambda f:f['start'])
         groups.append(dict(key='group:'+group['id'],kind=group['type'],group_id=group['id'],form='…'.join(f['text'] for f in fragments),gloss=group['gloss'],fragments=fragments,gloss_fragments=gloss_fragments,members=members,notes=group.get('notes',''),boundary=''))
     word['morphemes']=sorted([u for u in units if u['key'] not in used]+groups,key=lambda u:u['fragments'][0]['start'] if u['fragments'] else -1)
+    display_forms(word['form'],groups)
     if word['group_reviews']:return '多部分语素的原文已变化，请在形态分析中核对旧组合'
     return None
 
@@ -141,6 +156,21 @@ def validate_ref(ref):
     if not isinstance(ref,dict) or not isinstance(ref.get('word'),int) or ref['word']<0 or any(not isinstance(ref.get(k),str) for k in ('key','form','gloss','unit_form','unit_gloss')) or not isinstance(ref.get('fragments'),list):raise ValueError('例句语素引用无效')
 
 
+def script_reprojection(before,after):
+    """The same saved unit under the older parser, which kept sup commands literal.
+
+    Callers must also verify the complete source snapshot is unchanged. Only
+    script removal may alter offsets; unit keys and every fragment stay aligned.
+    """
+    from corpus import plain
+    if not re.search(r'#(?:sup|super)\[',before.get('form','')+before.get('gloss','')):return False
+    if before.get('key')!=after.get('key'):return False
+    if any(k in before and before[k]!=after.get(k) for k in ('kind','members')):return False
+    if any(plain(before.get(k,''))!=plain(after.get(k,'')) for k in ('form','gloss')):return False
+    a=before.get('fragments',[]);z=after.get('fragments',[])
+    return len(a)==len(z) and all(plain(f['text'])==plain(g['text']) for f,g in zip(a,z))
+
+
 def decorate_refs(body):
     for target in body.get('targets',[]):
         ref=target.get('segmentation_ref')
@@ -150,7 +180,10 @@ def decorate_refs(body):
         if 0<=ref['word']<len(body['words']):
             w=body['words'][ref['word']]
             unit=dict(key='@word',form=w['form'],gloss=w['gloss'],fragments=[]) if ref['key']=='@word' else next((m for m in w.get('morphemes',[]) if m['key']==ref['key']),None)
-            target['segmentation_review']=not unit or reference(w,ref['word'],unit)!=ref
+            if unit and all(ref[k]==w[k] for k in ('form','gloss')) and script_reprojection(dict(key=ref['key'],form=ref['unit_form'],gloss=ref['unit_gloss'],fragments=ref['fragments']),unit):
+                target['segmentation_ref']=reference(w,ref['word'],unit)
+                target['segmentation_review']=False
+            else:target['segmentation_review']=not unit or reference(w,ref['word'],unit)!=ref
 
 
 def link(db,b,lid):

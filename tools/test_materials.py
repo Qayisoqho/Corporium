@@ -132,9 +132,13 @@ def enable_legacy(script):
     in their original location. Captured before-source implementations are never
     rewritten and the baseline store is never exposed as a writable database.
     """
+    try:
+        from . import test_archives
+    except ImportError:
+        import test_archives
+    restored=test_archives.enable_legacy(script,lambda aliases:referenced_aliases(script,{'aliases':aliases}),root=ROOT)
     data=catalog()
-    if not data['aliases']:return []
-    restored=[]
+    if not data['aliases']:return restored
     for name in referenced_aliases(script,data):
         sha=data['aliases'][name]
         path=ROOT/name

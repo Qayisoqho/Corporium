@@ -11,6 +11,10 @@ $('analysis-counts-run').textContent=t('运行统计');
 panel.querySelector('.analysis-help').textContent=t('以词格计词次，完整词形去重。保留声调、附加符号和词素边界，仅统一 Unicode 等价写法。同一记录的多处引用只计一次；自然文本与诱导材料请按来源分别选择。');
 const label=document.createElement('label'),checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.id='analysis-counts-case';checkbox.checked=true;
 label.append(checkbox,document.createTextNode(' '+t('区分词形大小写')));$('analysis-counts-run').before(label);
+const mpwLabel=document.createElement('label'),mpwCheckbox=document.createElement('input');mpwCheckbox.type='checkbox';mpwCheckbox.id='analysis-mpw-clitics';mpwCheckbox.checked=false;
+mpwLabel.append(mpwCheckbox,document.createTextNode(' '+t('MPW：附着成分单独计词')));$('analysis-counts-run').before(mpwLabel);
+const mpwHelp=document.createElement('small');mpwHelp.className='analysis-help';mpwHelp.textContent=t('MPW = 形式行语素小格总数 ÷ 词数。勾选后，以 = 或 ＝ 连接的每个附着成分另计一个词，语素总数不变；空格、标点和纯边界格不计。');$('analysis-counts-form').append(mpwHelp);
+const ratio=value=>value==null?'—':Number(value).toFixed(3);
 function params(id,initial='overview'){if(state.id!==id)state={id,view:initial,order:'frequency',page:1,item:'',query:'',sourcePage:1};return {vocabulary_view:state.view,vocabulary_order:state.order,vocabulary_page:state.page,vocabulary_query:state.query||'',...(state.item?{vocabulary_item:state.item}:{})};}
 function render(data,{reload,card,source}){
  if(!data.vocabulary)return false;
@@ -18,6 +22,7 @@ function render(data,{reload,card,source}){
  const host=$('analysis-results'),count=$('analysis-result-count');
  const change=patch=>{Object.assign(state,{page:1,item:''},patch);return reload();};
  $('analysis-summary').innerHTML=`<strong>${st.words.toLocaleString()} <small>${t(v.view==='custom'?'范围词次':'总词次')}</small></strong><strong><button type="button" id="vocabulary-types" class="text-button">${st.types.toLocaleString()}</button> <small>${t(v.view==='custom'?'范围词形数':'不同词形数')}</small></strong><strong>${st.sentences.toLocaleString()} <small>${t(v.view==='custom'?'范围句数':'句子记录')}</small></strong>`;
+ if(st.mpw)$('analysis-summary').innerHTML+=`<strong>${ratio(st.mpw.value)} <small>MPW</small></strong>`;
  $('vocabulary-types').onclick=()=>change({view:'forms'});
  const nav=document.createElement('div');nav.className='analysis-result-tools';nav.setAttribute('role','group');nav.setAttribute('aria-label',t('词汇统计视图'));
  const shown=v.selection?{overview:views.overview,forms:views.forms,custom:views.custom}:Object.fromEntries(Object.entries(views).filter(([key])=>key!=='custom'));
@@ -28,6 +33,7 @@ function render(data,{reload,card,source}){
   count.textContent=t('不同词形总数按整个范围去重，不能把各篇的不同词形数直接相加。');
   const rows=st.rows||[],pages=Math.max(1,Math.ceil(rows.length/20));state.sourcePage=Math.max(1,Math.min(pages,state.sourcePage));
   content.innerHTML=`<div class="vocabulary-table"><table class="analysis-table"><thead><tr>${['来源','句数','词次','不同词形数','排除格数'].map(s=>'<th>'+t(s)+'</th>').join('')}</tr></thead><tbody>${rows.slice((state.sourcePage-1)*20,state.sourcePage*20).map(r=>`<tr><td>${esc(r.kind==='independent'?t('独立例句库'):r.title)}</td><td>${r.sentences}</td><td>${r.words}</td><td>${r.types}</td><td>${r.excluded}</td></tr>`).join('')}</tbody></table></div><p>${t('有有效语素关联的词次')}：${st.morpheme_words} / ${st.words} · ${t('有已确认词根的词次')}：${st.root_words} / ${st.words}</p>`;
+  if(st.mpw){const info=document.createElement('section');info.className='mpw-summary';info.innerHTML=`<h3>MPW</h3><p>${t('语素小格总数')} ${st.mpw.morphemes} ÷ ${t('MPW 计算词数')} ${st.mpw.words} = <strong>${ratio(st.mpw.value)}</strong></p><p>${t(st.mpw.separate_clitics?'附着成分单独计词':'附着成分与词缀同等计词')} · ${t('附着成分另计词数')} ${st.mpw.clitic_words}</p><div class="vocabulary-table"><table class="analysis-table"><thead><tr>${['来源','语素小格总数','MPW 计算词数','MPW'].map(s=>'<th>'+t(s)+'</th>').join('')}</tr></thead><tbody>${rows.slice((state.sourcePage-1)*20,state.sourcePage*20).map(r=>`<tr><td>${esc(r.kind==='independent'?t('独立例句库'):r.title)}</td><td>${r.mpw?.morphemes??'—'}</td><td>${r.mpw?.words??'—'}</td><td>${ratio(r.mpw?.value)}</td></tr>`).join('')}</tbody></table></div>`;content.append(info);}
   topPagination($('analysis-pagination'),state.sourcePage,pages,async p=>{state.sourcePage=p;await reload();});
   return true;
  }

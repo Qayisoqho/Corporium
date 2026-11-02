@@ -84,6 +84,9 @@ def mutate(db,action,b,lid,*,lookup=None,publish_result=True):
     if db.execute("SELECT 1 FROM sqlite_master WHERE name='category_classes'").fetchone():categories.ensure(db,lid,'grammar',fields[1])
     xid=b.get('id') or str(uuid.uuid4())
     db.execute('INSERT INTO grammar_tags VALUES(?,?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET symbol=excluded.symbol,description=excluded.description,category=excluded.category,aliases=excluded.aliases,notes=excluded.notes,revision=grammar_tags.revision+1',(xid,lid,symbol,fields[0],fields[1],json.dumps(aliases,ensure_ascii=False),fields[2]))
+    if old and old['symbol']!=symbol:
+        import grammar_rename
+        grammar_rename.rename(db,old,symbol)
     if publish_result:publish(db,lid)
     return {'ok':True,'id':xid}
 
@@ -300,7 +303,7 @@ def audit(db,q):
             b=gloss_inheritance.load(db,kind,row['id'],row['body'],metadata=False,changed_only=True);lang=b.get('language_id') or row['language_id']
             if lid!='all' and lang!=lid:continue
             sentences+=1;analyze(b,cache=analysis_cache)
-            base=dict(kind=kind,id=row['id'],language_id=lang,owner_language=row['language_id'],title=row['title'] if kind=='corpus' else b.get('source') or '独立例句',text_id=row['text_id'] if kind=='corpus' else None,position=row['position'] if kind=='corpus' else None,lexeme_id=None if kind=='corpus' else (b['targets'][0]['lexeme_id'] if b.get('targets') else None))
+            base=dict(kind=kind,id=row['id'],language_id=lang,owner_language=row['language_id'],title=row['title'] if kind=='corpus' else b.get('source') or '独立例句',title_default=kind=='independent' and not bool(b.get('source')),text_id=row['text_id'] if kind=='corpus' else None,position=row['position'] if kind=='corpus' else None,lexeme_id=None if kind=='corpus' else (b['targets'][0]['lexeme_id'] if b.get('targets') else None))
             records[(kind,row['id'])]=base
             bi=len(bases);bases.append(base)
             if b.get('orphaned_morphology'):add(base,'pending','旧形态分析待核对')

@@ -5,9 +5,11 @@ import languages
 import lexicon
 import code_switching
 import gloss_inheritance
+import sentence_search_index
 
 
 def search(db, q, lid):
+    if not db.in_transaction:db.execute('BEGIN')
     try:
         size = int(q.get('page_size', 20))
         page = max(1, int(q.get('page', 1)))
@@ -39,6 +41,7 @@ def search(db, q, lid):
     order = ' ORDER BY source_order,ordering,position'
     catalogue = {r['id']: dict(r) for r in db.execute('SELECT * FROM languages')}
     tokens = 0
+    indexed = None
     if not corpus.normalize(q.get('q', ''), q.get('case') == 'true') and q.get('warnings') != 'true' and q.get('field')!='reduplication':
         total = db.execute('SELECT COUNT(*) FROM (' + select + source + ')', args).fetchone()[0]
         page = min(page, max(1, (total + size - 1) // size))
@@ -53,6 +56,20 @@ def search(db, q, lid):
             rows=[found[(r['kind'],r['id'])] for r in keys]
         else:rows=[]
         visible = [(r, gloss_inheritance.load(db,r['kind'],r['id'],r['body']), []) for r in gloss_inheritance.iter_rows(db,rows)]
+    elif q.get('warnings') != 'true' and (indexed := sentence_search_index.search(
+            db, select+source, args, q.get('field','all'), q.get('q',''),
+            q.get('case')=='true', q.get('mode') or ('exact' if q.get('exact')=='true' else 'contains'),
+            page, size, text_notes=True,custom_language='all' if q.get('field','all') in ('all','layers','writings') else lid)) is not None:
+        total,tokens,page=indexed['total'],indexed['tokens'],indexed['page']
+        keys=indexed['keys'];visible=[]
+        if keys:
+            ids=list(dict.fromkeys(r['id'] for r in keys))
+            where=(' WHERE id' if select=='SELECT *' else ' AND e.id')+' IN ('+','.join('?' for _ in ids)+')'
+            found={(r['kind'],r['id']):r for r in db.execute(select+source+where,args+ids)}
+            visible=[(found[(r['kind'],r['id'])],None,indexed['positions'].get((r['kind'],r['id']),[])) for r in keys]
+            for kind in ('corpus','independent'):
+                selected=[r['id'] for r in keys if r['kind']==kind]
+                if selected:gloss_inheritance.prefetch(db,kind,selected)
     else:
         matches = []
         matcher=corpus.QueryMatcher(q.get('q',''),q.get('field','all'),q.get('exact')=='true',q.get('case')=='true',q.get('mode'))
@@ -63,10 +80,18 @@ def search(db, q, lid):
         # These fields cannot depend on an inherited dictionary gloss. Resolve
         # meanings only for the visible results, rather than for the whole scan.
         raw_only=q.get('field') in ('form','ipa','translation','notes') and q.get('warnings')!='true'
-        rows=db.execute(select + source + order,args)
+        scan=select+source
+        if raw_only and q.get('field') in ('ipa','translation','notes'):
+            # Scalar searches need neither the word array nor its stored analyses.
+            # Sort and decode only these fields, then fetch the actual visible
+            # records below in the same read snapshot.
+            fields=('notes','language_notes') if q['field']=='notes' else (q['field'],)
+            values=','.join("'"+field+"',CASE WHEN json_type(r.body,'$."+field+"') IS NULL THEN '' ELSE json_extract(r.body,'$."+field+"') END" for field in fields)
+            scan="SELECT r.id,r.text_id,r.position,json_object("+values+") body,r.revision,r.title,r.text_language_id,r.text_metadata,r.kind,r.ordering,r.source_order FROM ("+scan+") r"
+        rows=db.execute(scan+order,args)
         if not raw_only:rows=gloss_inheritance.iter_rows(db,rows,lightweight=q.get('warnings')!='true')
         for row in rows:
-            entry = json.loads(row['body']) if raw_only else gloss_inheritance.load(db,row['kind'],row['id'],row['body'],metadata=False,lightweight=q.get('warnings')!='true')
+            entry = json.loads(row['body']) if raw_only else gloss_inheritance.load(db,row['kind'],row['id'],row['body'],metadata=False,lightweight=q.get('warnings')!='true' and not (row['kind']=='independent' and custom.full_references))
             entry['text_notes'] = json.loads(row['text_metadata']).get('notes', '')
             hits, ok = matcher(entry)
             extra=custom.values(row['kind'],row['id'],entry,entry.get('language_id') or row['text_language_id'])
@@ -79,14 +104,19 @@ def search(db, q, lid):
                 if not entry['warnings']:
                     continue
             tokens += len(hits)
-            matches.append((row, None, hits))
+            # A full-corpus match list must not retain every sentence's JSON.
+            matches.append(({'kind':row['kind'],'id':row['id']}, None, hits))
         total = len(matches)
         page = min(page, max(1, (total + size - 1) // size))
         visible = matches[(page-1)*size:page*size]
-        if raw_only:
-            for kind in ('corpus','independent'):
-                ids=[r['id'] for r,_,_ in visible if r['kind']==kind]
-                if ids:gloss_inheritance.prefetch(db,kind,ids)
+        if visible:
+            ids=list(dict.fromkeys(r['id'] for r,_,_ in visible))
+            where=(' WHERE id' if select=='SELECT *' else ' AND e.id')+' IN ('+','.join('?' for _ in ids)+')'
+            found={(r['kind'],r['id']):r for r in db.execute(select+source+where,args+ids)}
+            visible=[(found[(r['kind'],r['id'])],None,hits) for r,_,hits in visible]
+        for kind in ('corpus','independent'):
+            ids=[r['id'] for r,_,_ in visible if r['kind']==kind]
+            if ids:gloss_inheritance.prefetch(db,kind,ids)
     items = []
     for row, entry, hits in visible:
         if entry is None:entry=gloss_inheritance.load(db,row['kind'],row['id'],row['body'])
@@ -98,5 +128,5 @@ def search(db, q, lid):
     for e in items:
         if e['kind']=='independent':annotations.enrich(db,e,'independent',e['id'])
     filtered=q.get('field')=='reduplication' or bool(corpus.normalize(q.get('q',''),q.get('case')=='true')) or q.get('warnings')=='true'
-    stats=code_switching.summary(db,select+source,args,{(r['kind'],r['id']) for r,_,_ in matches} if filtered else None)
+    stats=indexed['code_summary'] if indexed is not None else code_switching.summary(db,select+source,args,{(r['kind'],r['id']) for r,_,_ in matches} if filtered else None)
     return dict(total=total, tokens=tokens, page=page, page_size=size, items=items,code_summary=stats)

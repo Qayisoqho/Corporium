@@ -67,6 +67,16 @@ def media_view(db,mid):
 def listing(db,lid):
     return [dict(r) for r in db.execute('SELECT s.*,m.name media_name FROM timeline_sessions s LEFT JOIN timeline_media m ON m.id=s.media_id WHERE s.language_id=? ORDER BY s.position,s.rowid DESC',(lid,))]
 
+def text_has_audio(db,lid,text_id):
+    """Test all sentences, including those outside the visible/search page."""
+    return bool(db.execute("""SELECT 1 FROM entries e JOIN texts t ON t.id=e.text_id
+        JOIN timeline_intervals i ON i.entry_id=e.id JOIN timeline_sessions s ON s.id=i.session_id
+        JOIN timeline_media m ON m.id=s.media_id
+        WHERE t.id=? AND t.language_id=? AND i.end_ms>0
+        AND i.start_ms<json_extract(m.metadata,'$.duration_ms') AND i.end_ms>i.start_ms
+        AND EXISTS(SELECT 1 FROM json_each(m.metadata,'$.streams') stream WHERE json_extract(stream.value,'$.type')='audio') LIMIT 1""",(text_id,lid)).fetchone())
+
+
 def sentence_clips(db,ids):
     """One batch for visible sentence references; no snapshot copies of media paths."""
     ids=list(dict.fromkeys(ids))
@@ -74,7 +84,7 @@ def sentence_clips(db,ids):
     result={key:[] for key in ids}
     if not ids:return result
     rows=db.execute('''SELECT i.id,i.entry_id,i.start_ms,i.end_ms,s.id session_id,s.name session_name,
-        m.id asset,m.name media_name,m.metadata FROM timeline_intervals i
+        m.id asset,m.name media_name,m.metadata,(SELECT e.text_id FROM entries e WHERE e.id=i.entry_id) text_id FROM timeline_intervals i
         JOIN timeline_sessions s ON s.id=i.session_id
         JOIN timeline_media m ON m.id=s.media_id
         WHERE (EXISTS(SELECT 1 FROM entries e WHERE e.id=i.entry_id) OR EXISTS(SELECT 1 FROM dictionary_examples d WHERE 'independent:'||d.id=i.entry_id)) AND i.entry_id IN ('''+','.join('?' for _ in ids)+') ORDER BY s.rowid,i.start_ms,i.id',ids)

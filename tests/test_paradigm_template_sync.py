@@ -79,6 +79,23 @@ class TemplateSyncTests(unittest.TestCase):
         self.undo();self.assertEqual(len(self.get(x)['body']['paradigms'][0]['rows']),4)
         b=self.request(lambda ts:ts[0]['rows'].pop());_,p=self.submit(b);self.assertEqual(p['deletions'],[])
 
+    def test_preset_updates_existing_inherited_meanings_and_linked_gloss_but_keeps_overrides(self):
+        x=self.setup_template();t=x['body']['paradigms'][0];t['rows'][0]['gloss_addition']='PST'
+        meanings=t['rows'][0]['realizations'][0]['meanings'];meanings[0].update(gloss_mode='inherit',gloss_addition='PST',short_gloss='')
+        meanings.append(dict(id='custom-inherited',base_sense_id='go-meaning',gloss_mode='inherit',gloss_addition='CUSTOM'))
+        meanings.append(dict(id='independent',short_gloss='manual'))
+        x=self.api('lexeme-save',x)
+        # First align the original template's preset with this existing table.
+        self.submit(self.request(lambda ts:ts[0]['rows'][0].update(gloss_addition='PST')))
+        x=self.get(x)
+        sources=[self.source(k,[('went','')]) for k in ('corpus','independent')]
+        for src in sources:self.link(src,x)
+        before=self.get(x);self.submit(self.request(lambda ts:ts[0]['rows'][0].update(gloss_addition='PST.DAT')))
+        fresh=self.get(x);meanings=fresh['body']['paradigms'][0]['rows'][0]['realizations'][0]['meanings']
+        self.assertEqual([m.get('gloss_addition',m['short_gloss']) for m in meanings],['PST.DAT','CUSTOM','manual'])
+        self.assertEqual([self.gloss(src) for src in sources],['去.PST.DAT']*2)
+        self.undo();self.assertEqual(self.get(x)['body'],before['body']);self.assertEqual([self.gloss(src) for src in sources],['去.PST']*2)
+
     def test_same_template_in_multiple_tables_and_other_language_scope(self):
         x=self.setup_template();table=copy.deepcopy(x['body']['paradigms'][0]);table['id']='second-table'
         for row in table['rows']:

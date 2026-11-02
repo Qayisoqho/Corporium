@@ -2,8 +2,10 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const geometry=require('../web/timeline-geometry.js');
 test('pressing play after the media ends starts again from zero',async()=>{
  const vm=require('node:vm'),fs=require('node:fs'),source=fs.readFileSync(require.resolve('../web/timeline.js'),'utf8');
- const s={data:{media:{metadata:{duration_ms:20000}}},head:20000,timeSelection:null,loop:false,boundedPlayer:{start(a,z){assert.equal(a,0);assert.equal(z,20);}}};
+ const volume=require('../web/playback-volume.js');let bound;
+ const s={window:{CorporiumVolume:{timelineContext:volume.timelineContext,bind(media,context){bound=context;}}},currentInterval:()=>null,sid:'session',media:{},refreshTimelineVolume(){},data:{media:{metadata:{duration_ms:20000}}},head:20000,timeSelection:null,loop:false,boundedPlayer:{start(a,z){assert.equal(a,0);assert.equal(z,20);}}};
  vm.createContext(s);vm.runInContext(source.match(/async function playTimeSelection[^\n]+/)[0],s);await vm.runInContext('playTimeSelection()',s);
+ assert.equal(bound.key,'timeline:session');
 });
 test('zoom stops at the full extent and returns to its origin, including out-of-media annotations',()=>{
  let view=[5000,10000];for(let n=0;n<100;n++)view=geometry.zoom(...view,.5,100,[-2000,25000]);assert.deepEqual(view,[-2000,27000]);

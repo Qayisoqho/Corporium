@@ -7,9 +7,62 @@ import base64
 import codecs
 import json
 import zlib
+import hashlib
+import threading
 from collections import OrderedDict
 
 import long_tasks
+
+
+STATISTICS_LIMIT=16*1024**2
+_statistics=OrderedDict()
+_statistics_bytes=0
+_statistics_lock=threading.RLock()
+
+
+def statistics_metadata(payload):
+    """Reuse immutable, validated counts metadata, never live sentence cards."""
+    global _statistics_bytes
+    key=hashlib.sha256(payload.encode('ascii')).digest()
+    with _statistics_lock:
+        saved=_statistics.get(key)
+        if saved is not None:_statistics.move_to_end(key)
+    if saved is not None:
+        long_tasks.checkpoint(None,'正在读取分析结果…')
+        return json.loads(saved)
+    # Validate the complete legacy payload, releasing hits/cards as we go.
+    result=read(payload,only={'statistics','vocabulary'})
+    encoded=json.dumps(result,ensure_ascii=False,separators=(',',':')).encode('utf8')
+    if len(encoded)<=STATISTICS_LIMIT:
+        long_tasks.checkpoint()
+        with _statistics_lock:
+            old=_statistics.pop(key,None)
+            if old is not None:_statistics_bytes-=len(old)
+            while _statistics and (_statistics_bytes+len(encoded)>STATISTICS_LIMIT or len(_statistics)>=4):
+                _,old=_statistics.popitem(last=False);_statistics_bytes-=len(old)
+            _statistics[key]=encoded;_statistics_bytes+=len(encoded)
+    return result
+
+
+def selected_hits(payload,indices,*,validated=False):
+    """Preserve requested order/duplicates while retaining only the chosen hits."""
+    if not indices:return []
+    # Keep Python's historical indexing/error behavior for unusual old payloads.
+    if any(not isinstance(i,int) or i<0 for i in indices):
+        hits=read(payload,only={'hits'})['hits']
+        return [{**hits[i],'index':i} for i in indices]
+    wanted=set(indices);selected={}
+    class Complete(Exception):pass
+    def collect(index,hit):
+        if index in wanted:selected[index]=hit
+        # statistics_metadata has already validated this exact immutable
+        # payload. Once all requested positions are found, the remaining
+        # occurrences/frozen cards cannot change the selected result.
+        if validated and len(selected)==len(wanted):raise Complete
+    try:read(payload,only=set(),hit_sink=collect)
+    except Complete:pass
+    if wanted-selected.keys():raise IndexError('list index out of range')
+    return [{**selected[i],'index':i} for i in indices]
 
 
 def text_chunks(payload,size=65536):

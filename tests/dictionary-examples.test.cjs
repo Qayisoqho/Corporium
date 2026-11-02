@@ -1,6 +1,6 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync(require.resolve('../web/morphemes.js'),'utf8');
-const scope={};vm.createContext(scope);vm.runInContext(source.match(/^function dictionaryLinkNote[^\n]+/m)[0],scope);
+const scope={};vm.createContext(scope);require('./display-scripts-helpers.js')(scope);vm.runInContext(source.match(/^function dictionaryLinkNote[^\n]+/m)[0],scope);
 test('automatic batch-link provenance is hidden without hiding surrounding research notes',()=>{
  assert.equal(scope.dictionaryLinkNote('形式与简短标注释义完全匹配，批量关联'),'');
  assert.equal(scope.dictionaryLinkNote('人工判断\n形式与简短标注释义完全匹配，批量关联\n需要回访'),'人工判断\n需要回访');

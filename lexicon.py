@@ -1,4 +1,5 @@
 import long_tasks
+import corpus
 """Stable corpus units and an evidence-linked lexicon with sense-scoped gloss updates."""
 import link_review
 import morpheme_registry
@@ -150,10 +151,19 @@ def sync_entry(db,eid,word_ids=None,morph_ids=None,preserve_complex=False,analyz
         morphs=word['morphemes']
         old_morphs=children[uid]
         mids=(morph_ids or {}).get(uid) or match_units(old_morphs,morphs)
+        reprojected=set()
+        if re.search(r'#(?:sup|super)\[',word['form']+word['gloss']):
+            import segmentation
+            snapshot={k:word[k] for k in ('form','gloss')}
+            for old_unit in old_morphs:
+                previous=json.loads(previous_segments.get(old_unit['id'],'null') or 'null')
+                if not previous or previous.get('snapshot')!=snapshot:continue
+                for j,m in enumerate(morphs):
+                    if segmentation.script_reprojection(previous,m):mids[j]=old_unit['id'];reprojected.add(old_unit['id']);break
         for j,(m,mid) in enumerate(zip(morphs,mids)):
             snapshot={k:word[k] for k in ('form','gloss')}
             previous_segment=previous_segments.get(mid)
-            if previous_segment and not (preserve_complex and uid in (morph_ids or {})):
+            if previous_segment and mid not in reprojected and not (preserve_complex and uid in (morph_ids or {})):
                 previous_segment=json.loads(previous_segment)
                 if (m.get('kind')!='simple' or previous_segment.get('kind')!='simple') and (previous_segment.get('key')!=m.get('key') or previous_segment.get('snapshot')!=snapshot or previous_segment.get('fragments')!=m.get('fragments') or previous_segment.get('kind')!=m.get('kind')):mid=str(uuid.uuid4())
             segment_data[mid]={**m,'snapshot':snapshot}
@@ -432,6 +442,7 @@ def validate_links(db,affected=None):
 
 
 def list_lexemes(db,lid,query='',page=1,page_size=30,ids_only=False,category='',order='',search=None,summary=False,targets=False,counts=True):
+    if not db.in_transaction:db.execute('BEGIN')
     import dictionary_paging
     dictionary_paging.paginate([],1,page_size)
     if isinstance(search,str):
@@ -511,12 +522,12 @@ def get_lexeme(db,lid):
     return value if value['target_kind']=='morpheme' else homonyms.decorate(db,value)
 
 
-def segment_display_gloss(segment,fallback):
+def segment_display_gloss(segment,fallback,field='gloss'):
     snapshot=(segment or {}).get('snapshot')
     if snapshot:
         parsed=analyze({'words':[dict(snapshot)],'ipa':'','translation':''})['words'][0]
         match=next((m for m in parsed['morphemes'] if m['key']==segment.get('key')),None)
-        if match:return match.get('display_gloss',match['gloss'])
+        if match:return match.get('display_'+field,match[field])
     return fallback
 
 
@@ -535,6 +546,7 @@ def unit_info(db,uid):
     detail=db.execute('SELECT body FROM unit_segments WHERE id=?',(uid,)).fetchone()
     result['segmentation']=json.loads(detail[0]) if detail else None
     result['display_gloss']=live.get('display_gloss',result['gloss']) if u['body'] and live else segment_display_gloss(result['segmentation'],result['gloss'])
+    result['display_form']=live.get('display_form',live['form']) if u['body'] and live else segment_display_gloss(result['segmentation'],result['form'],'form')
     result['unit_type']='phonological_boundary' if boundary_count(u['form']) else u['kind']
     if u['body'] and u['kind']=='word' and u['active'] and json.loads(u['body'])['words'][u['position']].get('punctuation'):result['unit_type']='punctuation'
     result['gloss_relations']=gloss_relations(result['gloss']) if not boundary_count(u['form']) else []
@@ -560,10 +572,11 @@ def examples(db,lid,page=1,kind='all',form_id='all'):
         e=dict(row);e['status']='confirmed';e['entry']=analyze(gloss_inheritance.load(db,'corpus',row['entry_id'],e.pop('body'))) if row['body'] else None
         segment=db.execute('SELECT body FROM unit_segments WHERE id=?',(e['unit_id'],)).fetchone()
         e['display_gloss']=segment_display_gloss(json.loads(segment[0]) if segment else None,e['gloss'])
+        e['display_form']=segment_display_gloss(json.loads(segment[0]) if segment else None,e['form'],'form')
         if e['entry'] and 0<=row['word_position']<len(e['entry']['words']):
             word=e['entry']['words'][row['word_position']]
             unit=word if row['kind']=='word' else word['morphemes'][row['unit_position']] if 0<=row['unit_position']<len(word['morphemes']) else None
-            if unit:e['gloss']=unit['gloss'];e['display_gloss']=unit.get('display_gloss',unit['gloss'])
+            if unit:e['gloss']=unit['gloss'];e['display_gloss']=unit.get('display_gloss',unit['gloss']);e['display_form']=unit.get('display_form',unit['form'])
         e.update(morphology.analysis(db,e['id']))
         if e['entry']:annotations.enrich(db,e['entry'],'corpus',e['entry_id'])
         effective=(e['entry'].get('language_id') or e['text_language']) if e['entry'] else None
@@ -710,6 +723,22 @@ def mutate(db,action,body,lid):
         db.execute('DELETE FROM lexemes WHERE id=?',(old['id'],))
         homonyms.clear_singleton(db,lid,old['headword'])
         return {'ok':True}
+    if action=='lexeme-unlink' and body.get('all') is True:
+        target=get_lexeme(db,body.get('lexeme_id'))
+        if target['language_id']!=lid:raise ValueError('词条或语言范围已变化，请重新打开后操作')
+        if body.get('revision')!=target['revision']:raise ValueError('词条已修改，请重新选择词条')
+        if body.get('confirmed') is not True:raise ValueError('请确认解除全部句子关联')
+        rows=list(db.execute('SELECT id FROM lexical_links WHERE lexeme_id=?',(target['id'],)))
+        for table in ('component_links','lexical_reviews','morphology_analyses','lexical_links'):
+            db.executemany('DELETE FROM '+table+' WHERE id=?',[(r['id'],) for r in rows])
+        count=0
+        for row in db.execute('SELECT * FROM dictionary_examples WHERE language_id=?',(lid,)).fetchall():
+            data=json.loads(row['body']);before=data.get('targets',[])
+            kept=[t for t in before if t['lexeme_id']!=target['id']]
+            if len(kept)==len(before):continue
+            data['targets']=kept;count+=len(before)-len(kept)
+            db.execute('UPDATE dictionary_examples SET body=?,revision=revision+1 WHERE id=?',(json.dumps(data,ensure_ascii=False),row['id']))
+        return {'ok':True,'count':len(rows)+count,'corpus':len(rows),'independent':count}
     if action=='lexeme-unlink':
         items=body.get('items',[body])
         if not isinstance(items,list) or not 1<=len(items)<=100:raise ValueError('请选择本页要解除的关联')
@@ -831,7 +860,7 @@ def import_bundle(db,bundle,language_map,entry_map,lid,layouts=None):
         name=t['name'];n=1
         while db.execute('SELECT 1 FROM writing_types WHERE language_id=? AND name=?',(target_language,name)).fetchone():
             n+=1;name=t['name']+'（导入 '+str(n)+'）'
-        new=dictionary_data.mutate(db,'writing-save',dict(name=name,font=t['font'],position=t['position']),target_language)
+        new=dictionary_data.mutate(db,'writing-save',dict(name=name,font=t['font'],position=t['position'],space_before=t.get('space_before'),space_after=t.get('space_after')),target_language)
         type_map[t['id']]=new['id']
     for x in long_tasks.steps(bundle.get('lexemes',[])):
         if x['language_id'] not in language_map: raise ValueError('词典缺少引用语言的信息')
@@ -914,7 +943,13 @@ def import_bundle(db,bundle,language_map,entry_map,lid,layouts=None):
     if bundle.get('example_number_next') is not None:example_numbering.advance(db,lid,bundle['example_number_next'])
     lmap={}
     for l in long_tasks.steps(bundle.get('annotation_layers',[])):
-        new=annotations.mutate(db,'layer-save',{k:v for k,v in l.items() if k not in ('id','revision')},language_map[l['language_id']]);lmap[l['id']]=new['id']
+        config={k:v for k,v in l.items() if k not in ('id','revision')}
+        if config.get('dictionary_field','').startswith('writing:'):
+            writing=type_map.get(config['dictionary_field'][8:])
+            if writing:config['dictionary_field']='writing:'+writing
+            else:config['_unavailable_dictionary_field']=True
+        elif config.get('dictionary_field','').startswith('tag:'):config['_unavailable_dictionary_field']=True
+        new=annotations.mutate(db,'layer-save',config,language_map[l['language_id']]);lmap[l['id']]=new['id']
     for c in long_tasks.steps(bundle.get('annotation_cells',[])):
         if c['owner_kind']=='corpus':
             rid=entry_map.get(c['record_id']) or missing_entries.get(c['record_id']);uid=umap.get(c['unit_id'])
@@ -938,7 +973,7 @@ def auto_gloss_key(value,lookup,features=()):
     Complex structures remain ordered and opaque. Never flatten affixes, infixes,
     relational arguments or bracketed groups into inherent features.
     """
-    value=re.sub(r'[;:\\]', '.', value)
+    value=re.sub(r'[;:\\]', '.', corpus.script_spelling(value))
     if any(c in value for c in '-=+<>[](){}'):
         return ('structured',value,tuple(sorted(set(features))))
     parts=value.split('.')
@@ -975,7 +1010,7 @@ def auto_link_plan(db,lid,text_id='',ignore_symbols='-=.',ignore_position='edges
     ignore_symbols=''.join(c for c in '-=.' if c in ignore_symbols)
     # Compare equivalent Unicode spellings (e.g. ǰ and j + combining caron)
     # without rewriting source forms, segmentation references or dictionary data.
-    def form_key(value):return unicodedata.normalize('NFC',value)
+    def form_key(value):return unicodedata.normalize('NFC',corpus.plain(value))
     def stripped(value):
         value=form_key(value)
         return (value.strip(ignore_symbols) if ignore_position=='edges' else value.translate(str.maketrans('', '', ignore_symbols))) if ignore_symbols else value
@@ -1032,7 +1067,7 @@ def auto_link_plan(db,lid,text_id='',ignore_symbols='-=.',ignore_position='edges
                 semantic={}
                 for parent in parents.values():
                     word=body['words'][parent['position']]
-                    if '<' in word['form'] or '#' in word['gloss']:
+                    if '<' in word['form'] or '#' in word['form'] or '#' in word['gloss']:
                         semantic[parent['id']]=analyze(dict(ipa='',translation='',words=[dict(word)]))['words'][0].get('morphemes',[])
                 def meaning(u):
                     if u['kind']=='word':return clean(u['form']),u['gloss']
@@ -1048,7 +1083,9 @@ def auto_link_plan(db,lid,text_id='',ignore_symbols='-=.',ignore_position='edges
                     multipart_suggestions.extend(proposed);multipart_warnings.extend(notes)
                 for u in units:
                     match_form,match_gloss=meaning(u)
-                    yield {**u,**metadata,'body_data':body,'match_form':match_form,'match_gloss':match_gloss}
+                    morphs=semantic.get(u['parent_id'],[])
+                    live=morphs[u['position']] if u['kind']=='morpheme' and u['position']<len(morphs) else {}
+                    yield {**u,**metadata,'body_data':body,'match_form':match_form,'match_gloss':match_gloss,'display_form':live.get('display_form',u['form'])}
         duplicates.clear()
         if text_id in ('','@independent'):
             import segmentation
@@ -1072,7 +1109,7 @@ def auto_link_plan(db,lid,text_id='',ignore_symbols='-=.',ignore_position='edges
                         keys=word_keys if unit['key']=='@word' else {unit['key']}
                         linked_here=any(t.get('segmentation_ref',{}).get('word')==wi and t.get('segmentation_ref',{}).get('key') in keys and not t.get('segmentation_ref',{}).get('detached') for t in data.get('targets',[]))
                         extra={'coverage':[f'independent:{example["id"]}:{wi}:'+k for k in unit.get('members',[unit['key']])]} if multipart_catalog and unit['key']!='@word' else {}
-                        yield dict(id='independent:'+example['id']+':'+str(wi)+':'+unit['key'],entry_id=example['id'],entry_revision=example['revision'],revision=example['revision'],kind='word' if unit['key']=='@word' else 'morpheme',parent_id=None,position=wi,form=unit['form'],gloss=unit['gloss'],match_form=unit.get('lookup_form',unit['form']),match_gloss=unit.get('display_gloss',unit['gloss']),body_data=data,sentence_position=number,title='独立例句库',link_id=linked_here,owner_kind='independent',segmentation_ref=ref,**extra)
+                        yield dict(id='independent:'+example['id']+':'+str(wi)+':'+unit['key'],entry_id=example['id'],entry_revision=example['revision'],revision=example['revision'],kind='word' if unit['key']=='@word' else 'morpheme',parent_id=None,position=wi,form=unit['form'],gloss=unit['gloss'],display_form=unit.get('display_form',unit['form']),match_form=unit.get('lookup_form',unit['form']),match_gloss=unit.get('display_gloss',unit['gloss']),body_data=data,sentence_position=number,title='独立例句库',link_id=linked_here,owner_kind='independent',segmentation_ref=ref,**extra)
     choices=OrderedDict();choice_bytes=0
     def matching(effective,form,gloss):
         nonlocal choice_bytes
@@ -1112,7 +1149,7 @@ def auto_link_plan(db,lid,text_id='',ignore_symbols='-=.',ignore_position='edges
         if r['link_id'] or duplicates.get(r['id'],{}).get('link_id'):
             linked+=1;continue
         item={k:r[k] for k in ('entry_id','entry_revision','kind','form','gloss','title','sentence_position')}
-        item.update(unit_id=r['id'],unit_revision=r['revision'],effective_language_id=effective)
+        item.update(unit_id=r['id'],unit_revision=r['revision'],effective_language_id=effective,display_form=r.get('display_form',r['form']),display_gloss=r.get('match_gloss',r['gloss']))
         if r.get('coverage'):item['coverage']=r['coverage']
         if r.get('owner_kind'):item.update(owner_kind=r['owner_kind'],segmentation_ref=r['segmentation_ref'])
         if possible:

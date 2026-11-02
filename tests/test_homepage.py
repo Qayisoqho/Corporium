@@ -10,6 +10,14 @@ class HomeTests(unittest.TestCase):
         code,r=self.call('/api/home');self.assertEqual(code,200)
         self.assertEqual(r['counts']['sentences'],0);self.assertEqual(r['samples'],[])
 
+    def test_default_source_is_distinguished_from_identical_user_authored_source(self):
+        a=self.call('/api/example-save',dict(body=dict(ipa='one')))[1]
+        b=self.call('/api/example-save',dict(body=dict(ipa='two',source='独立例句')))[1]
+        samples={s['id']:s for s in self.call('/api/home')[1]['samples']}
+        self.assertTrue(samples[a['id']]['source_default'])
+        self.assertFalse(samples[b['id']]['source_default'])
+        self.assertEqual(samples[a['id']]['source'],samples[b['id']]['source'])
+
     def test_global_counts_dedup_and_sources(self):
         self.call('/api/import',dict(title='Text',content='#pass([ipa], (([a],[A]),), [translation])'))
         x=self.call('/api/lexeme-save',dict(headword='a',body={}))[1]

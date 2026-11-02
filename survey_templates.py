@@ -72,7 +72,7 @@ def mutate(db,lid,folder,b):
                 if node['parent_id'] is None:
                     node['position']=root_position;root_position+=1
             d=dict(format='corporium-survey-template',version=1,id=survey.uid(),name='',nodes=nodes,
-                   writing_types=[dict(r) for r in db.execute('SELECT id,name,font FROM writing_types WHERE language_id=?',(lid,)) if r['id'] in types])
+                   writing_types=[dict(r) for r in db.execute('SELECT id,name,font,space_before,space_after FROM writing_types WHERE language_id=?',(lid,)) if r['id'] in types])
         else:d=read(folder,b.get('id'))
         if action in ('save','rename','copy'):
             name=str(b.get('name','')).strip()
@@ -94,7 +94,10 @@ def mutate(db,lid,folder,b):
             for t in d.get('writing_types',[]):
                 old=db.execute('SELECT id FROM writing_types WHERE language_id=? AND name=? AND font=?',(lid,t['name'],t['font'])).fetchone()
                 tid=old[0] if old else survey.uid()
-                if not old:db.execute('INSERT INTO writing_types VALUES(?,?,?,?,0,1)',(tid,lid,t['name'],t['font']))
+                if not old:
+                    import display_spacing
+                    spacing=display_spacing.values(t)
+                    db.execute('INSERT INTO writing_types(id,language_id,name,font,position,revision,space_before,space_after) VALUES(?,?,?,?,0,1,?,?)',(tid,lid,t['name'],t['font'],spacing['space_before'],spacing['space_after']))
                 type_map[t['id']]=tid
             mapping={};root=None;remaining=list(rows)
             while remaining:

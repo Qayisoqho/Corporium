@@ -19,7 +19,8 @@ class CleanupTests(unittest.TestCase):
         code,data=self.call('/api/'+path,b);self.assertEqual(code,200,data);return data
 
     def test_separators_only_connect_filled_cells(self):
-        for before,after in [('root-GEN-NOM-','root-GEN-NOM'),('root-GEN-.NOM-_','root-GEN-NOM'),('root--GEN==PL++','root-GEN=PL'),('-.GEN','GEN'),('A_/B;','A_B'),('GEN.#sub[].','GEN'),('._-=+',''),('root<GEN.SG>-','root<GEN.SG>'),('A#sub[2]-B_','A#sub[2]-B')]:
+        # Underscores are literal Leipzig word-internal spaces, not boundaries.
+        for before,after in [('root-GEN-NOM-','root-GEN-NOM'),('root-GEN-.NOM-_','root-GEN-NOM-_'),('root--GEN==PL++','root-GEN=PL'),('-.GEN','GEN'),('A_/B;','A_/B'),('GEN.#sub[].','GEN'),('._-=+','_'),('root<GEN.SG>-','root<GEN.SG>'),('A#sub[2]-B_','A#sub[2]-B_')]:
             with self.subTest(before=before):self.assertEqual(corpus.compact_gloss(before),after)
         self.assertEqual(corpus.compact_empty_pairs('a--b=','A--B='),('a-b','A-B'))
         self.assertEqual(corpus.compact_empty_pairs('a-n','A-'),('a-n','A-'))

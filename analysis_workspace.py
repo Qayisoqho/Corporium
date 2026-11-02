@@ -26,7 +26,7 @@ import analysis_payload
 import grammaticality
 
 TABLES=('analysis_state','analysis_runs','analysis_saved','analysis_groups','analysis_evidence')
-VERSION=14
+VERSION=15
 FIELDS=('reduplication','form','morpheme','tag','lexeme','pos','ipa','translation','notes','grammaticality')
 SENTENCE_FIELDS=('ipa','translation','notes','grammaticality')
 DIMENSIONS=('value','form','tag','lexeme','pos','text','sentence_speaker','speakers','place','date','genre','folder','grammaticality')
@@ -126,9 +126,11 @@ def normalize(b):
     if b.get('kind')=='counts':
         case=b.get('case',True)
         if type(case) is not bool:raise ValueError('搜索匹配设置无效')
+        separate=b.get('separate_clitics',False)
+        if type(separate) is not bool:raise ValueError('附着成分计词选项无效')
         import vocabulary_selection
         selection=vocabulary_selection.normalize(b.get('vocabulary'))
-        return dict(kind='counts',scope=corpus_statistics.normalize(b.get('scope',{})),case=case,engine=VERSION,**({'vocabulary':selection} if selection else {}))
+        return dict(kind='counts',scope=corpus_statistics.normalize(b.get('scope',{})),case=case,separate_clitics=separate,engine=VERSION,**({'vocabulary':selection} if selection else {}))
     scope=b.get('scope',{})
     if not isinstance(scope,dict):raise ValueError('语料范围无效')
     normalized_scope={k:text(scope.get(k,'')) for k in ('text_id','folder_id','speakers','place','date','genre','sentence_language','code_mode','code_id')}
@@ -324,7 +326,7 @@ def run(db,lid,b):
         if q.get('kind')=='counts':
             import vocabulary_selection
             selection=vocabulary_selection.Selection(db,lid,q['vocabulary'],q['case']) if q.get('vocabulary') else None
-            stats=corpus_statistics.calculate(db,lid,q['scope'],case=q.get('case',True),selection=selection)
+            stats=corpus_statistics.calculate(db,lid,q['scope'],case=q.get('case',True),selection=selection,separate_clitics=q.get('separate_clitics',False))
             result=dict(hits=stats.pop('_hits'),vocabulary=stats.pop('_vocabulary'),statistics=stats)
             summary=encode(dict(kind='counts',**{k:v for k,v in stats.items() if k!='rows'}))
         else:
@@ -392,6 +394,12 @@ def materialized_items(db,hits,*,reuse_words=False):
             body=corpus.analyze(gloss_inheritance.load(db,'corpus',r['id'],r['body']),cache=analysis_cache);language=body.get('language_id') or r['owner_language']
             grammaticality.strip_corpus(body)
             annotations.attach(body,[units[r['id']].get(i,'') for i in range(len(body['words']))],definitions[language],cells[r['id']])
+            if any(l.get('source')=='dictionary' for l in definitions[language]):
+                import dictionary_layers
+                dictionary_layers.project(db,body,'corpus',r['id'],language,definitions[language])
+                for index,word in enumerate(body['words']):
+                    for layer in word.get('extra_layers',[]):
+                        if layer.get('derived'):layer['unit_id']=units[r['id']].get(index,'')
             morpheme_colors.attach(db,body,'corpus',r['id'],language,prepared=colors)
             code_switching.attach(db,body,'corpus',r['id'])
             yield r['id'],{**dict(r),'kind':'corpus','body':body,'metadata':json.loads(r['metadata']),'attribution':people.attribution('corpus',r['id'])}
@@ -416,11 +424,11 @@ def result_page(db,lid,b):
     common=dict(id=row['id'],query=q,summary=summary,version=v,stale=stale,snapshot=frozen,created=row['created'])
     if stale and not frozen:return {**common,'items':[],'total':0,'page':1,'pages':1,'frequencies':[]}
     if q.get('kind')=='counts':
-        result=analysis_payload.read(row['payload'],only={'statistics','vocabulary','hits'})
+        result=analysis_payload.statistics_metadata(row['payload'])
         if 'vocabulary' not in result:return {**common,'statistics':result['statistics'],'items':[],'page':1,'pages':1}
         import vocabulary_statistics
         profile,indices=vocabulary_statistics.page(result,b)
-        selected=[{**result['hits'][i],'index':i} for i in indices]
+        selected=analysis_payload.selected_hits(row['payload'],indices,validated=True)
         records=analysis_payload.read(row['payload'],only={'records'},record_ids={h['entry_id'] for h in selected}).get('records',{}) if frozen and selected else materialize(db,selected)
         profile['items']=[{**h,'record':source_record(records.get(h['entry_id']))} for h in selected]
         return {**common,'statistics':result['statistics'],'vocabulary':profile,'items':[],'page':1,'pages':1}

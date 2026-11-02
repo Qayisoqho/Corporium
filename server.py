@@ -39,6 +39,7 @@ import dictionary_replace
 import dictionary_batch
 import sentence_dictionary
 import corpus_search
+import sentence_search_index
 import analysis_workspace
 import timeline
 import media_engine
@@ -73,7 +74,7 @@ class ThreadingHTTPServer(BaseThreadingHTTPServer):
 
 
 @contextmanager
-def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False):
+def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False, deferred=False):
     db = sqlite3.connect(DB if path is None else path)
     db.row_factory = sqlite3.Row
     import gloss_inheritance
@@ -90,7 +91,7 @@ def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False)
                 db.execute('PRAGMA temp_store=FILE');db.execute('PRAGMA cache_size=-8192')
                 job=long_tasks.CURRENT.get()
                 db.set_progress_handler(lambda:int(job['cancel'].is_set()),5000)
-                db.execute('BEGIN IMMEDIATE')
+                db.execute('BEGIN' if deferred else 'BEGIN IMMEDIATE')
             if audit and journal.action.get():
                 if not db.in_transaction:db.execute("BEGIN IMMEDIATE")
                 changes = journal.watch(db)
@@ -147,6 +148,7 @@ def init():
             missing_languages=not old.execute("SELECT 1 FROM sqlite_master WHERE name='languages'").fetchone()
             missing_dictionary=not old.execute("SELECT 1 FROM sqlite_master WHERE name='morphology_analyses'").fetchone() or not old.execute("SELECT 1 FROM sqlite_master WHERE name='morph_class_templates'").fetchone()
             missing_class_order=categories.needed(old)
+            missing_display_spacing=any(not {'space_before','space_after'}.issubset({r[1] for r in old.execute('PRAGMA table_info('+table+')')}) for table in ('writing_types','annotation_layers'))
             missing_sentence_layers='anchor' not in {r[1] for r in old.execute('PRAGMA table_info(annotation_layers)')} or not old.execute("SELECT 1 FROM sqlite_master WHERE name='category_classes'").fetchone()
             missing_track_tree=old.execute("SELECT 1 FROM sqlite_master WHERE name='timeline_tracks'").fetchone() and 'parent_id' not in {r[1] for r in old.execute('PRAGMA table_info(timeline_tracks)')}
             missing_track_color=old.execute("SELECT 1 FROM sqlite_master WHERE name='timeline_tracks'").fetchone() and 'color' not in {r[1] for r in old.execute('PRAGMA table_info(timeline_tracks)')}
@@ -161,7 +163,7 @@ def init():
             missing_organization=not old.execute("SELECT 1 FROM sqlite_master WHERE name='semantic_classes'").fetchone()
             missing_collaborators=not old.execute("SELECT 1 FROM sqlite_master WHERE name='collaborator_assignments'").fetchone()
             missing_inheritance=not old.execute("SELECT 1 FROM sqlite_master WHERE name='gloss_migrations'").fetchone()
-            if missing_class_order or missing_example_numbers or missing_example_groups or grammaticality.corpus_rows_needed(old) or storage_optimization.needed(old) or missing_inheritance or script_tags.needed(old) or manual_status.needed(old) or missing_code_spans or missing_object_media or missing_organization or missing_survey or missing_notes or missing_collaborators or missing_languages or missing_dictionary or missing_sentence_layers or missing_track_tree or missing_track_color or missing_session_order or missing_text_order or old.execute('PRAGMA user_version').fetchone()[0]<4 or not old.execute("SELECT 1 FROM sqlite_master WHERE name='corpus_units'").fetchone():
+            if missing_display_spacing or missing_class_order or missing_example_numbers or missing_example_groups or grammaticality.corpus_rows_needed(old) or storage_optimization.needed(old) or missing_inheritance or script_tags.needed(old) or manual_status.needed(old) or missing_code_spans or missing_object_media or missing_organization or missing_survey or missing_notes or missing_collaborators or missing_languages or missing_dictionary or missing_sentence_layers or missing_track_tree or missing_track_color or missing_session_order or missing_text_order or old.execute('PRAGMA user_version').fetchone()[0]<4 or not old.execute("SELECT 1 FROM sqlite_master WHERE name='corpus_units'").fetchone():
                 backup_policy.sqlite_snapshot(DB.parent/'backups',old,'languages' if missing_languages else 'lexicon')
     with connect() as db:
         db.executescript('''CREATE TABLE IF NOT EXISTS texts(id TEXT PRIMARY KEY,title TEXT,source TEXT,original TEXT,digest TEXT UNIQUE,errors TEXT);
@@ -190,6 +192,7 @@ def init():
         import word_analysis_memory
         word_analysis_memory.initialize(db)
         if grammaticality.migrate_corpus(db):analysis_workspace.invalidate(db)
+        sentence_search_index.initialize(db)
     backup_policy.prune(DB.parent/'backups')
 
 
@@ -306,9 +309,11 @@ class Handler(BaseHTTPRequestHandler):
         if url.path=='/api/fonts':
             return self.send(font_catalog.scan(q.get('refresh')=='true'))
         if url.path=='/api/font-file':
-            data,mime=font_catalog.font_file(q.get('id',''))
+            data,mime=font_catalog.font_file(q.get('id',''),q.get('v'))
             return self.send(data,mime=mime)
-        with connect(observe_snapshot=url.path=='/api/grammar-audit') as db:
+        if url.path in {'/font/'+r[1] for r in font_catalog.BUILTIN_FILES}:
+            return self.send(font_catalog.read_file(font_catalog.builtin_path(url.path[6:]),q.get('v')),mime='font/ttf')
+        with connect(observe_snapshot=url.path in ('/api/grammar-audit','/api/lexemes','/api/morphemes')) as db:
             # Sentence bodies and stable units must come from the same snapshot.
             db.execute('BEGIN')
             lid=q.get('language','all')
@@ -329,6 +334,7 @@ class Handler(BaseHTTPRequestHandler):
             if url.path=='/api/timeline-text-order':
                 timeline.session(db,lid,q.get('id'))
                 return self.send(timeline.text_order.state(db,lid,q.get('text_id'),q.get('id')))
+            if url.path=='/api/text-audio':return self.send({'has_audio':timeline.text_has_audio(db,lid,q.get('id',''))})
             if url.path=='/api/timeline-clips':
                 result=timeline.sentence_clips(db,[v for v in q.get('ids','').split(',') if v])
                 proxies={}
@@ -401,8 +407,21 @@ class Handler(BaseHTTPRequestHandler):
                 code_switching.attach(db,d['body'],'independent',d['id'],d)
                 return self.send(d)
             if url.path=='/api/sentence-search-fields':return self.send(annotations.search_catalog(db,lid))
+            if url.path=='/api/sentence-index-status':return self.send({'pending':sentence_search_index.pending(db,q.get('field',''))})
             if url.path=='/api/example-library':return self.send(annotations.search(db,q))
             if url.path=='/api/punctuation-settings':return self.send(punctuation.settings(db,lid))
+            if url.path=='/api/dictionary-layer-fields':
+                import dictionary_layers
+                return self.send({'fields':dictionary_layers.catalog(db,q.get('lexical_language',lid))})
+            if url.path=='/api/dictionary-layer-values':
+                owners=json.loads(q.get('owners','[]'))
+                if not isinstance(owners,list) or len(owners)>200:raise ValueError('例句数量超出范围')
+                result=[]
+                for owner in owners:
+                    if not isinstance(owner,dict) or owner.get('kind') not in ('corpus','independent') or not isinstance(owner.get('id'),str):raise ValueError('例句来源无效')
+                    d=annotations.get(db,owner['kind'],owner['id'])
+                    result.append(dict(kind=d['kind'],id=d['id'],values=d.get('dictionary_layers',{}),words=d['words'],layers=d['layers']))
+                return self.send({'items':result})
             if url.path=='/api/layers':return self.send(annotations.layers(db,q.get('lexical_language',lid)))
             if url.path=='/api/annotations':
                 d=annotations.get(db,q['kind'],q['id']);code_switching.attach(db,d['body'],q['kind'],q['id'],d)
@@ -410,7 +429,10 @@ class Handler(BaseHTTPRequestHandler):
             if url.path=='/api/code-catalog':return self.send(code_switching.catalog(db))
             if url.path=='/api/code-detail':return self.send(code_switching.detail(db,q['kind'],q['id']))
             if url.path=='/api/segmentation':return self.send(segmentation.get(db,q['kind'],q['id']))
-            if url.path=='/api/export-layer-status':return self.send({'count':db.execute("SELECT COUNT(*) FROM annotation_cells c JOIN entries e ON e.id=c.record_id WHERE c.owner_kind='corpus' AND e.text_id=?",(q['id'],)).fetchone()[0]})
+            if url.path=='/api/export-layer-status':
+                count=db.execute("SELECT COUNT(*) FROM annotation_cells c JOIN entries e ON e.id=c.record_id WHERE c.owner_kind='corpus' AND e.text_id=?",(q['id'],)).fetchone()[0]
+                count+=db.execute("SELECT COUNT(*) FROM corpus_units u JOIN entries e ON e.id=u.entry_id JOIN texts t ON t.id=e.text_id JOIN annotation_layers l ON l.language_id=t.language_id WHERE e.text_id=? AND u.kind='word' AND u.active=1 AND l.source='dictionary'",(q['id'],)).fetchone()[0]
+                return self.send({'count':count})
             if url.path=='/api/writing-types':
                 return self.send(dictionary_data.types(db,q.get('lexical_language',lid),catalog_only=q.get('catalog_only')=='1'))
             if url.path=='/api/dictionary-examples':
@@ -471,20 +493,11 @@ class Handler(BaseHTTPRequestHandler):
                 import gloss_inheritance
                 entries = [gloss_inheritance.load(db,'corpus',r['id'],r['body']) for r in gloss_inheritance.iter_rows(db,db.execute('SELECT id,body FROM entries WHERE text_id=? ORDER BY position',(q['id'],)),'corpus')]
                 return self.send('\n\n'.join(export_entry(e) for e in entries),mime='text/plain; charset=utf-8')
-        fonts = {
-            '/font/IPAPANNEW.TTF': 'IPAPANNEW.TTF',
-            '/font/Junicode/Junicode.ttf': 'Junicode/Junicode.ttf',
-            '/font/Junicode/Junicode-Italic.ttf': 'Junicode/Junicode-Italic.ttf',
-            '/font/Junicode/Junicode-Bold.ttf': 'Junicode/Junicode-Bold.ttf',
-            '/font/Junicode/Junicode-BoldItalic.ttf': 'Junicode/Junicode-BoldItalic.ttf',
-        }
-        if url.path in fonts:
-            path=font_catalog.ROOT/fonts[url.path]
-            if not path.is_file():path=ROOT/'font'/'Junicode'/'Junicode.ttf'
-            return self.send(path.read_bytes(), mime='font/ttf')
         files = {'/classes.js':'classes.js','/display-tools.js':'display-tools.js','/ui-tools.js':'ui-tools.js','/grammar.js':'grammar.js','/inline-editor.js':'inline-editor.js','/example-library.js':'example-library.js','/':'index.html','/fonts.js':'fonts.js','/home.js':'home.js','/dictionary-manager.js':'dictionary-manager.js','/app.js':'app.js','/organize.js':'organize.js','/metadata.js':'metadata.js','/undo.js':'undo.js','/languages.js':'languages.js','/lexicon.js':'lexicon.js','/lexicon-extra.js':'lexicon-extra.js','/style.css':'style.css'}
         files.update({'/reduplication.js':'reduplication.js','/text-tools.js':'text-tools.js','/word-structure.js':'word-structure.js','/punctuation.js':'punctuation.js','/workspace-layout.js':'workspace-layout.js','/typography.js':'typography.js','/morphology.js':'morphology.js','/segmentation.js':'segmentation.js','/multipart-forms.js':'multipart-forms.js','/multipart-forms.css':'multipart-forms.css','/favicon.ico':'favicon.ico'})
         files['/layer-order.js']='layer-order.js'
+        files['/line-spacing.js']='line-spacing.js'
+        files['/dictionary-layers.js']='dictionary-layers.js'
         files['/analysis-workspace.js']='analysis-workspace.js'
         files['/vocabulary-statistics.js']='vocabulary-statistics.js'
         files['/vocabulary-controls.js']='vocabulary-controls.js'
@@ -532,6 +545,7 @@ class Handler(BaseHTTPRequestHandler):
         files['/object-media.js']='object-media.js'
         files['/recorder.js']='recorder.js'
         files['/recorder.css']='recorder.css'
+        files.update({'/playback-volume.js':'playback-volume.js','/playback-volume.css':'playback-volume.css'})
         files.update({'/licenses':'licenses.html','/license-notices.js':'license-notices.js','/license-notices.css':'license-notices.css'})
         files['/example-groups.js']='example-groups.js'
         files['/example-groups.css']='example-groups.css'
