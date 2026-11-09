@@ -250,6 +250,69 @@ html[data-shell][data-home=false] :is(#analysis-query-form,#analysis-counts-form
 html[data-shell][data-home=false] :is(#analysis-query-form,#analysis-counts-form,.organize-bar,.grammar-candidate-tools,.grammar-type-options,.survey-tree-toolbar,#dictionary-search-panel) input:is([type=checkbox],[type=radio]){width:var(--ui-check-size);height:var(--ui-check-size);min-height:0;flex:none;margin:0;vertical-align:middle}
 
 /* Input widths express content needs; heights and text roles stay shared. */
+/* The quick editor shares the normal core fields and compact row controls.
+   Its legacy local heights must not shrink section actions or let sense tools
+   overflow the gloss column. Keep research font declarations on the inputs. */
+html:not([data-home=true]) #lexeme-quick-editor #lexeme-form>.quick-identity-row{align-items:start;row-gap:var(--ui-gap)}
+html:not([data-home=true]) #lexeme-quick-editor .quick-identity-row>.multipart-form-editor,
+html:not([data-home=true]) #lexeme-quick-editor .quick-entry-type{grid-template-columns:minmax(0,1fr);align-content:start;gap:var(--ui-gap)}
+html:not([data-home=true]) #lexeme-quick-editor :is(#lexeme-headword,#morph-entry-type){height:var(--ui-field-height);min-height:var(--ui-field-height);margin:0;padding:var(--ui-control-padding);line-height:normal;box-sizing:border-box}
+html:not([data-home=true]) #lexeme-quick-editor .quick-identity-row .multipart-part>input{height:var(--ui-field-height);min-height:var(--ui-field-height);margin:0;padding:var(--ui-control-padding)!important;line-height:normal;box-sizing:border-box}
+html:not([data-home=true]) #lexeme-quick-editor #morph-entry-type{font-size:var(--ui-text-size)}
+html:not([data-home=true]) #lexeme-quick-editor :is(#add-orthography,#add-usage){height:auto;min-height:var(--ui-field-height);padding:var(--ui-control-padding);font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+html:not([data-home=true]) #lexeme-quick-editor #lexeme-orthographies .orthography-editor{--ui-field-height:var(--ui-control-height-small,2rem);grid-template-columns:minmax(0,1fr) minmax(0,2fr) var(--ui-field-height);gap:var(--ui-gap);align-items:center}
+html:not([data-home=true]) #lexeme-quick-editor #lexeme-orthographies .orthography-editor>label:has(>.orthography-type){grid-column:1;grid-row:1}
+html:not([data-home=true]) #lexeme-quick-editor #lexeme-orthographies .orthography-editor>label:has(>.orthography-text){grid-column:2;grid-row:1}
+html:not([data-home=true]) #lexeme-quick-editor #lexeme-orthographies .orthography-editor>label:has(>.orthography-label){display:none}
+html:not([data-home=true]) #lexeme-quick-editor #lexeme-orthographies .remove-orthography{grid-column:3;grid-row:1;box-sizing:border-box;width:var(--ui-field-height);min-width:var(--ui-field-height);height:var(--ui-field-height);min-height:var(--ui-field-height);margin:0;padding:0}
+html:not([data-home=true]) #lexeme-quick-editor :is(.quick-sense-row,.quick-component-table){--ui-field-height:var(--ui-control-height-small,2rem)}
+html:not([data-home=true]) #lexeme-quick-editor #lexeme-usages{container:quick-senses / inline-size}
+html:not([data-home=true]) #lexeme-quick-editor .quick-usage-row{min-width:0}
+html:not([data-home=true]) #lexeme-quick-editor .quick-sense-row{grid-template-columns:var(--ui-field-height) max-content minmax(6.25rem,.45fr) minmax(11.25rem,1fr) max-content;gap:var(--ui-gap)}
+html:not([data-home=true]) #lexeme-quick-editor .quick-sense-tools{align-items:center;gap:var(--ui-gap)}
+html:not([data-home=true]) #lexeme-quick-editor .quick-sense-tools button{flex:none;white-space:nowrap;height:auto;min-height:var(--ui-field-height);padding:var(--ui-control-padding)}
+html:not([data-home=true]) #lexeme-quick-editor :is(.quick-row-grip,.quick-row-remove,.quick-component-search button){box-sizing:border-box;width:var(--ui-field-height);min-width:var(--ui-field-height);height:var(--ui-field-height);min-height:var(--ui-field-height);padding:0}
+/* Keep registry choices compact. Their original native select remains the
+   input; a clipped text mirror can pan without widening the research columns. */
+html:not([data-home=true]) #lexeme-quick-editor .quick-component-table{--quick-link-min:calc(14rem + var(--ui-field-height) + 2*var(--ui-gap))}
+html:not([data-home=true]) #lexeme-quick-editor .quick-component-search{display:grid;grid-template-columns:minmax(8rem,1fr) var(--ui-field-height) 6rem;gap:var(--ui-gap);align-items:center}
+html:not([data-home=true]) #lexeme-quick-editor .quick-component-search .ws-registry-query{width:100%}
+html:not([data-home=true]) #lexeme-quick-editor .quick-component-search :is(.ws-registry-target,.ws-registry-form){box-sizing:border-box;width:100%;min-width:0;height:var(--ui-field-height);min-height:var(--ui-field-height);margin:0;padding:var(--ui-control-padding);font-size:var(--ui-text-size);line-height:normal}
+html:not([data-home=true]) #lexeme-quick-editor .quick-registry-select{position:relative;min-width:0;height:var(--ui-field-height);font-size:var(--ui-text-size);font-weight:var(--ui-control-weight,var(--ui-weight,400))}
+html:not([data-home=true]) #lexeme-quick-editor .quick-registry-select[hidden]{display:none}
+html:not([data-home=true]) #lexeme-quick-editor .quick-registry-select:has(>.ws-registry-form){grid-column:1/-1}
+html:not([data-home=true]) #lexeme-quick-editor .quick-registry-select>select{appearance:none;color:transparent;padding-right:calc(var(--ui-field-padding) + var(--ui-icon-size) + var(--ui-gap))}
+html:not([data-home=true]) #lexeme-quick-editor .quick-registry-select>select option{color:var(--ink);background:var(--paper)}
+html:not([data-home=true]) #lexeme-quick-editor .quick-registry-mask{position:absolute;inset:0 calc(var(--ui-field-padding) + var(--ui-icon-size) + var(--ui-gap)) 0 var(--ui-field-padding);display:flex;align-items:center;overflow:hidden;pointer-events:none;color:var(--ink)}
+html:not([data-home=true]) #lexeme-quick-editor .quick-registry-label{flex:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:normal}
+html:not([data-home=true]) #lexeme-quick-editor .quick-registry-select>svg{position:absolute;right:var(--ui-field-padding);top:50%;width:var(--ui-icon-size);height:var(--ui-icon-size);transform:translateY(-50%);fill:none;stroke:currentColor;stroke-width:1.5;pointer-events:none}
+html:not([data-home=true]) #lexeme-quick-editor .quick-registry-select.title-overflows:is(:hover,:focus-within) .quick-registry-label{max-width:none;overflow:visible;text-overflow:clip;animation:sidebar-title-pan var(--title-duration,8s) linear infinite}
+@media(prefers-reduced-motion:reduce){html:not([data-home=true]) #lexeme-quick-editor .quick-registry-label{animation:none!important}}
+html:not([data-home=true]) #lexeme-quick-editor .quick-analysis-tools{--ui-field-height:var(--ui-control-height,2.25rem);display:flex;align-items:center;flex-wrap:wrap;gap:var(--ui-gap);min-width:0;max-width:100%;margin-top:var(--ui-gap)}
+html:not([data-home=true]) #lexeme-quick-editor .quick-analysis-tools>.ws-row-tools{--ui-field-height:inherit;display:flex;align-items:center;flex-wrap:wrap;gap:var(--ui-gap);min-width:0;max-width:100%;margin:0}
+html:not([data-home=true]) #lexeme-quick-editor .quick-analysis-tools :is(button,select){box-sizing:border-box;min-height:var(--ui-field-height);margin:0;padding:var(--ui-control-padding);font-size:var(--ui-text-size);line-height:normal}
+html:not([data-home=true]) #lexeme-quick-editor .quick-analysis-tools .quick-writing-add{width:auto;max-width:100%;height:var(--ui-field-height)}
+html:not([data-home=true]) #lexeme-quick-editor :is(.quick-sense-pos,.quick-sense-gloss){height:var(--ui-field-height);min-height:var(--ui-field-height);line-height:normal}
+@container quick-senses (max-width:32rem){
+ html:not([data-home=true]) #lexeme-quick-editor .quick-sense-row{grid-template-columns:var(--ui-field-height) max-content minmax(0,1fr)}
+ html:not([data-home=true]) #lexeme-quick-editor .quick-sense-row>:is(.quick-sense-pos,.quick-sense-gloss,.quick-sense-tools,.quick-sense-addition){grid-column:3}
+ html:not([data-home=true]) #lexeme-quick-editor .quick-sense-row>.quick-row-grip{grid-column:1;grid-row:1}
+ html:not([data-home=true]) #lexeme-quick-editor .quick-sense-row>.quick-sense-number{grid-column:2;grid-row:1}
+ html:not([data-home=true]) #lexeme-quick-editor .quick-sense-tools{justify-self:end;flex-wrap:wrap;max-width:100%}
+}
+
+/* Command groups stay together when they fit. When a sidebar or larger text
+   leaves less room, cap the group at its actual toolbar width and wrap inside
+   it. An unshrinkable nested flex group must not widen the whole page. */
+html[data-shell][data-home=false] #workspace-toolbar .toolbar-command-group,
+html[data-shell][data-home=false] #workspace-toolbar .toolbar-command-group .formatted-copy-controls,
+html[data-shell][data-home=false] #workspace-toolbar>.module-heading>:not(h1):not(:has(>h1)){
+ box-sizing:border-box;min-width:0;max-width:100%;flex-wrap:wrap;
+}
+html[data-shell][data-home=false] #workspace-toolbar>.module-heading>.app-segmented{height:auto;min-height:var(--ui-control-height-small)}
+html[data-shell][data-home=false] #workspace-toolbar :is(.toolbar-row,.module-heading) :is(button,summary,.workbench-menu>summary):not(.app-segmented button){max-width:100%;min-width:0;height:auto;white-space:normal;overflow-wrap:anywhere}
+html[data-shell][data-home=false] #workspace-toolbar>.module-heading>.app-segmented button{max-width:100%;min-width:0;height:auto;min-height:var(--ui-control-height-small);white-space:normal;overflow-wrap:anywhere}
+
 html[data-shell][data-home=false] #analysis-query-form .analysis-condition{align-items:center;gap:var(--ui-gap)}
 html[data-shell][data-home=false] #analysis-query-form .analysis-condition>[data-key=category]{flex:0 1 15rem;min-width:8rem}
 html[data-shell][data-home=false] #analysis-query-form .analysis-condition>[data-key=field]{flex:0 1 14rem;min-width:8rem}

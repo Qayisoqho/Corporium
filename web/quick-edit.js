@@ -8,6 +8,7 @@
  const notify=phase=>editor.dispatchEvent(new CustomEvent('corporium-quick-edit',{detail:{phase}}));
  const typeField=$('morph-entry-type').closest('label'),identity=form.querySelector(':scope>.metadata-grid');
  const rows=createQuickEditRows(()=>dialog.open,()=>columns);
+ $('add-orthography').addEventListener('click',()=>rows.refresh());
  function componentColumns(row){
   if(row.registryRecord)return;
   const el=row.querySelector('.ws-writings'),values=wsReadWritings(el);
