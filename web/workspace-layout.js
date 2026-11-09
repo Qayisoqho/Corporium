@@ -17,7 +17,7 @@ historyToggle.onclick=()=>{historyPanel.hidden=!historyPanel.hidden;historyToggl
 let sidebarWidth=260,sidebarCollapsed=false;
 let sidebarScope=workspace==='dictionary'?'dictionary':'shared';
 const sidebarWidthKey=()=>sidebarScope==='dictionary'?'corporium-dictionary-sidebar-width':'corporium-sidebar-width';
-const sidebarDefaultWidth=()=>sidebarScope==='dictionary'?480:260;
+const sidebarDefaultWidth=()=>sidebarScope==='dictionary'?320:260;
 try{sidebarWidth=Number(localStorage.getItem(sidebarWidthKey()))||sidebarDefaultWidth();sidebarCollapsed=localStorage.getItem('corporium-sidebar-collapsed')==='true';}catch{}
 const resizeHandle=document.createElement('div');resizeHandle.id='sidebar-resize';resizeHandle.tabIndex=0;resizeHandle.role='separator';resizeHandle.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("c16ac9baed1b99",()=>[])??'调整侧栏宽度'));resizeHandle.setAttribute('aria-orientation','vertical');resizeHandle.setAttribute('aria-controls',sidebar.id);resizeHandle.title=(globalThis.CorporiumI18n?.f("26a0b64297c794",()=>[])??'拖动调整宽度；方向键微调；双击恢复默认');document.body.append(resizeHandle);
 function applySidebar(save=false){
@@ -45,4 +45,4 @@ window.corporiumApplyWorkspaceSidebar=()=>{
 };
 window.addEventListener('resize',()=>applySidebar());applySidebar();
 new ResizeObserver(()=>document.documentElement.style.setProperty('--toolbar-height',toolbar.offsetHeight+'px')).observe(toolbar);
-const briefDetailShow=showLexeme;showLexeme=async function(...args){await briefDetailShow(...args);const controls=$('dictionary-example-controls');if(controls)controls.classList.toggle('brief-empty',$('corpus-examples-section')?.classList.contains('brief-empty')&&$('standalone-examples')?.classList.contains('brief-empty'));};
+const briefDetailShow=showLexeme;showLexeme=async function(...args){await briefDetailShow(...args);const controls=$('dictionary-example-controls');if(controls)controls.classList.toggle('brief-empty',$('corpus-examples-section')?.classList.contains('brief-empty')&&$('standalone-examples')?.classList.contains('brief-empty'));globalThis.CorporiumDictionaryEvidence?.refresh();};

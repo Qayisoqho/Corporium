@@ -1,7 +1,8 @@
-"""Word identities describe code use; optional audio links never infer word times."""
+"""Occurrence code annotations; optional audio links never infer morpheme times."""
 import hashlib
 import json
 import uuid
+import code_morphemes as morphs
 
 TABLES = ('code_spans', 'code_time_links')
 
@@ -45,53 +46,95 @@ def profile(db, kind, rid, data=None, spans=None, codes=None):
     d = data or owner(db, kind, rid)
     spans = rows(db, kind, rid) if spans is None else spans
     codes = {r['id']: r for r in catalog(db)} if codes is None else codes
-    words = {w['id']: (i, d['body']['words'][i]) for i, w in enumerate(d['words'])}
-    import corpus
-    live = {uid for uid, (_, w) in words.items() if w['form'].strip() and not corpus.boundary_count(w['form']) and not w.get('punctuation')}
-    live_prefix = [0]
-    for unit in d['words']: live_prefix.append(live_prefix[-1] + (unit['id'] in live))
+    layout = morphs.layout(d)
+    words = {w['id']: (i, w) for i, w in enumerate(layout)}
     base = d['language_id']
     base_row = db.execute('SELECT name FROM languages WHERE id=?', (base,)).fetchone()
-    labels = {}; marked = {}; used = set(); covered = set(); reviews = 0; result = []
+    labels = {}; marked = {}; cell_marks = {}; used = set(); reviews = 0; result = []
+    # Legacy word marks remain readable. New marks resolve only against the saved
+    # form AND segmentation; a newly inserted/changed cell never acquires a code.
     for s in spans:
         s = dict(s); ids = json.loads(s['word_ids']); snap = json.loads(s['snapshot'])
         code = codes.get(s['code_id']); meta = json.loads(code['metadata']) if code else {}
         s.update(word_ids=ids, snapshot=snap, name=code['name'] if code else '未确定',
                  short=meta.get('number') or (code['name'] if code else '?'))
-        missing = [uid for uid in ids if uid not in words]
-        changed = [uid for uid in ids if uid in words and snap.get(uid) != words[uid][1]['form']]
-        s['review'] = bool(missing or changed)
-        s['review_reason'] = '词格已删除或形式已改变，请核对标记范围' if s['review'] else ''
-        display_ids=sorted(ids,key=lambda uid:words[uid][0] if uid in words else len(words)+ids.index(uid))
-        s['positions'] = sorted(words[uid][0] for uid in ids if uid in words)
-        s['text'] = ' '.join(words[uid][1]['form'] if uid in words else snap.get(uid, '（原词格）') for uid in display_ids)
+        s['legacy'] = all(isinstance(v, str) for v in snap.values())
+        s['morpheme_ids'] = []; unavailable = []
+        positions = []; texts = []
+        for wid in sorted(ids, key=lambda u: words[u][0] if u in words else len(words) + ids.index(u)):
+            saved = snap[wid]
+            if wid not in words:
+                unavailable.append(wid); texts.append(morphs.saved_text(saved)); continue
+            index, w = words[wid]; positions.append(index)
+            active = [u for u in w['morphemes'] if
+                      (saved == w['form'] if isinstance(saved, str) else morphs.matching(saved, w, u))]
+            s['morpheme_ids'].extend(u['id'] for u in active)
+            current = {u['key'] for u in active}
+            changed = saved != w['form'] if isinstance(saved, str) else len(active) != len(saved['units'])
+            if changed: unavailable.append(wid)
+            texts.append(w['form'] if isinstance(saved, str) else morphs.saved_text(saved))
+            mark = dict(span_id=s['id'], code_id=s['code_id'], name=s['name'], short=s['short'],
+                        notes=s['notes'], review=changed)
+            for ci, c in enumerate(w['cells']):
+                if c['key'] in current or isinstance(saved, str):
+                    cell_marks[wid, ci] = {**mark, 'valid': code is not None and not changed}
+            if isinstance(saved, str):
+                marked[wid] = {**mark, 'valid': code is not None and not changed}
+        s['positions'] = sorted(positions); s['text'] = ' '.join(texts)
+        s['unavailable'] = unavailable
+        s['review'] = bool(unavailable)
+        s['review_reason'] = '原语素范围已变化，请重新点选范围后保存' if unavailable else ''
         if s['review']: reviews += 1
-        key = 'language:' + meta['workspace_language_id'] if meta.get('workspace_language_id') else 'code:' + str(s['code_id'])
-        previous = -2
-        ordered = sorted((u for u in ids if u in words), key=lambda u: words[u][0])
-        for j, uid in enumerate(ordered):
-            index, w = words[uid]
-            next_index = words[ordered[j + 1]][0] if j + 1 < len(ordered) else None
-            marked[uid] = dict(span_id=s['id'], code_id=s['code_id'], name=s['name'], short=s['short'],
-                               notes=s['notes'], review=s['review'], start=index != previous + 1,
-                               end=next_index is None or live_prefix[next_index] > live_prefix[index + 1])
-            previous = index
-            if uid not in live: continue
-            covered.add(uid)
-            # Uncertain/deleted/replaced words do not silently establish code identity.
-            if code and uid not in changed:
-                used.add(s['code_id']); labels[key] = code['name']
         result.append(s)
-    if live - covered: labels.setdefault('language:' + base, base_row['name'] if base_row else base)
+    # Traverse actual fragment order (including discontinuous hosts/circumfixes).
+    # Separators/punctuation are not languages and do not interrupt a code run.
+    atoms = []
+    for w in layout:
+        if not w['live']: continue
+        parts = [(ci, c) for ci, c in enumerate(w['cells']) if c['key'] is not None]
+        if not parts:
+            atoms.append((w['id'], None, marked.get(w['id']))); continue
+        for ci, c in parts:
+            atoms.append((w['id'], ci, cell_marks.get((w['id'], ci))))
+    word_atoms = {}
+    for j, (wid, ci, mark) in enumerate(atoms):
+        if mark is None:
+            labels.setdefault('language:' + base, base_row['name'] if base_row else base); continue
+        word_atoms.setdefault(wid, []).append(mark)
+        if mark['valid']:
+            code = codes[mark['code_id']]; meta = json.loads(code['metadata'])
+            key = 'language:' + meta['workspace_language_id'] if meta.get('workspace_language_id') else 'code:' + str(mark['code_id'])
+            labels[key] = code['name']; used.add(mark['code_id'])
+        def same(other):
+            return other is not None and (other['code_id'], other['notes']) == (mark['code_id'], mark['notes'])
+        mark['start'] = j == 0 or not same(atoms[j - 1][2])
+        mark['end'] = j + 1 == len(atoms) or not same(atoms[j + 1][2])
+    # Old readers still receive whole-word marks for historical annotations.
+    for wid, mark in marked.items():
+        candidates = word_atoms.get(wid, [])
+        mark['start'] = candidates[0].get('start', True) if candidates else True
+        mark['end'] = candidates[-1].get('end', True) if candidates else True
+        mark.pop('valid', None)
+    projected = {}
+    for w in layout:
+        if not any((w['id'], ci) in cell_marks for ci in range(len(w['cells']))): continue
+        if w['id'] in marked: continue  # Preserve historical whole-word display.
+        cells = []
+        for ci, c in enumerate(w['cells']):
+            item = dict(c)
+            if (w['id'], ci) in cell_marks:
+                item['mark'] = {k: v for k, v in cell_marks[w['id'], ci].items() if k != 'valid'}
+            cells.append(item)
+        projected[w['id']] = cells
     return dict(mixed=len(labels) > 1, languages=list(labels.values()), code_ids=sorted(used),
-                review=reviews, has_annotations=bool(spans), spans=result, marked=marked,
-                base_language=base, base_name=base_row['name'] if base_row else base)
+                review=reviews, has_annotations=bool(spans), spans=result, marked=marked, cells=projected,
+                words=layout, base_language=base, base_name=base_row['name'] if base_row else base)
 
 
 def attach(db, body, kind, rid, d=None):
     body.pop('code_profile', None)
     for w in body.get('words', []):
-        for field in ('code_unit', 'code_mark'): w.pop(field, None)
+        for field in ('code_unit', 'code_mark', 'code_cells'): w.pop(field, None)
     if not db.execute('SELECT 1 FROM code_spans WHERE owner_kind=? AND record_id=? LIMIT 1', (kind, rid)).fetchone():
         return body
     d = d or owner(db, kind, rid)
@@ -100,6 +143,7 @@ def attach(db, body, kind, rid, d=None):
     for w, unit in zip(body.get('words', []), d['words']):
         w['code_unit'] = unit['id']
         if unit['id'] in p['marked']: w['code_mark'] = p['marked'][unit['id']]
+        if unit['id'] in p['cells']: w['code_cells'] = p['cells'][unit['id']]
     return body
 
 
@@ -119,7 +163,7 @@ def detail(db, kind, rid):
         JOIN timeline_sessions s ON s.id=i.session_id LEFT JOIN code_time_links l ON l.interval_id=i.id
         WHERE t.kind='language' AND parent.entry_id=? AND s.language_id=? ORDER BY s.position,i.start_ms,i.id''', (audio_id, d['owner_language']))]
     return {k: d[k] for k in ('kind', 'id', 'revision', 'language_id', 'owner_language', 'words')} | dict(
-        words=[{**w, 'form': d['body']['words'][i]['form'], 'selectable': bool(d['body']['words'][i]['form'].strip()) and not __import__('corpus').boundary_count(w['form']) and not d['body']['words'][i].get('punctuation')} for i, w in enumerate(d['words'])],
+        words=p['words'],
         spans=p['spans'], codes=catalog(db), profile={k: p[k] for k in ('mixed', 'languages', 'review', 'base_name')},
         intervals=options, token=token(db, d))
 
@@ -192,25 +236,49 @@ def mutate(db, action, b, lid):
             db.execute('DELETE FROM code_time_links WHERE id=?', (linked['id'],))
             touch_audio(db, [interval['id']])
     elif action == 'save':
-        ids = b.get('word_ids'); live = {w['id']: (i, d['body']['words'][i]) for i, w in enumerate(d['words'])}
-        if not isinstance(ids, list) or not ids or any(not isinstance(i, str) for i in ids) or len(set(ids)) != len(ids) or any(i not in live for i in ids): raise ValueError('请选择现有词格')
-        positions = sorted(live[i][0] for i in ids)
-        # Existing identities may become discontinuous after inserting/moving words.
-        omitted=[w for uid,(i,w) in live.items() if positions[0]<=i<=positions[-1] and uid not in ids]
-        skips_words=any(w['form'].strip() and not __import__('corpus').boundary_count(w['form']) and not w.get('punctuation') for w in omitted)
-        if skips_words and (not old or set(ids) != set(json.loads(old['word_ids']))): raise ValueError('新标记请选择连续词格；已有标记会跟随原词格')
-        if any(not live[i][1]['form'].strip() or __import__('corpus').boundary_count(live[i][1]['form']) or live[i][1].get('punctuation') for i in ids): raise ValueError('空词格、标点和音系边界不单独指定语码')
+        layout = morphs.layout(d)
+        live = {w['id']: (i, w) for i, w in enumerate(layout)}
+        selection = b.get('morpheme_ids')
+        if selection is not None:
+            flat = [(w, u) for w in layout for u in (w['morphemes'] or ([None] if w['live'] else []))]
+            by_id = {u['id']: (i, w, u) for i, (w, u) in enumerate(flat) if u is not None}
+            if (not isinstance(selection, list) or not selection or any(not isinstance(i, str) for i in selection)
+                    or len(set(selection)) != len(selection) or any(i not in by_id for i in selection)):
+                raise ValueError('请选择现有语素；切分不一致时请先在标注编辑器中整理')
+            ordered_units = sorted(selection, key=lambda i: by_id[i][0])
+            positions = [by_id[i][0] for i in ordered_units]
+            previous = profile(db, d['kind'], d['id'], d, spans=[dict(old)])['spans'][0] if old else None
+            if positions[-1] - positions[0] + 1 != len(positions) and (not previous or set(selection) != set(previous['morpheme_ids'])):
+                raise ValueError('新标记请选择连续语素；多部分语素作为一个整体选择')
+            ids = list(dict.fromkeys(by_id[i][1]['id'] for i in ordered_units))
+            snap = {wid: morphs.snapshot(live[wid][1], [by_id[i][2] for i in ordered_units if by_id[i][1]['id'] == wid]) for wid in ids}
+        else:
+            # Old clients and historical replay still address whole words.
+            ids = b.get('word_ids')
+            if not isinstance(ids, list) or not ids or any(not isinstance(i, str) for i in ids) or len(set(ids)) != len(ids) or any(i not in live for i in ids): raise ValueError('请选择现有词格')
+            positions = sorted(live[i][0] for i in ids)
+            omitted = [w for uid, (i, w) in live.items() if positions[0] <= i <= positions[-1] and uid not in ids]
+            if any(w['live'] for w in omitted) and (not old or set(ids) != set(json.loads(old['word_ids']))): raise ValueError('新标记请选择连续词格；已有标记会跟随原词格')
+            if any(not live[i][1]['live'] for i in ids): raise ValueError('空词格、标点和音系边界不单独指定语码')
+            ids = sorted(ids, key=lambda i: live[i][0]); snap = {i: live[i][1]['form'] for i in ids}
         for other in rows(db, b['kind'], b['record_id']):
-            if other['id'] != b.get('id') and set(ids) & set(json.loads(other['word_ids'])): raise ValueError('所选词格已有语码标记，请先编辑或移除原标记')
+            if other['id'] == b.get('id'): continue
+            other_snap = json.loads(other['snapshot'])
+            if any(morphs.overlaps(snap[i], other_snap[i]) for i in set(ids) & set(json.loads(other['word_ids']))):
+                raise ValueError('所选语素已有语码标记，请先编辑或移除原标记')
         code_id = b.get('code_id') or None
         if code_id and not db.execute('SELECT 1 FROM timeline_codes WHERE id=?', (code_id,)).fetchone(): raise ValueError('语言标记已不存在')
         notes = b.get('notes', '')
         if not isinstance(notes, str) or len(notes) > 20000: raise ValueError('备注须为不超过20000字的文字')
         sid = old['id'] if old else str(uuid.uuid4())
-        ordered = sorted(ids, key=lambda i: live[i][0]); snap = {i: live[i][1]['form'] for i in ordered}
+        ordered = ids
         if old and old['code_id']==code_id and old['notes']==notes and json.loads(old['word_ids'])==ordered and json.loads(old['snapshot'])==snap:return dict(ok=True)
         if old and (set(ids) != set(json.loads(old['word_ids'])) or snap != json.loads(old['snapshot'])):
-            detach_audio(db, sid)
+            previous = profile(db, d['kind'], d['id'], d, spans=[dict(old)])['spans'][0]
+            # Converting an unchanged whole-word mark to all its morphemes does
+            # not change the text range, so its explicit audio link remains valid.
+            if previous['review'] or selection is None or set(selection) != set(previous['morpheme_ids']):
+                detach_audio(db, sid)
         db.execute('''INSERT INTO code_spans VALUES(?,?,?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET
             code_id=excluded.code_id,word_ids=excluded.word_ids,snapshot=excluded.snapshot,notes=excluded.notes,revision=code_spans.revision+1''',
                    (sid, b['kind'], b['record_id'], lid, code_id, dump(ordered), dump(snap), notes))
@@ -260,12 +328,18 @@ def validate(db, span_ids=None):
         if owners[key]['owner_language'] != r['language_id']: raise ValueError('语码标记的所属语言不一致')
         if r['code_id'] and not db.execute('SELECT 1 FROM timeline_codes WHERE id=?', (r['code_id'],)).fetchone(): raise ValueError('语言标记仍被正文引用，不能删除或撤销其创建')
         ids = json.loads(r['word_ids']); snap = json.loads(r['snapshot'])
-        if not isinstance(ids, list) or not ids or any(not isinstance(i, str) for i in ids) or len(set(ids)) != len(ids) or not isinstance(snap, dict) or set(snap) != set(ids) or any(not isinstance(v, str) for v in snap.values()): raise ValueError('语码标记的词格快照无效')
+        if not isinstance(ids, list) or not ids or any(not isinstance(i, str) for i in ids) or len(set(ids)) != len(ids) or not isinstance(snap, dict) or set(snap) != set(ids) or any(not morphs.validate(v) for v in snap.values()) or len({isinstance(v, str) for v in snap.values()}) != 1: raise ValueError('语码标记的语素快照无效')
     seen = {}
-    for r in spans:
-        key = (r['owner_kind'], r['record_id']); used = seen.setdefault(key, set()); ids = set(json.loads(r['word_ids']))
-        if used & ids: raise ValueError('同一词格不能有重叠的语码标记')
-        used.update(ids)
+    # Validate the entire owner even for incremental changes: two distinct
+    # annotations may share a parent word, but never the same logical morpheme.
+    for key in owners:
+        for r in rows(db, *key):
+            snap = json.loads(r['snapshot'])
+            for wid, evidence in snap.items():
+                earlier = seen.setdefault((key, wid), [])
+                if any(morphs.overlaps(evidence, v) for v in earlier):
+                    raise ValueError('同一语素不能有重叠的语码标记')
+                earlier.append(evidence)
     links=list(db.execute('SELECT * FROM code_time_links')) if span_ids is None else [r for sid in span_ids for r in db.execute('SELECT * FROM code_time_links WHERE span_id=?',(sid,))]
     for r in links:
         span = db.execute('SELECT * FROM code_spans WHERE id=?', (r['span_id'],)).fetchone()

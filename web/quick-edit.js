@@ -4,7 +4,8 @@
  const dialog=document.createElement('dialog');dialog.id='lexeme-quick-editor';dialog.dataset.docked='true';
  dialog.innerHTML=(globalThis.CorporiumI18n?.f("6e1fa1615a9670",()=>[])??'<div class="dialog-top dialog-title-row"><h2>快捷编辑</h2><button type="button" id="quick-edit-return">返回完整编辑</button></div><div class="dialog-content" id="quick-edit-host"></div><div class="dialog-bottom" id="quick-edit-actions"></div>');
  document.body.append(dialog);
- let formHome=null,saveHome=null,typeHome=null,expanded=false,sequence=0,columns=[];
+ let formHome=null,saveHome=null,typeHome=null,expanded=false,sequence=0,columns=[],opening=false;
+ const notify=phase=>editor.dispatchEvent(new CustomEvent('corporium-quick-edit',{detail:{phase}}));
  const typeField=$('morph-entry-type').closest('label'),identity=form.querySelector(':scope>.metadata-grid');
  const rows=createQuickEditRows(()=>dialog.open,()=>columns);
  function componentColumns(row){
@@ -19,15 +20,21 @@
   typeHome?.replaceWith(typeField);typeHome=null;identity.classList.remove('quick-identity-row');typeField.classList.remove('quick-entry-type');
   rows.clear();formHome.replaceWith(form);saveHome.replaceWith(save);formHome=saveHome=null;
   morphologyEditorBlock.open=expanded;
+  notify('restored');
  }
  dialog.addEventListener('close',restore);
- $('quick-edit-return').onclick=()=>dialog.close();
+ function returnToFull(){if(dialog.open)dialog.close();restore();}
+ $('quick-edit-return').onclick=returnToFull;
+ form.addEventListener('corporium-quick-edit-return',returnToFull);
  editor.addEventListener('close',()=>{sequence++;if(dialog.open)dialog.close();restore();});
  async function open(){
+  if(opening||dialog.open)return;
   const request=++sequence,lid=$('lexeme-language').value;
+  opening=true;button.disabled=true;button.setAttribute('aria-busy','true');
   try{
    const settings=await api('quick-edit-settings?'+new URLSearchParams({language:lid}));
    if(request!==sequence||!editor.open||$('lexeme-language').value!==lid)return;
+   notify('prepare');
    columns=settings.selected;
    for(const id of columns)if(![...$('lexeme-orthographies').children].some(r=>r.querySelector('.orthography-type').value===id))addOrthography({type_id:id});
    if(!$('lexeme-usages').children.length)addUsage({senses:[{}]});
@@ -40,8 +47,9 @@
    saveHome=document.createComment('complete editor save');save.before(saveHome);
    typeHome=document.createComment('complete editor entry type');typeField.before(typeHome);identity.append(typeField);identity.classList.add('quick-identity-row');typeField.classList.add('quick-entry-type');
    $('quick-edit-host').append(form);$('quick-edit-actions').append(save);
-   dialog.showModal();window.CorporiumParadigms?.setQuick(true);rows.refresh();$('lexeme-headword').focus();
-  }catch(e){$('lexeme-error').textContent=e.message;}
+   dialog.showModal();notify('opened');window.CorporiumParadigms?.setQuick(true);rows.refresh();$('lexeme-headword').focus();
+  }catch(e){returnToFull();$('lexeme-error').textContent=e.message;}
+  finally{opening=false;button.disabled=false;button.removeAttribute('aria-busy');notify('settled');}
  }
  const button=document.createElement('button');button.type='button';button.id='lexeme-quick-open';button.textContent=(globalThis.CorporiumI18n?.f("54e43c5e0d6bd5",()=>[])??'快捷编辑');button.onclick=open;
  const originalOpen=openLexemeEditor;

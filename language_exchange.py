@@ -159,7 +159,8 @@ def _import_new(db,dbpath,path,name,created,bundle):
     if any(r[0].strip().casefold()==name.casefold() for r in db.execute('SELECT name FROM languages')):raise ValueError('已有同名语言，请为导入语言改名')
     meta=bundle['language'].get('metadata','{}');meta=json.loads(meta) if isinstance(meta,str) else meta
     if 'grammar_tags' in bundle:meta={**meta,'glossary':{}}
-    lid=languages.save(db,dict(name=name,metadata=meta))['id']
+    supplied_catalogs={r.get('kind') for r in bundle.get('category_classes',[]) if r.get('language_id')==bundle['language']['id'] and r.get('kind') in ('form','usage_tag')}
+    lid=languages.save(db,dict(name=name,metadata=meta),class_catalogs=supplied_catalogs)['id']
     import journal
     journal.scope.set(lid)
     media={}

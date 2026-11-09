@@ -4,7 +4,7 @@ const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {
 
 function inlineHarness(){
  const source=read('inline-editor'),listeners={},drafts=new Map(),calls=[],nodes={notice:{textContent:''}},cards=[];
- const c={window:{},workspace:'dictionary',activeLanguage:'one',structuredClone,URLSearchParams,inlineDrafts:drafts,inlineOpening:new Map(),
+ const c={window:{},workspace:'dictionary',activeLanguage:'one',structuredClone,URLSearchParams,crypto:require('node:crypto'),inlineDrafts:drafts,inlineOpening:new Map(),
   document:{addEventListener:(name,fn)=>listeners[name]=fn,querySelectorAll:()=>cards,createElement:()=>({})},$:id=>nodes[id],
   inlineStyledFields:d=>'<button data-inline-save>保存</button>'+JSON.stringify(d.body),inlineSelection:()=>{},api:async()=>{calls.push('read');return {body:{translation:'server'},cells:[]};},
   originalApi:async()=>{calls.push('write');return {id:'saved'};},refreshUndo:async()=>calls.push('heavy-history'),

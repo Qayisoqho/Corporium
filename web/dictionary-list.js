@@ -24,27 +24,34 @@ function renderDictionaryList(host,source,options){
  // Navigation moves this host into the module sidebar after its first load.
  // Bind to that stable scroll surface even while the host is still in main.
  const scroller=document.getElementById('workbench-module-nav')||host,virtual=items.length>200;
+ const stickySearch=document.getElementById('dictionary-search-panel');
  const scrollBefore=scroller.scrollTop;host.dictionaryViewport?.destroy();
  let frame=0,range='',offsets=[],heights=[],width=0,scale=0,closed=false;
  const selected=()=>window.dictionaryListSelectionChanged?.();
  const prefix=()=>{offsets=[0];for(const h of heights)offsets.push(offsets.at(-1)+h);};
  function reset(){scale=parseFloat(getComputedStyle(document.documentElement).fontSize);heights=items.map(x=>scale*(x.dictionaryClass?2.4:2.465+(x.body.homonym_note?.length?1.01:0)));prefix();range='';}
  function origin(){return host.getBoundingClientRect().top-scroller.getBoundingClientRect().top+scroller.scrollTop;}
+ function inset(){return stickySearch?.parentElement===scroller&&getComputedStyle(stickySearch).position==='sticky'?Math.max(0,Math.min(scroller.clientHeight,stickySearch.getBoundingClientRect().bottom-scroller.getBoundingClientRect().top)):0;}
+ function syncInset(){const value=inset()+'px';if(scroller.style.getPropertyValue('--dictionary-search-inset')!==value)scroller.style.setProperty('--dictionary-search-inset',value);if(virtual)schedule();}
  function paint(){
   frame=0;if(closed||host.hidden||!host.isConnected)return;
   if(!virtual){host.innerHTML=items.map(html).join('')||empty;selected();return;}
-  const top=scroller.scrollTop-origin(),[start,end]=dictionaryVisibleRange(offsets,top,Math.max(200,scroller.clientHeight)),key=start+':'+end;
+  const covered=inset(),top=scroller.scrollTop-origin()+covered,[start,end]=dictionaryVisibleRange(offsets,top,Math.max(200,scroller.clientHeight-covered)),key=start+':'+end;
   if(key===range)return;range=key;
+  const active=document.activeElement,focused=active&&host.contains(active)?active.closest('[data-virtual-index]'):null,focusedIndex=focused?.dataset.virtualIndex,focusedCheckbox=active?.matches('input[type=checkbox]');
   host.style.paddingTop=offsets[start]+'px';host.style.paddingBottom=(offsets.at(-1)-offsets[end])+'px';
   host.innerHTML=items.slice(start,end).map((x,i)=>'<div class="dictionary-virtual-row" role="listitem" aria-posinset="'+(start+i+1)+'" aria-setsize="'+items.length+'" data-virtual-index="'+(start+i)+'">'+html(x)+'</div>').join('');
   const measured=[...host.children].map(el=>el.getBoundingClientRect().height);let changed=false;
   for(let i=start;i<end;i++)if(measured[i-start]>0&&Math.abs(measured[i-start]-heights[i])>.5){heights[i]=measured[i-start];changed=true;}
   if(changed){prefix();host.style.paddingTop=offsets[start]+'px';host.style.paddingBottom=(offsets.at(-1)-offsets[end])+'px';}
   selected();
+  // Measured heights or an expanded sticky search can change the mounted
+  // range again after a key move. Retain focus on the same visible record.
+  if(focusedIndex!==undefined){const row=host.querySelector('[data-virtual-index="'+focusedIndex+'"]');(row?.querySelector(focusedCheckbox?'input[type=checkbox]':'['+attribute+']')||row?.querySelector('button'))?.focus({preventScroll:true});}
  }
  function schedule(){if(!frame&&!closed)frame=requestAnimationFrame(paint);}
  const click=e=>{const row=e.target.closest('['+attribute+']');if(row&&host.contains(row))select(row.getAttribute(attribute));};
- function focusRow(index,checkbox=false){index=Math.max(0,Math.min(index,items.length-1));scroller.scrollTop=origin()+offsets[index]-Math.max(0,(scroller.clientHeight-heights[index])/2);range='';paint();const row=host.querySelector('[data-virtual-index="'+index+'"]');(row?.querySelector(checkbox?'input[type=checkbox]':'['+attribute+']')||row?.querySelector('button'))?.focus({preventScroll:true});}
+ function focusRow(index,checkbox=false){index=Math.max(0,Math.min(index,items.length-1));const covered=inset();scroller.scrollTop=origin()+offsets[index]-covered-Math.max(0,(scroller.clientHeight-covered-heights[index])/2);range='';paint();const row=host.querySelector('[data-virtual-index="'+index+'"]');(row?.querySelector(checkbox?'input[type=checkbox]':'['+attribute+']')||row?.querySelector('button'))?.focus({preventScroll:true});}
  const keydown=e=>{
   if(!virtual||e.altKey||e.ctrlKey||e.metaKey)return;const row=e.target.closest('[data-virtual-index]');if(!row)return;const index=Number(row.dataset.virtualIndex),checkbox=e.target.matches('input[type=checkbox]');
   const delta={ArrowUp:-1,ArrowDown:1,PageUp:-Math.max(1,Math.floor(scroller.clientHeight/heights[index])-1),PageDown:Math.max(1,Math.floor(scroller.clientHeight/heights[index])-1)};
@@ -55,8 +62,9 @@ function renderDictionaryList(host,source,options){
  };
  host.addEventListener('click',click);host.addEventListener('keydown',keydown);
  const resize=new ResizeObserver(()=>{if(width!==scroller.clientWidth||scale!==parseFloat(getComputedStyle(document.documentElement).fontSize)){width=scroller.clientWidth;reset();}schedule();});
+ const searchResize=new ResizeObserver(syncInset);if(stickySearch)searchResize.observe(stickySearch);syncInset();
  host.style.paddingTop=host.style.paddingBottom='';if(virtual)host.setAttribute('role','list');else host.removeAttribute('role');
  if(virtual){reset();host.style.minHeight=offsets.at(-1)+'px';scroller.scrollTop=scrollBefore;width=scroller.clientWidth;scroller.addEventListener('scroll',schedule,{passive:true});resize.observe(scroller);document.fonts?.addEventListener('loadingdone',schedule);}
- host.dictionaryViewport={destroy(){closed=true;if(frame)cancelAnimationFrame(frame);resize.disconnect();scroller.removeEventListener('scroll',schedule);document.fonts?.removeEventListener('loadingdone',schedule);host.removeEventListener('click',click);host.removeEventListener('keydown',keydown);},refresh(){range='';schedule();},rebuild(){renderDictionaryList(host,source,options);}};
+ host.dictionaryViewport={destroy(){closed=true;if(frame)cancelAnimationFrame(frame);resize.disconnect();searchResize.disconnect();scroller.removeEventListener('scroll',schedule);document.fonts?.removeEventListener('loadingdone',schedule);host.removeEventListener('click',click);host.removeEventListener('keydown',keydown);},refresh(){range='';schedule();},rebuild(){renderDictionaryList(host,source,options);}};
  paint();host.style.minHeight='';
 }

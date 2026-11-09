@@ -52,7 +52,12 @@
   const scroll=el('ipa-keys').scrollTop;el('ipa-keys').innerHTML=html||(globalThis.CorporiumI18n?.f("ebc136403f16f1",()=>[category==='favorites'?(globalThis.CorporiumI18n?.f("e08c8a6aed766f",()=>[])??'，可点击符号旁的☆收藏'):''])??'<p>没有匹配的符号'+(category==='favorites'?'，可点击符号旁的☆收藏':'')+'。</p>');el('ipa-keys').scrollTop=scroll;
  }
  function floatingButtons(){const activeModal=modal();return [...document.querySelectorAll('#add,#new-lexeme,#morpheme-new,#library-new,dialog[open]:not([hidden]) .dialog-bottom')].filter(b=>(!activeModal||activeModal.contains(b))&&b.getClientRects().length&&getComputedStyle(b).visibility!=='hidden'&&(b.matches('.dialog-bottom')||getComputedStyle(b).position==='fixed')).map(b=>b.getBoundingClientRect());}
- function position(){const margin=10,w=state.open?Math.min(Math.max(300,Number(state.width)||510),innerWidth-2*margin):64,h=state.open?Math.min(Math.max(190,Number(state.height)||310),innerHeight-2*margin):36;
+ function position(){
+  // Collapsed, the keyboard button occupies its slot at the end of the status bar.
+  const slot=state.open?null:document.querySelector('#app-status .app-status-ipa');
+  if(slot?.getClientRects().length&&!modal()){const r=slot.getBoundingClientRect();host.classList.add('ipa-docked');host.style.left=r.left+'px';host.style.top=r.top+'px';host.style.width=r.width+'px';host.style.height=r.height+'px';return;}
+  host.classList.remove('ipa-docked');
+  const margin=10,w=state.open?Math.min(Math.max(300,Number(state.width)||510),innerWidth-2*margin):64,h=state.open?Math.min(Math.max(190,Number(state.height)||310),innerHeight-2*margin):36;
   let x=state.open&&Number.isFinite(state.x)?state.x:innerWidth-w-margin,y=state.open&&Number.isFinite(state.y)?state.y:innerHeight-h-margin;
   x=Math.max(margin,Math.min(x,innerWidth-w-margin));y=Math.max(margin,Math.min(y,innerHeight-h-margin));
   for(const r of floatingButtons())if(x<r.right+8&&x+w>r.left-8&&y<r.bottom+8&&y+h>r.top-8){if(r.left-w-8>=margin)x=r.left-w-8;else y=Math.max(margin,r.top-h-8);}
@@ -70,7 +75,7 @@
  }
  function schedule(top=false){forceTop ||= top;if(!frame)frame=requestAnimationFrame(sync);}
  function immediate(top=false){if(frame)cancelAnimationFrame(frame);frame=0;forceTop ||= top;sync();}
- el('ipa-toggle').onclick=()=>{state.open=true;saveLayout();immediate(true);};el('ipa-collapse').onclick=()=>{state.open=false;saveLayout();immediate();};el('ipa-home').onclick=()=>{state.x=state.y=null;saveLayout();immediate();};
+ el('ipa-toggle').onclick=e=>{const keyboard=e.detail===0&&document.activeElement===el('ipa-toggle');state.open=true;saveLayout();immediate(true);if(keyboard)el('ipa-search').focus({preventScroll:true});};el('ipa-collapse').onclick=e=>{const keyboard=e.detail===0&&document.activeElement===el('ipa-collapse');state.open=false;saveLayout();immediate();if(keyboard)el('ipa-toggle').focus({preventScroll:true});};el('ipa-home').onclick=()=>{state.x=state.y=null;saveLayout();immediate();};
  el('ipa-search').oninput=render;el('ipa-category').onchange=()=>{el('ipa-keys').scrollTop=0;render();};
  host.addEventListener('click',e=>{const b=e.target.closest('[data-insert],[data-favorite-toggle]');if(!b)return;if(b.dataset.insert!==undefined)insert(b.dataset.insert);else{if(language()==='all'){message((globalThis.CorporiumI18n?.f("be8259fb460d4d",()=>[])??'请先选择一种语言再收藏'));return;}const s=b.dataset.favoriteToggle;favorites=favorites.includes(s)?favorites.filter(v=>v!==s):[...favorites,s];save('favorites',favorites);render();}});
  function start(e,mode){if(e.button!==0||e.target.closest('button,input,select'))return;e.preventDefault();const r=host.getBoundingClientRect();drag={mode,id:e.pointerId,x:e.clientX,y:e.clientY,left:r.left,top:r.top,width:r.width,height:r.height};e.currentTarget.setPointerCapture(e.pointerId);}
@@ -85,12 +90,12 @@
  host.addEventListener('keydown',e=>{const grip=e.target.closest('[data-fav-grip]');if(!grip||!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();const i=favorites.indexOf(grip.dataset.favGrip),j=i+(e.key==='ArrowLeft'?-1:1);if(j<0||j>=favorites.length)return;[favorites[i],favorites[j]]=[favorites[j],favorites[i]];save('favorites',favorites);render();host.querySelector('[data-fav-grip="'+CSS.escape(grip.dataset.favGrip)+'"]')?.focus();});
  function layoutChanged(records){return records.some(r=>{
   if(host.contains(r.target))return false;
-  if(r.type==='attributes')return true;
+  if(r.type==='attributes')return r.oldValue!==r.target.getAttribute(r.attributeName);
   const relevant='dialog,#add,#new-lexeme,#morpheme-new,#library-new';
   return [...r.addedNodes,...r.removedNodes].some(n=>n.nodeType===1&&(n.matches(relevant)||n.querySelector(relevant)||target&&n.contains(target)));
  });}
- new MutationObserver(records=>{if(layoutChanged(records))schedule(records.some(r=>r.type==='attributes'&&r.attributeName==='open'));}).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['open','hidden']});
+ new MutationObserver(records=>{if(layoutChanged(records))schedule(records.some(r=>r.type==='attributes'&&r.attributeName==='open'&&r.target.matches('dialog[open]')&&r.oldValue===null));}).observe(document.body,{childList:true,subtree:true,attributes:true,attributeOldValue:true,attributeFilter:['open','hidden']});
  new MutationObserver(()=>schedule()).observe(document.documentElement,{attributes:true,attributeFilter:['data-home','data-theme','style']});
- document.addEventListener('toggle',e=>{if(e.target!==host&&e.newState==='open')schedule(true);},true);
+ document.addEventListener('toggle',e=>{if(e.target!==host&&e.newState==='open'&&e.target.matches('dialog,[popover]'))schedule(true);},true);
  window.addEventListener('resize',()=>schedule());document.addEventListener('corporium-sidebar-layout',()=>schedule());window.addEventListener('storage',()=>{owner=null;schedule();});render();schedule();
 })();

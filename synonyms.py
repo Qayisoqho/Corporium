@@ -16,8 +16,21 @@ def senses(db,lid,kind,rid):
     row=db.execute('SELECT * FROM '+('lexemes' if kind=='lexeme' else 'morphemes')+' WHERE id=? AND language_id=?',(rid,lid)).fetchone()
     if not row:raise ValueError('条目已删除或不属于当前语言')
     body=json.loads(row['body']);form=row['headword'] if kind=='lexeme' else row['form']
-    if kind=='lexeme':items=[dict(sense=s['id'],label=(u.get('pos') or '词类待定')+' · '+(s.get('short_gloss') or s.get('definition') or '义项未填写')) for u in body.get('usages',[]) for s in u.get('senses',[])]
-    else:items=[dict(sense=body.get('primary_sense_id','@main'),label=body.get('gloss') or '主要释义')]+[dict(sense=s['id'],label=s.get('gloss') or s.get('definition') or '义项未填写') for s in body.get('senses',[])]
+    # Keep the legacy plain label, but identify its gloss separately for display.
+    # POS names and definitions can themselves contain registered-label spellings.
+    def part(text,gloss=False):return dict(kind='gloss' if gloss else 'text',text=text)
+    if kind=='lexeme':
+        items=[]
+        for u in body.get('usages',[]):
+            for s in u.get('senses',[]):
+                pos=u.get('pos') or '词类待定';meaning=s.get('short_gloss') or s.get('definition') or '义项未填写'
+                items.append(dict(sense=s['id'],label=pos+' · '+meaning,label_parts=[part(pos),part(meaning,bool(s.get('short_gloss')))]))
+    else:
+        meaning=body.get('gloss') or '主要释义'
+        items=[dict(sense=body.get('primary_sense_id','@main'),label=meaning,label_parts=[part(meaning,bool(body.get('gloss')))])]
+        for s in body.get('senses',[]):
+            meaning=s.get('gloss') or s.get('definition') or '义项未填写'
+            items.append(dict(sense=s['id'],label=meaning,label_parts=[part(meaning,bool(s.get('gloss')))]))
     return [dict(kind=kind,id=rid,form=form,**s) for s in items]
 
 def resolve(db,lid,ref):
@@ -57,7 +70,8 @@ def mutate(db,lid,b):
     refs=[resolve(db,lid,b.get(k,{})) for k in ('source','target')]
     refs.sort(key=key);a,c=map(key,refs)
     if a==c:raise ValueError('不能把一个义项与自身关联')
-    db.execute('INSERT OR IGNORE INTO synonym_links VALUES(?,?,?,?,?)',(str(uuid.uuid4()),lid,a,c,json.dumps(refs,ensure_ascii=False)))
+    stored=[{k:r[k] for k in ('kind','id','sense','form','label')} for r in refs]
+    db.execute('INSERT OR IGNORE INTO synonym_links VALUES(?,?,?,?,?)',(str(uuid.uuid4()),lid,a,c,json.dumps(stored,ensure_ascii=False)))
     return dict(ok=True)
 
 def export_bundle(db,languages):

@@ -31,6 +31,7 @@
   else if(!progress.open)progress.showModal();
   try{
    id=(await taskApi('task-start',{kind,request})).id;
+   let waitingPolls=0;
    for(;;){
     if(cancelRequested)await taskApi('task-cancel',{id});
     const state=await taskApi('task-status?id='+encodeURIComponent(id));
@@ -41,7 +42,10 @@
     if(state.progress==null)$('long-task-progress').removeAttribute('value');else $('long-task-progress').value=state.progress;
     if(state.state==='done'){finished=true;return state.result;}
     if(state.state==='error'||state.state==='cancelled'){finished=true;if(background&&state.state==='cancelled')throw new DOMException((globalThis.CorporiumI18n?.f("1720e3a42617f8",()=>[])??'检索已取消'),'AbortError');throw Error(state.message);}
-    await new Promise(resolve=>setTimeout(resolve,background?80:400));
+    // Short jobs often finish just after the first status read. Check those
+    // promptly, then return to the existing interval for sustained work.
+    const delay=background?80:Math.min(400,40*2**Math.min(waitingPolls++,4));
+    await new Promise(resolve=>setTimeout(resolve,delay));
    }
   }finally{
    const close=()=>{active=!background&&progressHolds>0;if(background)status?.remove();else if(!progressHolds&&progress.open)progress.close();};

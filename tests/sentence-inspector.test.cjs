@@ -1,4 +1,10 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
+test('language-name actions inside a word bypass the dictionary capture handler',()=>{
+ const {listeners,calls}=setup();let intercepted=false;
+ const word={matches:()=>false};
+ listeners.click({target:{closest:selector=>selector.startsWith('.editable-example')?word:selector.includes('[data-code-info]')?{}:null},preventDefault(){intercepted=true;},stopImmediatePropagation(){intercepted=true;}});
+ assert.equal(intercepted,false);assert.equal(calls.length,0);
+});
 function setup(){
  const calls=[],questions=[],answers=[],elements={},listeners={},observers=[],metrics={scans:0,shows:0,closes:0};
  function dialog(){const handlers={},tabs=['dictionary','morphology'].map(tab=>({dataset:{inspectorTab:tab},setAttribute(){}}));return {open:false,hidden:false,handlers,classList:{add(){}},setAttribute(){},show(){metrics.shows++;this.open=true;},close(){metrics.closes++;this.open=false;},querySelector(s){if(s==='.sentence-inspector-tabs')return {};if(s==='form[method="dialog"]')return {addEventListener(){},removeEventListener(){}};return null;},querySelectorAll(){return tabs;},addEventListener(type,fn){handlers[type]=fn;},removeEventListener(){}};}

@@ -1,16 +1,12 @@
 """Read-only token/record counts, with explicit scope and identity deduplication."""
 import long_tasks
 import json
-import unicodedata
 import corpus
 from collections import OrderedDict
 
 
-def is_word(word):
-    value=corpus.plain(word.get('form','')).strip()
-    if not value or corpus.boundary_count(value):return False
-    if word.get('punctuation') and word.get('punctuation_form')==word.get('form'):return False
-    return any(not c.isspace() and c!='#' and not unicodedata.category(c).startswith('P') for c in value)
+# Keep the public statistics helper while sharing its rule with diagnostics.
+is_word=corpus.is_word
 
 
 class WordCounter:

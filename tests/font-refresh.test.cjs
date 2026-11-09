@@ -8,6 +8,11 @@ function setup(){
  return {c,elements,selected,events};
 }
 function catalog(version){return {families:[{id:'localfont-aaaaaaaaaaaaaaaaaaaaaaaa',name:'Probe',faces:[{url:'/api/font-file?id=one&v='+version,style:'normal',weight:'400'}]}],builtins:[{family:'Junicode',url:'/font/Junicode/Junicode.ttf?v='+version,style:'normal',weight:'400'},{family:'Junicode',url:'/font/Junicode/Junicode-BoldItalic.ttf?v='+version,style:'italic',weight:'700'}],file_count:1,errors:[]};}
+test('immutable bundled UI faces keep their initial CSS URLs after a project font scan',()=>{
+ const {c}=setup(),data=catalog('latest');
+ data.builtins.push({family:'Noto Sans',url:'/font/NotoSans/NotoSans-VF.ttf?v=latest',style:'normal',weight:'100 900',bundled_ui:true});
+ assert.doesNotMatch(c.fontFaceCSS(data),/NotoSans/);assert.match(c.fontFaceCSS(data),/Junicode/);
+});
 test('font face rules update both stable custom IDs and builtin style aliases',()=>{
  const {c}=setup(),old=c.fontFaceCSS(catalog('before')),fresh=c.fontFaceCSS(catalog('after'));
  assert.notEqual(old,fresh);assert.match(fresh,/font-family:"localfont-aaaaaaaaaaaaaaaaaaaaaaaa"/);assert.match(fresh,/font-family:"Junicode"/);assert.match(fresh,/font-style:italic;font-weight:700/);assert.doesNotMatch(fresh,/before/);

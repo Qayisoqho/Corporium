@@ -1,27 +1,83 @@
 <!doctype html>
 <html lang="zh-CN" data-theme="docoid"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Corporium</title>
-<script>try{const t=localStorage.getItem('ordos-theme');if(['docoid','dawoid','ivory','night','forest'].includes(t))document.documentElement.dataset.theme=t}catch{}</script>
+<script>
+// No project catalogue is available yet. Read only local interface preferences.
+(()=>{try{
+ const root=document.documentElement,t=localStorage.getItem('ordos-theme');
+ if(['docoid','dawoid','ivory','night','forest'].includes(t))root.dataset.theme=t;
+ const scale=localStorage.getItem('ordos-text-scale');
+ if(['0.9','1','1.1','1.2','1.3','1.5'].includes(scale))root.style.setProperty('--text-scale',scale);
+ if(localStorage.getItem('corporium-density')==='compact')root.dataset.density='compact';
+ const settings=JSON.parse(localStorage.getItem('corporium-typography')||'{}')||{};
+ const known=new Set(['IPAPANNEW','Junicode','STIX Two Text','Microsoft JhengHei','Noto Sans','Source Han Sans SC','SimSun','KaiTi','Microsoft YaHei','serif','sans-serif']);
+ function family(value){
+  if(typeof value!=='string')return null;
+  if(known.has(value)||/^localfont-[0-9a-f]{24}$/.test(value))return value;
+  if(!/^systemfont-(?:[0-9a-f]{2}){1,1024}$/.test(value))return null;
+  try{const name=decodeURIComponent(value.slice(11).replace(/../g,'%$&'));return name.length<=256&&name.trim()===name&&!/^@|[\u0000-\u001f\u007f-\u009f]/.test(name)?name:null;}catch{return null;}
+ }
+ let stack=[...new Set((Array.isArray(settings.uiFonts)?settings.uiFonts:[settings.ui]).map(family).filter(Boolean))].slice(0,32);
+ if(!stack.length||stack.length===2&&stack[0]==='Noto Sans'&&stack[1]==='Source Han Sans SC')stack=['STIX Two Text','Microsoft JhengHei'];
+ if(!stack.includes('sans-serif'))stack.push('sans-serif');
+ root.style.setProperty('--global-font-stack',stack.map(v=>['serif','sans-serif'].includes(v)?v:JSON.stringify(v)).join(','));
+ root.style.setProperty('--ui-style',['italic','bolditalic'].includes(settings.uiVariant)?'italic':'normal');
+ root.style.setProperty('--ui-weight',['bold','bolditalic'].includes(settings.uiVariant)?'700':'400');
+}catch{}})();
+</script>
 <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/workbench.css">
 <style>
-body{background:var(--paper);color:var(--ink);font:16px/1.7 'Segoe UI','Microsoft YaHei',sans-serif}
-.startup-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px 28px;padding:14px max(24px,calc((100vw - 850px)/2));background:var(--green);color:var(--button-ink,#fff)}
-html .startup-header h1{font:30px Georgia,serif;margin:0;color:inherit}
-.startup-header .startup-interface-language{margin:0;font-size:14px;flex-wrap:wrap}
-.startup-header select{color:var(--ink);background:var(--paper);max-width:100%;padding:4px 8px}
-html .startup-content h2{font-family:inherit}
-body>main{margin:0 auto;max-width:898px;padding:40px 24px}
-.startup-actions{display:flex;flex-wrap:wrap;gap:10px}
-.startup-actions button{margin:0}
-#desktop-recent button{display:block;max-width:100%;text-align:left;overflow-wrap:anywhere;margin:8px 0}
-#desktop-error{color:var(--danger,#a32626);white-space:pre-wrap}
-a{color:var(--green)}
-@media(max-width:600px){.startup-header{padding:14px 20px}body>main{padding:24px 20px}}
-</style></head><body>
-<div class="startup-header"><h1>Corporium</h1><div id="startup-language"></div></div>
+body{min-height:100vh;background:var(--paper);color:var(--ink)}
+.startup-header{background:var(--green);color:var(--button-ink,#fff)}
+.startup-header-inner{max-width:66rem;margin-inline:auto;padding:.75rem 2rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem 2rem}
+html .startup-header .startup-brand{font:normal 2rem/1.2 Junicode,serif;letter-spacing:0;margin:0;color:inherit}
+.startup-header .startup-interface-language{margin:0;flex-wrap:wrap;gap:var(--ui-gap)}
+.startup-header select{color:var(--ink);background:var(--paper);max-width:100%}
+body>main.startup-content{margin:0 auto;max-width:66rem;padding:2.5rem 2rem}
+.startup-intro{margin-bottom:2rem}
+.startup-intro h2{margin:0 0 .5rem}
+.startup-intro p{margin:0}
+.startup-layout{display:grid;grid-template-columns:minmax(15rem,.85fr) minmax(0,1.4fr);gap:2.5rem;align-items:start}
+.startup-project-actions{min-width:0;display:grid;gap:1.25rem}
+.startup-action{display:grid;gap:.5rem}
+html .startup-action button{display:flex;align-items:center;justify-content:flex-start;gap:var(--ui-gap);width:100%;margin:0;text-align:start}
+.startup-action p{margin:0}
+.startup-action svg,.startup-recent svg{width:var(--ui-icon-size);height:var(--ui-icon-size);flex:none}
+.startup-legacy{margin:0;padding-top:1.25rem;border-top:1px solid var(--line)}
+.startup-legacy summary{cursor:pointer;color:var(--muted)}
+.startup-legacy p{margin:.5rem 0 0}
+.startup-recents{min-width:0;background:var(--sidebar);border:1px solid var(--line);border-radius:5px;padding:1.25rem}
+.startup-recents h2{margin:0 0 1rem}
+#desktop-recent{display:grid;gap:.5rem}
+.startup-empty{padding:.5rem 0 1.5rem}
+.startup-empty p{margin:0 0 .5rem}
+#desktop-recent .startup-recent{display:grid;grid-template-columns:var(--ui-icon-size) minmax(0,1fr) var(--ui-icon-size);align-items:center;gap:.75rem;width:100%;margin:0;text-align:start}
+.startup-recent-text{min-width:0}
+.startup-recent-name,.startup-recent-path{display:block;overflow-wrap:anywhere}
+.startup-recent-name{font-weight:600}
+.startup-recent-path{margin-top:.25rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.startup-footer{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.75rem 2rem;margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line)}
+.startup-footer p{margin:0}
+.startup-about{display:flex;align-items:baseline;flex-wrap:wrap;gap:var(--ui-gap)}
+.startup-footer a{color:var(--green)}
+.startup-footer a:hover{text-decoration:underline}
+#desktop-error:empty{display:none}
+#desktop-error{margin:0 0 1.5rem;border-left:3px solid var(--danger);padding:.75rem 1rem;background:var(--edit-surface,var(--sidebar));color:var(--danger);white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:50rem){.startup-layout{grid-template-columns:minmax(0,1fr);gap:2rem}.startup-project-actions{grid-template-columns:repeat(auto-fit,minmax(min(100%,15rem),1fr));gap:1.25rem}.startup-legacy{grid-column:1/-1}}
+@media(max-width:32rem){.startup-header-inner{padding:.75rem 1rem}.startup-header-inner #startup-language{max-width:100%}body>main.startup-content{padding:1.5rem 1rem}.startup-project-actions{grid-template-columns:minmax(0,1fr)}.startup-layout{gap:1.5rem}.startup-intro{margin-bottom:1.5rem}}
+</style><link rel="stylesheet" href="/ui-standards.css"></head><body>
+<div class="startup-header"><div class="startup-header-inner"><h1 class="startup-brand">Corporium</h1><div id="startup-language"></div></div></div>
 <main class="startup-content">
-<p>打开一个项目，或选择空文件夹建立新项目。</p>
-<p class="startup-actions"><button class="primary" data-project-action="new">新建项目</button><button data-project-action="open">打开项目</button><button data-project-action="restore">从完整备份恢复到新项目</button></p>
-<p><small>现有网页版资料：选择包含 data 和 font 的语料库文件夹。项目可以包含多种语言。首次打开会先备份数据库。</small></p>
-<h2>最近项目</h2><div id="desktop-recent"></div><p id="desktop-error" role="alert"></p>
-<p><a href="/licenses">关于与许可</a></p>
+<div class="startup-intro"><h2 class="ui-heading">选择一个项目</h2><p class="ui-help">在同一个项目中整理文本、词典与调查资料。</p></div>
+<p id="desktop-error" class="ui-help" role="alert"></p>
+<div class="startup-layout">
+<section class="startup-project-actions ui-controls" aria-label="项目操作">
+<div class="startup-action"><button class="primary" data-project-action="new" aria-describedby="startup-new-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="ui-button-label">新建项目</span></button><p id="startup-new-help" class="ui-help">选择空文件夹，建立一个多语言项目。</p></div>
+<div class="startup-action"><button data-project-action="open" aria-describedby="startup-open-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 8V6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v2M3 8h18l-3 11H5Z"/></svg><span class="ui-button-label">打开项目</span></button><p id="startup-open-help" class="ui-help">选择已有项目的最外层文件夹。</p></div>
+<div class="startup-action"><button data-project-action="example" aria-describedby="startup-example-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v15M12 5C9 3 5 3 3 4v14c3-1 6-1 9 2 3-3 6-3 9-2V4c-2-1-6-1-9 1Z"/></svg><span class="ui-button-label">打开 Tëlira 示例</span></button><p id="startup-example-help" class="ui-help">选择空文件夹，用随附材料建立可自由编辑的示例项目。</p></div>
+<div class="startup-action"><button data-project-action="restore" aria-describedby="startup-restore-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9a8 8 0 1 1 0 7M4 4v5h5M12 8v4l3 2"/></svg><span class="ui-button-label">恢复完整备份</span></button><p id="startup-restore-help" class="ui-help">将完整备份恢复为一个新项目。</p></div>
+<details class="startup-legacy"><summary class="ui-label">已有网页版资料？</summary><p class="ui-help">选择包含 data 和 font 的语料库文件夹。首次打开会先备份数据库。</p></details>
+</section>
+<section class="startup-recents" aria-labelledby="startup-recent-heading"><h2 id="startup-recent-heading" class="ui-heading">最近项目</h2><div id="desktop-recent" aria-live="polite"><p class="ui-help">正在读取最近项目…</p></div></section>
+</div>
+<div class="startup-footer"><p class="ui-help">资料保存在你选择的项目文件夹中。</p><div class="startup-about ui-help"><a href="/licenses">关于与许可</a><a id="startup-version" href="/licenses"></a></div></div>
 </main></body></html>

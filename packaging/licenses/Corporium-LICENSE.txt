@@ -1,3 +1,11 @@
+Corporium License
+
+You may install and use this version of Corporium.
+This license gives Corporium no rights to the corpora, recordings, or research results you import or create.
+The software is provided as is; to the extent permitted by applicable law, no additional warranties are made.
+Third-party components are provided under their respective licenses. Their original license texts are included with the application and can be viewed under “Manage → About & licenses”.
+
+
 Corporium 使用许可
 
 你可以安装并使用本版本 Corporium。

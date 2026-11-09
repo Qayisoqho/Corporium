@@ -133,7 +133,10 @@ document.addEventListener('click',async e=>{
     const data=await api('annotations?'+new URLSearchParams({kind:card.dataset.exampleKind,id:card.dataset.exampleId}));
     if(inlineOpening.get(key)!==opening||owner!==activeLanguage||workspace!==origin||!card.isConnected)return;
     if(inlineDrafts.has(key)){repaintInline(key);return;}
-    const d={...data,workspace,body:structuredClone(data.body),before:structuredClone(data.cells),cells:structuredClone(data.cells),dirty:false,notesOpen:button.dataset.inlineStart==='notes'};inlineDrafts.set(key,d);repaintInline(key);
+    const d={...data,workspace,body:structuredClone(data.body),before:structuredClone(data.cells),cells:structuredClone(data.cells),dirty:false,notesOpen:button.dataset.inlineStart==='notes'};
+    // A sentence saved without word slots still opens with one blank box; left empty, saving drops it again.
+    if(!d.words?.length&&!d.body.words?.length){d.words=[{id:'new:'+crypto.randomUUID(),protected:false}];d.body.words=[{form:'',gloss:''}];}
+    inlineDrafts.set(key,d);repaintInline(key);
    }catch(error){if(inlineOpening.get(key)===opening&&owner===activeLanguage&&workspace===origin&&card.isConnected)throw error;}
    finally{if(inlineOpening.get(key)===opening)inlineOpening.delete(key);button.disabled=false;}
    return;
@@ -197,6 +200,27 @@ document.addEventListener('keydown',e=>{
  if(!e.shiftKey&&slot?.dataset.inlineSlot===d.words.at(-1)?.id&&!inlineSlotEmpty(d,d.words.length-1)&&e.target===slot.querySelectorAll('.inline-piece.'+e.target.dataset.field)[slot.querySelectorAll('.inline-piece.'+e.target.dataset.field).length-1]){e.preventDefault();inlineInsert(card,d,d.words.length);return;}
  if(next){e.preventDefault();next.focus();return;}
  if(!e.shiftKey&&!inlineSlotEmpty(d,d.words.length-1)){e.preventDefault();inlineInsert(card,d,d.words.length);}
+});
+// Arrow keys: Up/Down switch between the morpheme, gloss and word-tier rows of one box; Left/Right
+// at either end of a field step to the neighbouring piece, then the neighbouring box, in the same row.
+document.addEventListener('keydown',e=>{
+ if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)||e.isComposing||e.keyCode===229||e.shiftKey||e.altKey||e.ctrlKey||e.metaKey)return;
+ const t=e.target,slot=t.closest?.('.inline-words [data-inline-slot]');if(!slot||!t.matches('input.inline-piece,.extra-layer input[data-inline-layer]'))return;
+ const card=slot.closest('.editable-example'),d=inlineDrafts.get(card?.dataset.exampleKey);if(!d||d.saving||d.dragEnabled)return;
+ const rows=box=>[[...box.querySelectorAll('input.inline-piece.form')],[...box.querySelectorAll('input.inline-piece.gloss')],...[...box.querySelectorAll('.extra-layer input[data-inline-layer]')].map(input=>[input])].filter(row=>row.length);
+ const own=rows(slot),r=own.findIndex(row=>row.includes(t));if(r<0)return;
+ let target,at;
+ if(e.key==='ArrowUp'||e.key==='ArrowDown'){
+  const row=own[r+(e.key==='ArrowUp'?-1:1)];if(!row)return;
+  const centre=n=>{const b=n.getBoundingClientRect();return b.left+b.width/2;},x=centre(t);
+  target=row.reduce((a,b)=>Math.abs(centre(b)-x)<Math.abs(centre(a)-x)?b:a);at=target.value.length;
+ }else{
+  const back=e.key==='ArrowLeft';if(t.selectionStart!==t.selectionEnd||t.selectionStart!==(back?0:t.value.length))return;
+  target=own[r][own[r].indexOf(t)+(back?-1:1)];
+  if(!target){const boxes=[...card.querySelectorAll('.inline-words [data-inline-slot]')],next=boxes[boxes.indexOf(slot)+(back?-1:1)],kind=input=>input.dataset.inlineLayer||input.dataset.field,row=next&&rows(next).find(row=>kind(row[0])===kind(t));target=row?.[back?row.length-1:0];}
+  at=back?target?.value.length:0;
+ }
+ if(!target)return;e.preventDefault();target.focus();target.setSelectionRange(at,at);
 });
 document.addEventListener('focusout',e=>{
  const card=e.target.closest('.editable-example'),slot=e.target.closest('[data-inline-slot]');if(!card||!slot)return;

@@ -12,7 +12,9 @@ test('ordinary text edits do not reposition the tool, while modals, visibility c
  const target={},host={contains:n=>n==='keyboard'},c={host,target};vm.createContext(c);vm.runInContext(source.slice(source.indexOf(' function layoutChanged('),source.indexOf(' new MutationObserver(records=>{if(layoutChanged')),c);
  const element=(relevant=false,contains=false)=>({nodeType:1,matches:()=>relevant,querySelector:()=>null,contains:n=>contains&&n===target}),record=(added=[],removed=[])=>({type:'childList',target:'outside',addedNodes:added,removedNodes:removed});
  assert.equal(c.layoutChanged([record([{nodeType:3}])]),false);assert.equal(c.layoutChanged([record([element()])]),false);assert.equal(c.layoutChanged([{type:'attributes',target:'keyboard'}]),false);
- assert.equal(c.layoutChanged([{type:'attributes',target:'dialog'}]),true);assert.equal(c.layoutChanged([record([element(true)])]),true);assert.equal(c.layoutChanged([record([],[element(false,true)])]),true);
+ const dialog={getAttribute:()=>''};assert.equal(c.layoutChanged([{type:'attributes',target:dialog,attributeName:'open',oldValue:null}]),true);
+ assert.equal(c.layoutChanged([{type:'attributes',target:dialog,attributeName:'open',oldValue:''}]),false);
+ assert.equal(c.layoutChanged([record([element(true)])]),true);assert.equal(c.layoutChanged([record([],[element(false,true)])]),true);
 });
 test('keyboard avoids visible inspector save footers and fixed add buttons, including modal ownership',()=>{
  const make=(footer,position='static',visible=true)=>({footer,position,getClientRects:()=>visible?[{}]:[],matches:()=>footer,getBoundingClientRect(){return this;}});

@@ -1,7 +1,7 @@
 /* Shared About page and on-demand, plain-text licenses; no project reads or writes. */
 (()=>{
  const standalone=document.getElementById('legal-page-content');
- let host=standalone,dialog=null,loaded=false,sequence=0,info=null;
+ let host=standalone,dialog=null,loaded=false,sequence=0,info=null,catalogRequest=null;
  if(!host){
   makeDialog('legal-notices-dialog',(globalThis.CorporiumI18n?.f("a92d50cc0277f1",()=>[])??'<h2>关于与许可</h2><div id="legal-notices-content"></div>'));
   dialog=document.getElementById('legal-notices-dialog');host=document.getElementById('legal-notices-content');
@@ -14,11 +14,16 @@
  const select=host.querySelector('select'),status=host.querySelector('.legal-notices-status'),text=host.querySelector('pre'),section=host.querySelector('details');
  const aboutStatus=host.querySelector('.about-status'),copy=host.querySelector('.about-copy');
  async function read(url){const r=await fetch(url),body=await r.json();if(!r.ok||body.error)throw Error(body.error||(globalThis.CorporiumI18n?.f("24a38bcc13a180",()=>[])??'读取许可失败'));return body;}
+ // The status version and the viewer share this program-only response.
+ function catalog(){if(!catalogRequest)catalogRequest=read('/licenses/catalog').catch(error=>{catalogRequest=null;throw error;});return catalogRequest;}
+ const version=document.getElementById('app-status-version');
+ if(version){version.onclick=()=>document.getElementById('legal-notices-open')?.click();void catalog().then(r=>{version.textContent=r.about.version;}).catch(()=>{});}
  async function show(){const ticket=++sequence;status.textContent=(globalThis.CorporiumI18n?.f("b603bd24a8a299",()=>[])??'正在读取…');text.textContent='';try{const r=await read('/licenses/document?'+new URLSearchParams({id:select.value}));if(ticket!==sequence)return;text.textContent=r.text;text.scrollTop=0;status.textContent='';}catch(e){if(ticket===sequence)status.textContent=e.message;}}
  async function open(){
   if(loaded){aboutStatus.textContent='';return;}aboutStatus.textContent=(globalThis.CorporiumI18n?.f("26444842d4f679",()=>[])??'正在读取…');
   try{
-   const r=await read('/licenses/catalog');info=r.about;
+   const r=await catalog();info=r.about;
+   if(version)version.textContent=info.version;
    host.querySelector('.about-name').textContent=info.name;host.querySelector('.about-version').textContent=info.version;
    host.querySelector('.about-description').textContent=info.description;host.querySelector('.about-developer').textContent=info.developer;
    for(const [selector,url] of [['.about-project',info.project_url],['.about-issues',info.issues_url]]){const link=host.querySelector(selector);link.href=url;link.hidden=false;}

@@ -1,0 +1,292 @@
+/* Interface roles. See docs/UI_STANDARDS.md before adding local size rules.
+   Research text and language-specific annotation rows do not use these roles. */
+:root{
+ --ui-text-size:.9375rem;
+ --ui-help-size:.875rem;
+ --ui-heading-size:1.125rem;
+ --ui-text-leading:1.5;
+ --ui-help-leading:1.65;
+ --ui-field-height:var(--ui-control-height,2.25rem);
+ --ui-field-padding:.625rem;
+ --ui-gap:.5rem;
+ --ui-icon-size:1rem;
+ --ui-check-size:1rem;
+ --ui-list-padding-block:.5rem;
+ --ui-list-line-gap:.25rem;
+}
+:root[data-density=compact]{--ui-list-padding-block:.375rem}
+/* Calculate at the control itself so compact ancestors and text scaling are
+   resolved locally, rather than inheriting a padding computed at :root. */
+:where(button), :where(input), :where(select), :where(textarea){--ui-control-padding:calc((var(--ui-field-height) - var(--ui-text-size)*var(--ui-text-leading) - 2px)/2) var(--ui-field-padding)}
+/* Leave room for digits, native spin buttons and both borders. A fixed narrow
+   width is not a text-size-independent way to make a numeric field compact. */
+html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav) input[type=number]{--ui-field-padding:.375rem;--ui-number-min:calc(4ch + 2*var(--ui-field-padding) + 1.25rem + 2px);min-width:var(--ui-number-min);flex-shrink:0}
+/* A page jump needs only the digits in its actual page range, with a two-digit
+   minimum. Keep native spin-button space and let large ranges grow naturally. */
+html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav) .top-pagination input[type=number]{--ui-page-number-width:calc(var(--ui-page-digits,2)*1ch + 2*var(--ui-field-padding) + 1.25rem + 2px);--ui-number-min:var(--ui-page-number-width);width:var(--ui-page-number-width);min-width:var(--ui-page-number-width);text-align:center;font-variant-numeric:tabular-nums}
+
+/* Defaults cover every application surface and newly created dialogs. Existing
+   component rules below consume the same tokens. Language rows, glyphs and
+   shell chrome keep their own typography and geometry. */
+html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav,.startup-header) button:not(:where(
+ .word-dictionary,.judgment-mark,.ui-content,.ui-content *,
+ .inline-words *,.inline-ipa *,.inline-gloss *,.inline-translation *,
+ .language-body input,.language-body textarea,
+ #lexeme-headword,#morpheme-form-value,.sense-short,.morpheme-sense-gloss,
+ #workspace-toolbar *,#app-bar *,#app-status *,#ipa-keyboard *,
+ .tl-toggle,.tl-block,.tl-block *,.tl-handle,.hp-resize,.hp-row-grip,.lx-sort-handle,.font-stack-grip
+)), html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav,.startup-header) input:where(:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]):not([type=hidden])):not(:where(
+ .word-dictionary,.judgment-mark,.ui-content,.ui-content *,
+ .inline-words *,.inline-ipa *,.inline-gloss *,.inline-translation *,
+ .language-body input,.language-body textarea,
+ #lexeme-headword,#morpheme-form-value,.sense-short,.morpheme-sense-gloss,
+ #workspace-toolbar *,#app-bar *,#app-status *,#ipa-keyboard *,
+ .tl-toggle,.tl-block,.tl-block *,.tl-handle,.hp-resize,.hp-row-grip,.lx-sort-handle,.font-stack-grip
+)), html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav,.startup-header) select:not(:where(
+ .word-dictionary,.judgment-mark,.ui-content,.ui-content *,
+ .inline-words *,.inline-ipa *,.inline-gloss *,.inline-translation *,
+ .language-body input,.language-body textarea,
+ #lexeme-headword,#morpheme-form-value,.sense-short,.morpheme-sense-gloss,
+ #workspace-toolbar *,#app-bar *,#app-status *,#ipa-keyboard *,
+ .tl-toggle,.tl-block,.tl-block *,.tl-handle,.hp-resize,.hp-row-grip,.lx-sort-handle,.font-stack-grip
+)){min-height:var(--ui-field-height);padding:var(--ui-control-padding);line-height:var(--ui-text-leading);font-weight:var(--ui-control-weight,var(--ui-weight,400))}
+
+html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav,.startup-header) input:where(:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]):not([type=hidden])):not(:where(.ui-content,.ui-content *,.inline-words *,.inline-ipa *,.inline-gloss *,.inline-translation *,.language-body input,#lexeme-headword,#morpheme-form-value,.sense-short,.morpheme-sense-gloss,#workspace-toolbar *)), html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav,.startup-header) select:not(:where(.ui-content,.ui-content *,.inline-words *,.inline-ipa *,.inline-gloss *,.inline-translation *,.language-body input,#lexeme-headword,#morpheme-form-value,.sense-short,.morpheme-sense-gloss,#workspace-toolbar *)){line-height:normal}
+
+:where(.pagination), :where(.top-pagination), :where(.dictionary-list-controls), :where(.dictionary-pagination), :where(.morpheme-pagination), :where(.sentence-actions), :where(.sentence-footer-actions), :where(.inline-tools), :where(.slot-tools), :where(.survey-node-tools), :where(.survey-rich-tools), :where(.lx-card-head), :where(.lx-panel-bar), :where(.lx-summary), :where(.lx-field-value), :where(.ws-row-tools), :where(.quick-sense-tools), :where(.quick-component-search), :where(.paradigm-toolbar), :where(.paradigm-quick-tools), :where(.paradigm-quick-row-actions), :where(.font-stack-tags), :where(.font-catalog-results), :where(.tl-toolbar), :where(.tl-controls), :where(.tl-transport), :where(.tl-sidebar), :where(.tl-track-title), :where(.tl-manager-row), :where(.tl-inline-confirm), :where(.code-panel), :where(.object-media-controls), :where(.object-media-manager), :where(.font-stack-heading), :where(.compact-form-reading-actions), :where(#workbench-module-nav), :where(#fieldwork-notes), :where(#hp-inspector), :where(.dialog-top){--ui-field-height:var(--ui-control-height-small,2rem)}
+
+html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav) input:is([type=checkbox],[type=radio]){width:var(--ui-check-size);height:var(--ui-check-size);min-height:0;padding:0;flex:none;vertical-align:middle}
+html:not([data-home=true]) :is(dialog,#hp-inspector,#fieldwork-notes) h2:not(:where(.ui-content *,.survey-rich *,.font-stack-preview *,.preview *)), html:not([data-home=true]) :is(dialog,#hp-inspector,#fieldwork-notes) h3:not(:where(.ui-content *,.survey-rich *,.font-stack-preview *,.preview *)){font-family:var(--ui-font),sans-serif}
+
+/* Shared form labels do not inherit the old small caption sizes. */
+html:not([data-home=true]) :is(dialog,#homophone-panel,#hp-inspector,#fieldwork-notes) label{font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+html:not([data-home=true]) :is(#management-dialog,#typography-dialog) .font-stack-tag button{width:var(--ui-field-height);min-width:var(--ui-field-height);padding:0}
+html:not([data-home=true]) :is(#management-dialog,#typography-dialog) .font-stack-tags{--ui-field-height:var(--ui-control-height-small,2rem)}
+html:not([data-home=true]) #hp-settings-dialog .hp-inventory-row .homophone-links{height:auto;min-height:var(--ui-field-height);flex-wrap:wrap}
+html:not([data-home=true]) #hp-settings-dialog .hp-row-grip{height:var(--ui-field-height)}
+.startup-content>p{font-size:var(--ui-help-size);line-height:var(--ui-help-leading)}
+/* Startup uses the same interface roles; only the Junicode wordmark is chrome. */
+html .startup-content .ui-heading{font-family:var(--ui-font),sans-serif;font-size:var(--ui-heading-size);line-height:var(--ui-text-leading);font-weight:600;letter-spacing:0}
+.startup-content .startup-recent-name{font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav) :is(
+ button:has(>svg):not(:has(>span)),button.close,.tl-icon-grid button,.tl-pan-row button,.sentence-audio button,.hp-row-grip
+):not(:where(#workspace-toolbar *,#app-bar *,#app-status *,#ipa-keyboard *)){min-width:var(--ui-field-height);min-height:var(--ui-field-height);padding:0}
+html:not([data-home=true]) dialog .dialog-content>p:not(:where(.ipa,.form,.gloss,.translation,.preserve-lines,.ui-content,.font-stack-preview *)){font-size:var(--ui-help-size);line-height:var(--ui-help-leading)}
+html:not([data-home=true]) #hp-settings-dialog .hp-inventory-row{grid-template-columns:var(--ui-field-height) minmax(7rem,1fr) minmax(10rem,1.5fr) auto}
+@media(max-width:1100px){
+ html:not([data-home=true]) #hp-settings-dialog .hp-inventory-row{grid-template-columns:var(--ui-field-height) minmax(0,1fr) minmax(0,1.5fr)}
+ html:not([data-home=true]) #hp-settings-dialog .hp-inventory-row .homophone-links{grid-column:2/-1}
+}
+.ui-text,.ui-label,.ui-controls{font-family:var(--ui-font),sans-serif;font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+.ui-help{font-family:var(--ui-font),sans-serif;font-size:var(--ui-help-size);line-height:var(--ui-help-leading);color:var(--muted);max-inline-size:95ch;overflow-wrap:anywhere}
+.ui-heading{font-family:var(--ui-font),sans-serif;font-size:var(--ui-heading-size);line-height:var(--ui-text-leading);font-weight:600}
+.ui-controls--compact{--ui-field-height:var(--ui-control-height-small,2rem)}
+/* Center the visible label rather than its font's asymmetric internal leading.
+   Keep the CJK/alphabetic writing conventions and the existing control sizes. */
+.ui-button-label{pointer-events:none}
+@supports(text-box-trim:trim-both){
+ html[data-shell]{--ui-button-edges:cap alphabetic}
+ :is(.ui-button-label,.ui-optical-label,.ui-optical-control){text-box-trim:trim-both;text-box-edge:var(--ui-button-edges,cap text)}
+ :is(.ui-button-label,.ui-optical-label,.ui-optical-control):is(:lang(zh),[data-ui-cjk]){text-box-edge:text alphabetic}
+}
+/* Navigation remains a regular control; search and paging use the compact
+   role. Trimming a caption must never collapse the clickable row. */
+html[data-shell][data-home=false] :is(main,aside,dialog,#hp-inspector,#fieldwork-notes) button.ui-optical-control{min-height:var(--ui-field-height);box-sizing:border-box}
+html[data-shell][data-home=false] #workspace-sidebar :is(#all,#texts button.nav){min-height:var(--ui-control-height);padding-block:0;box-sizing:border-box}
+html[data-shell][data-home=false] #workspace-sidebar #all{height:auto}
+html[data-shell][data-home=false] #workspace-sidebar #texts button.nav{height:var(--ui-control-height)}
+/* Reading choices need their own breathing room. Command-button padding is
+   calculated for one interface line and must not compress research previews. */
+html[data-shell][data-home=false] :is(.ui-list-item,#dictionary-list .lexeme-list-item,#morpheme-list .lexeme-list-item,#tl-candidates .tl-pending>button,#timeline-workspace .tl-pending>button){min-height:var(--ui-control-height);height:auto;box-sizing:border-box;padding:var(--ui-list-padding-block) var(--ui-field-padding)}
+html[data-shell][data-home=false] :is(.ui-list,.tl-pending){display:grid;grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;align-content:start;gap:var(--ui-gap)}
+html[data-shell][data-home=false] .tl-pending{--ui-list-line-gap:0}
+html[data-shell][data-home=false] :is(.ui-list>.ui-list-item,.tl-pending>button){display:grid;gap:var(--ui-list-line-gap);margin-block:0;text-align:start;white-space:normal;overflow-wrap:anywhere}
+html[data-shell][data-home=false] .tl-pending>button>small{font-family:var(--ui-font),sans-serif;font-size:var(--ui-help-size);line-height:var(--ui-text-leading)}
+html[data-shell][data-home=false] .tl-pending>button>.tl-ipa{display:block}
+@supports(text-box-trim:trim-both){
+ html[data-shell][data-home=false] :is(.ui-list-caption,.tl-pending>button>small){text-box-trim:trim-both;text-box-edge:text alphabetic}
+}
+html[data-shell][data-home=false] #workspace-toolbar>.module-heading h1{display:flex;align-items:center;height:var(--ui-control-height-small);--ui-button-edges:text alphabetic}
+html[data-shell][data-home=false] #workspace-toolbar>.module-heading h1>.ui-title-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+html[data-shell] :is(#brand-language,.folder-name,.text-title){--ui-button-edges:text alphabetic}
+/* Evidence captions share a text baseline inside one compact command row.
+   The checkbox has its own centre, so it cannot enlarge that baseline group. */
+html[data-shell][data-home=false] :is(#dictionary-detail,#morpheme-detail) .lex-example-source.entry-head{display:flex;flex-wrap:wrap;align-items:baseline;align-content:center;gap:var(--ui-list-line-gap) var(--ui-gap);min-height:var(--ui-control-height-small)}
+html[data-shell][data-home=false] :is(#dictionary-detail,#morpheme-detail) .lex-example-source.entry-head:has(>input[type=checkbox]){position:relative;padding-inline-start:calc(var(--ui-check-size) + var(--ui-gap))}
+html[data-shell][data-home=false] :is(#dictionary-detail,#morpheme-detail) .lex-example-source>input[type=checkbox]{position:absolute;inset-inline-start:0;top:50%;transform:translateY(-50%);margin:0}
+/* Match the morpheme card's existing reading padding and top border. */
+html[data-shell][data-home=false] #morpheme-detail .lex-example.has-sentence-actions .sentence-actions{top:calc(var(--ui-gap) + 1px)}
+html[data-shell][data-home=false] :is(#dictionary-detail,#morpheme-detail) .lex-example.has-sentence-actions{container:lex-evidence / inline-size}
+/* Once commands and a caption need separate rows, use their existing document
+   flow. This also lets long translated commands wrap without covering text. */
+@container lex-evidence (width < 40rem){
+ html[data-shell][data-home=false] :is(#dictionary-detail,#morpheme-detail) .lex-example-source.entry-head{padding-inline-end:0;padding-block-start:0}
+ html[data-shell][data-home=false] :is(#dictionary-detail,#morpheme-detail) .lex-example.has-sentence-actions .sentence-actions{position:static;max-width:100%;justify-content:flex-end;margin:0 0 var(--ui-gap)}
+}
+@supports(text-box-trim:trim-both){
+ html[data-shell][data-home=false] :is(#dictionary-detail,#morpheme-detail) .lex-example-source>:is(strong,span,small){text-box-trim:trim-both;text-box-edge:text alphabetic}
+}
+html[data-shell][data-home=false] :is(.survey-card-head,.survey-evidence-actions){align-items:baseline}
+html[data-shell][data-home=false] .survey-evidence-actions>small{font-family:var(--ui-font),sans-serif;font-size:var(--ui-help-size);line-height:var(--ui-help-leading)}
+/* Ellipsis masks, including POS labels, need room for accents and descenders outside the trimmed
+   metrics. Symmetric padding restores a line-sized clipping box without
+   shifting its visible centre or changing a font-specific baseline. */
+@supports(text-box-trim:trim-both){
+ html[data-shell] :is(#brand-language,.text-title,:is(#dictionary-list,#morpheme-list) .lexeme-title,:is(#dictionary-list,#morpheme-list) .lexeme-list-pos,#app-command>.ui-optical-label,#workspace-toolbar>.module-heading h1>.ui-title-label){padding-block:max(0px,calc((1lh - 1cap)/2));box-sizing:border-box}
+}
+/* Sentence actions float in the top layer but retain their original DOM
+   ancestry, global typography and compact control role. Long commands wrap. */
+html[data-home=false] .sentence-menu>.workbench-menu-items[data-floating-sentence-menu]{color:var(--ink);overscroll-behavior:contain;scrollbar-gutter:stable;--ui-field-height:var(--ui-control-height-small,2rem)}
+html[data-home=false] .sentence-menu>.workbench-menu-items[popover]:not(:popover-open){display:none}
+html[data-shell][data-home=false] :is(#corpus-workspace,#example-library,#dictionary-workspace,#survey-workspace,#analysis-workspace,#timeline-workspace,#grammar-workspace,dialog,#fieldwork-notes) .sentence-menu[open]>.workbench-menu-items[data-floating-sentence-menu] button{height:auto;min-height:var(--ui-field-height);padding:var(--ui-control-padding);font-family:var(--ui-font),sans-serif;font-size:var(--ui-text-size);line-height:var(--ui-text-leading);white-space:normal;overflow-wrap:anywhere}
+
+/* Legacy component bridge: each named region contains interface controls only.
+   Keep these selectors here, rather than adding panel-specific size overrides. */
+html[data-shell][data-home=false] :is(#corpus-workspace,#example-library,#analysis-workspace,#grammar-workspace,#survey-workspace,#workbench-module-nav) :is(
+ .workbench-result-tools,.workbench-batch,.organize-bar,.pagination,.top-pagination,
+ #dictionary-search-panel,#dictionary-top-pagination,#survey-search,.survey-tree-toolbar,.survey-root-drop,
+ #analysis-query-form,#analysis-counts-form,#analysis-records,.analysis-result-tools,.analysis-view-options,
+ #analysis-pagination,#analysis-evidence-pages,.vocabulary-configuration,.grammar-type-options,.grammar-type-list,
+ .search-row,.grammar-heading,.grammar-candidate-tools,.grammar-candidate-row,#grammar-ignored,.survey-node-tools,.survey-evidence-actions
+){font-family:var(--ui-font),sans-serif;font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+
+html[data-shell][data-home=false] :is(#corpus-workspace,#example-library,#analysis-workspace,#grammar-workspace,#survey-workspace,#workbench-module-nav) :is(
+ .workbench-result-tools,.workbench-batch,.organize-bar,.pagination,.top-pagination,
+ #dictionary-search-panel,#dictionary-top-pagination,#survey-search,.survey-tree-toolbar,.survey-search-pages,
+ #analysis-records,#analysis-pagination,#analysis-evidence-pages,.grammar-candidate-row
+){--ui-field-height:var(--ui-control-height-small,2rem)}
+
+.ui-control, .ui-controls button, .ui-controls input:where(:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file])), .ui-controls select, .ui-controls textarea, html[data-shell][data-home=false] :is(#corpus-workspace,#example-library,#analysis-workspace,#grammar-workspace,#survey-workspace,#workbench-module-nav) :is(
+ .workbench-result-tools,.workbench-batch,.organize-bar,.pagination,.top-pagination,
+ #dictionary-search-panel,#dictionary-top-pagination,#survey-search,.survey-tree-toolbar,.survey-search-pages,
+ #analysis-query-form,#analysis-counts-form,#analysis-records,.analysis-result-tools,.analysis-view-options,
+ #analysis-pagination,#analysis-evidence-pages,.vocabulary-configuration,.grammar-type-options,
+ .search-row,.grammar-heading,.grammar-candidate-tools,.grammar-candidate-row,#grammar-ignored,.survey-node-tools,.survey-evidence-actions
+) button, html[data-shell][data-home=false] :is(#corpus-workspace,#example-library,#analysis-workspace,#grammar-workspace,#survey-workspace,#workbench-module-nav) :is(
+ .workbench-result-tools,.workbench-batch,.organize-bar,.pagination,.top-pagination,
+ #dictionary-search-panel,#dictionary-top-pagination,#survey-search,.survey-tree-toolbar,.survey-search-pages,
+ #analysis-query-form,#analysis-counts-form,#analysis-records,.analysis-result-tools,.analysis-view-options,
+ #analysis-pagination,#analysis-evidence-pages,.vocabulary-configuration,.grammar-type-options,
+ .search-row,.grammar-heading,.grammar-candidate-tools,.grammar-candidate-row,#grammar-ignored,.survey-node-tools,.survey-evidence-actions
+) input:where(:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file])), html[data-shell][data-home=false] :is(#corpus-workspace,#example-library,#analysis-workspace,#grammar-workspace,#survey-workspace,#workbench-module-nav) :is(
+ .workbench-result-tools,.workbench-batch,.organize-bar,.pagination,.top-pagination,
+ #dictionary-search-panel,#dictionary-top-pagination,#survey-search,.survey-tree-toolbar,.survey-search-pages,
+ #analysis-query-form,#analysis-counts-form,#analysis-records,.analysis-result-tools,.analysis-view-options,
+ #analysis-pagination,#analysis-evidence-pages,.vocabulary-configuration,.grammar-type-options,
+ .search-row,.grammar-heading,.grammar-candidate-tools,.grammar-candidate-row,#grammar-ignored,.survey-node-tools,.survey-evidence-actions
+) select, html[data-shell][data-home=false] :is(#corpus-workspace,#example-library,#analysis-workspace,#grammar-workspace,#survey-workspace,#workbench-module-nav) :is(
+ .workbench-result-tools,.workbench-batch,.organize-bar,.pagination,.top-pagination,
+ #dictionary-search-panel,#dictionary-top-pagination,#survey-search,.survey-tree-toolbar,.survey-search-pages,
+ #analysis-query-form,#analysis-counts-form,#analysis-records,.analysis-result-tools,.analysis-view-options,
+ #analysis-pagination,#analysis-evidence-pages,.vocabulary-configuration,.grammar-type-options,
+ .search-row,.grammar-heading,.grammar-candidate-tools,.grammar-candidate-row,#grammar-ignored,.survey-node-tools,.survey-evidence-actions
+) textarea{
+ box-sizing:border-box;
+ min-height:var(--ui-field-height);
+ height:auto;
+ margin-block:0;
+ padding:calc((var(--ui-field-height) - var(--ui-text-size)*var(--ui-text-leading) - 2px)/2) var(--ui-field-padding);
+ font-family:var(--ui-font),sans-serif;
+ font-size:var(--ui-text-size);
+ font-style:var(--ui-style,normal);
+ font-weight:var(--ui-control-weight,var(--ui-weight,400));
+ line-height:var(--ui-text-leading);
+}
+html[data-home=false] :is(#lexeme-form,#ws-class-template) :is(.ws-membership-head,.ws-parts-table,#ws-template-slots,.lx-classification-fields) :is(input:not([type=checkbox]):not([type=radio]),select), .ui-controls input:where(:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file])), .ui-controls select, html[data-shell][data-home=false] :is(#corpus-workspace,#example-library,#analysis-workspace,#grammar-workspace,#survey-workspace,#workbench-module-nav) :is(
+ .workbench-result-tools,.workbench-batch,.organize-bar,.pagination,.top-pagination,
+ #dictionary-search-panel,#dictionary-top-pagination,#survey-search,.survey-search-pages,
+ #analysis-query-form,#analysis-counts-form,#analysis-records,.analysis-result-tools,.analysis-view-options,
+ #analysis-pagination,#analysis-evidence-pages,.vocabulary-configuration,.grammar-type-options,
+ .search-row,.grammar-heading,.grammar-candidate-tools,.grammar-candidate-row,#grammar-ignored
+) input:where(:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file])), html[data-shell][data-home=false] :is(#corpus-workspace,#example-library,#analysis-workspace,#grammar-workspace,#survey-workspace,#workbench-module-nav) :is(
+ .workbench-result-tools,.workbench-batch,.organize-bar,.pagination,.top-pagination,
+ #dictionary-search-panel,#dictionary-top-pagination,#survey-search,.survey-search-pages,
+ #analysis-query-form,#analysis-counts-form,#analysis-records,.analysis-result-tools,.analysis-view-options,
+ #analysis-pagination,#analysis-evidence-pages,.vocabulary-configuration,.grammar-type-options,
+ .search-row,.grammar-heading,.grammar-candidate-tools,.grammar-candidate-row,#grammar-ignored
+) select{height:var(--ui-field-height);min-height:var(--ui-field-height);padding-block:0;line-height:normal;min-width:var(--ui-number-min,0)}
+
+.ui-controls button,
+html[data-shell][data-home=false] :is(#corpus-workspace,#example-library,#analysis-workspace,#grammar-workspace,#survey-workspace,#workbench-module-nav) :is(
+ .workbench-result-tools,.workbench-batch,.organize-bar,.pagination,.top-pagination,
+ #dictionary-search-panel,#dictionary-top-pagination,#survey-search,.survey-tree-toolbar,.survey-search-pages,
+ #analysis-query-form,#analysis-counts-form,#analysis-records,.analysis-result-tools,.analysis-view-options,
+ #analysis-pagination,#analysis-evidence-pages,.vocabulary-configuration,.grammar-candidate-tools,.grammar-candidate-row,
+ #grammar-ignored,.survey-node-tools,.survey-evidence-actions
+) button{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;white-space:normal;overflow-wrap:anywhere}
+button.primary{--ui-control-weight:600}
+.ui-controls button>svg,
+html[data-shell][data-home=false] :is(#dictionary-search-panel,#survey-search,.workbench-result-tools,.workbench-batch,.grammar-candidate-tools) button>svg{width:var(--ui-icon-size);height:var(--ui-icon-size);flex:none;align-self:center}
+.ui-icon-button{width:var(--ui-field-height);min-width:var(--ui-field-height);padding:0;display:inline-grid;place-items:center;line-height:1}
+html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav) .ui-icon-button{display:inline-grid;place-items:center;width:var(--ui-field-height);min-width:var(--ui-field-height);padding:0;line-height:1}
+.ui-icon-button>svg{width:var(--ui-icon-size);height:var(--ui-icon-size);margin:0}
+
+/* Labels remain the same size across normal and compact controls. */
+html[data-shell][data-home=false] :is(#analysis-query-form,#analysis-counts-form,#analysis-records,#grammar-workspace,#workbench-module-nav,#corpus-workspace) :is(
+ .analysis-scope-grid label,.analysis-condition strong,.analysis-condition label,.analysis-query-footer label,
+ .vocabulary-choice-row label,.vocabulary-configuration label,.grammar-type-options label,
+ #dictionary-search-options label,.survey-tree-toolbar label,.organize-bar label,.workbench-result-tools label
+){font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+html[data-shell][data-home=false] :is(#corpus-workspace,#example-library) :is(.language-details>summary,.workbench-batch>summary),
+html[data-shell][data-home=false] :is(#dictionary-search-panel,#analysis-query-form,#analysis-counts-panel,#analysis-records) summary,
+html[data-shell][data-home=false] #grammar-workspace :is(#grammar-candidates,#grammar-ignored)>summary{font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+
+html[data-shell][data-home=false] :is(#analysis-workspace,#grammar-workspace,#workbench-module-nav,#corpus-workspace,#survey-workspace) :is(
+ .analysis-help,.analysis-query>small,.analysis-summary>small,.analysis-record small,
+ #analysis-status,#analysis-result-count,#grammar-summary,#grammar-candidates p,#grammar-candidates small,#grammar-ignored p,#grammar-ignored small,
+ #grammar-candidate-count,.survey-search-path,.survey-search-result>details>summary,.survey-root-drop,#survey-search-status,.survey-search-empty,.survey-search-result>small,
+ #dictionary-search-status,#counts
+){font-family:var(--ui-font),sans-serif;font-size:var(--ui-help-size);line-height:var(--ui-help-leading);overflow-wrap:anywhere}
+html[data-shell][data-home=false] :is(#analysis-workspace,#workbench-module-nav) :is(.analysis-help,.analysis-query>small),
+html[data-shell][data-home=false] #grammar-workspace :is(#grammar-candidates p,#grammar-ignored p){max-inline-size:95ch}
+html[data-shell][data-home=false] :is(#analysis-workspace,#workbench-module-nav,#grammar-workspace) :is(.analysis-record-heading h2,.grammar-types>h3,.grammar-checks-title){font-family:var(--ui-font),sans-serif;font-size:var(--ui-heading-size);line-height:var(--ui-text-leading)}
+html[data-shell][data-home=false] #grammar-workspace .grammar-type-list>button{font-size:var(--ui-text-size);line-height:var(--ui-text-leading);min-height:var(--ui-control-height);height:auto}
+html[data-shell][data-home=false] #grammar-workspace .grammar-type-list>button>small{font-size:var(--ui-help-size)}
+
+/* Pagination and adjacent labels share one baseline and one density. */
+html[data-shell][data-home=false] :is(#corpus-workspace,#example-library,#dictionary-workspace,#analysis-workspace,#grammar-workspace,#workbench-module-nav) :is(.pagination,.top-pagination,.workbench-result-tools,#analysis-pagination,#analysis-evidence-pages,#dictionary-top-pagination){font-size:var(--ui-text-size);line-height:var(--ui-text-leading);align-items:baseline;gap:var(--ui-gap);flex-wrap:wrap}
+html[data-shell][data-home=false] :is(#analysis-query-form,#analysis-counts-form,.organize-bar,.grammar-candidate-tools,.grammar-type-options,.survey-tree-toolbar) label:has(>input[type=checkbox]){display:inline-flex;align-items:center;gap:.375rem;margin-block:0;font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+.ui-controls input:is([type=checkbox],[type=radio]),
+html[data-shell][data-home=false] :is(#analysis-query-form,#analysis-counts-form,.organize-bar,.grammar-candidate-tools,.grammar-type-options,.survey-tree-toolbar,#dictionary-search-panel) input:is([type=checkbox],[type=radio]){width:var(--ui-check-size);height:var(--ui-check-size);min-height:0;flex:none;margin:0;vertical-align:middle}
+
+/* Input widths express content needs; heights and text roles stay shared. */
+html[data-shell][data-home=false] #analysis-query-form .analysis-condition{align-items:center;gap:var(--ui-gap)}
+html[data-shell][data-home=false] #analysis-query-form .analysis-condition>[data-key=category]{flex:0 1 15rem;min-width:8rem}
+html[data-shell][data-home=false] #analysis-query-form .analysis-condition>[data-key=field]{flex:0 1 14rem;min-width:8rem}
+html[data-shell][data-home=false] #analysis-query-form .analysis-condition>[data-key=value]{flex:1 1 16rem;min-width:min(100%,12rem)}
+html[data-shell][data-home=false] #workbench-module-nav #analysis-records button{max-width:100%}
+html[data-shell][data-home=false] #workbench-module-nav .survey-tree-toolbar label{white-space:normal}
+html[data-shell][data-home=false] #grammar-workspace .grammar-candidate-tools input:not([type=checkbox]){flex:1 1 16rem;max-width:100%;min-width:min(100%,10rem)}
+
+html[data-shell][data-home=false] #analysis-workspace :is(#analysis-query-form,#analysis-counts-form) label{font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+html[data-shell][data-home=false] #workbench-module-nav #analysis-records h2{font-family:var(--ui-font),sans-serif;font-size:var(--ui-heading-size);line-height:var(--ui-text-leading)}
+html[data-shell][data-home=false] #workbench-module-nav #dictionary-search-panel #dictionary-search,
+html[data-shell][data-home=false] #workbench-module-nav #survey-search button{width:var(--ui-field-height);min-width:var(--ui-field-height);padding:0;display:inline-grid;place-items:center;line-height:1}
+
+/* Keep each explanation on its own flex row. Constrain the text, rather
+   than the flex item, so a wide panel cannot pack it beside the run button. */
+html[data-shell][data-home=false] #analysis-workspace #analysis-counts-form>.analysis-help{flex:0 0 100%;max-inline-size:none;box-sizing:border-box;padding-inline-end:max(0px,calc(100% - 95ch))}
+
+.startup-header select, .startup-content button, .startup-content input, .startup-content select{font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+
+/* Native text inputs can carry a language font. Ordinary command buttons and
+   choices always use the interface size, even inside a legacy small caption. */
+html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav) button:not(:where(
+ .word-dictionary,.judgment-mark,.form,.ipa,.gloss,.translation,.grammar-label,.morpheme-form,.dictionary-wordform,.ws-registry-form,
+ .ui-content,.ui-content *,.inline-words *,.language-body input,
+ #app-bar *,#app-status *,#ipa-keyboard *,
+ .tl-icon-grid button,.tl-toggle,.tl-block,.tl-block *,.tl-handle,.hp-resize,.hp-row-grip,.lx-sort-handle,.font-stack-handle
+)), html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav) select:not(:where(
+ .word-dictionary,.judgment-mark,.form,.ipa,.gloss,.translation,.grammar-label,.morpheme-form,.dictionary-wordform,.ws-registry-form,
+ .ui-content,.ui-content *,.inline-words *,.language-body input,
+ #app-bar *,#app-status *,#ipa-keyboard *,
+ .tl-icon-grid button,.tl-toggle,.tl-block,.tl-block *,.tl-handle,.hp-resize,.hp-row-grip,.lx-sort-handle,.font-stack-handle
+)){font-size:var(--ui-text-size)}
+html:not([data-home=true]) :is(main,aside,dialog,#hp-inspector,#fieldwork-notes,#workbench-module-nav) label:not(:where(.words *,.word *,.inline-words *,.ui-content *,.language-body label)){font-size:var(--ui-text-size)}
+:where(.playback-volume), :where(.reading-index){--ui-field-height:var(--ui-control-height-small,2rem)}
+
+:where(aside), :where(.sidebar-text-actions){--ui-field-height:var(--ui-control-height-small,2rem)}
+#workbench-corpus-nav>.text-filter{height:var(--ui-field-height);min-height:var(--ui-field-height);font-size:var(--ui-text-size)}
+/* Rich notes/questions use the interface default; explicitly formatted runs
+   and writing-system spans inside them retain their own typography. */
+html:not([data-home=true]) :is(#fieldwork-notes,#survey-workspace,#survey-edit-dialog,#survey-template-dialog) .survey-rich-input{font-size:var(--ui-text-size)}

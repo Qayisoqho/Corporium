@@ -1,3 +1,5 @@
-Tëlira：为 Corporium 创建的虚构示例语言。
-在侧栏「语言选项 → 导入语言数据包 → 使用内置示例 Tëlira」导入。
-仅附语言材料，不附音视频；不会自动写入既有项目。
+Tëlira is a fictional example language created for Corporium.
+Open an independent project using Open Tëlira example on the desktop startup page.
+To add it to an existing project, use the built-in Tëlira example option under Language options.
+English edition: 573 lexemes, 2 texts, 168 sentences. No audio or video is included.
+Importing the example does not replace an existing language or translate other project materials.

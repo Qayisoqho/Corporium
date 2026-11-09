@@ -4,23 +4,34 @@ import re
 import struct
 import threading
 import zlib
+import system_fonts
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parent/'font'
 ASSET_ROOT=ROOT
-BUILTINS=('IPAPANNEW','Junicode','SimSun','KaiTi','Microsoft YaHei','serif','sans-serif')
+BUILTINS=('IPAPANNEW','Junicode','STIX Two Text','Microsoft JhengHei','Noto Sans','Source Han Sans SC','SimSun','KaiTi','Microsoft YaHei','serif','sans-serif')
+# Microsoft JhengHei is referenced as an installed system family only. Windows
+# font permissions do not authorize copying its files into this application.
+UI_BUILTIN_FILES=tuple(('STIX Two Text','STIXTwoText/STIXTwoText-'+face+'.ttf',slant,weight)
+ for face,slant,weight in (('Regular','normal','400'),('Italic','italic','400'),
+ ('Medium','normal','500'),('MediumItalic','italic','500'),
+ ('SemiBold','normal','600'),('SemiBoldItalic','italic','600'),
+ ('Bold','normal','700'),('BoldItalic','italic','700')))
 BUILTIN_FILES=(('IPAPANNEW','IPAPANNEW.TTF','normal','400'),
  ('Junicode','Junicode/Junicode.ttf','normal','400'),
  ('Junicode','Junicode/Junicode-Italic.ttf','italic','400'),
  ('Junicode','Junicode/Junicode-Bold.ttf','normal','700'),
- ('Junicode','Junicode/Junicode-BoldItalic.ttf','italic','700'))
+ ('Junicode','Junicode/Junicode-BoldItalic.ttf','italic','700'))+UI_BUILTIN_FILES
 _lock=threading.RLock()
 _catalog=None
 _files={}
 _signature=None
 
 def valid_font(value):
-    return isinstance(value,str) and (value in BUILTINS or re.fullmatch(r'localfont-[0-9a-f]{24}',value) is not None)
+    return isinstance(value,str) and (value in BUILTINS or re.fullmatch(r'localfont-[0-9a-f]{24}',value) is not None or system_fonts.font_name(value) is not None)
+
+def valid_row_font(value):
+    return value=='@global' or valid_font(value)
 
 def inspect_font(path,data=None):
     if data is None:data=path.read_bytes()
@@ -69,6 +80,12 @@ def inspect_font(path,data=None):
 
 def builtin_path(relative):
     if relative not in {r[1] for r in BUILTIN_FILES}:raise ValueError('字体不存在，请重新扫描')
+    # Interface assets belong to the application, including before a project is
+    # selected. Opening a project must not change them or copy them into it.
+    if relative in {r[1] for r in UI_BUILTIN_FILES}:
+        path=ASSET_ROOT/relative
+        path.resolve().relative_to(ASSET_ROOT.resolve())
+        return path
     path=ROOT/relative
     path.resolve().relative_to(ROOT.resolve())
     return path if path.is_file() else ASSET_ROOT/'Junicode'/'Junicode.ttf'
@@ -92,8 +109,9 @@ def builtin_stamp(relative):
 def scan(refresh=False):
     global _catalog,_files,_signature
     with _lock:
+        installed=system_fonts.catalog(refresh)
         paths=[p for p in sorted(ROOT.rglob('*')) if p.is_file() and p.suffix.lower() in ('.ttf','.otf','.woff','.woff2','.ttc','.otc')]
-        signature=(str(ROOT.resolve()),tuple(file_stamp(p) for p in paths),tuple(builtin_stamp(r[1]) for r in BUILTIN_FILES))
+        signature=(str(ROOT.resolve()),tuple(file_stamp(p) for p in paths),tuple(builtin_stamp(r[1]) for r in BUILTIN_FILES),installed)
         if _catalog is not None and not refresh and signature==_signature:return _catalog
         families={};files={};errors=[];priorities={}
         for path in paths:
@@ -112,9 +130,14 @@ def scan(refresh=False):
         for family in families.values():family['faces'].sort(key=lambda f:priorities[f['url']])
         builtins=[]
         for family,relative,style,weight in BUILTIN_FILES:
-            try:builtins.append(dict(family=family,url='/font/'+relative+'?v='+hashlib.sha256(read_file(builtin_path(relative))).hexdigest(),style=style,weight=weight))
+            try:
+                face=dict(family=family,url='/font/'+relative+'?v='+hashlib.sha256(read_file(builtin_path(relative))).hexdigest(),style=style,weight=weight)
+                # style.css loads these immutable application assets before JS.
+                # Do not inject a second face with a different URL after scanning.
+                if relative in {r[1] for r in UI_BUILTIN_FILES}:face['bundled_ui']=True
+                builtins.append(face)
             except (OSError,ValueError) as exc:errors.append(dict(file=relative,error=str(exc)))
-        _files=files;_signature=signature;_catalog=dict(families=sorted(families.values(),key=lambda x:x['name'].casefold()),builtins=builtins,file_count=len(files),errors=errors)
+        _files=files;_signature=signature;_catalog=dict(families=sorted(families.values(),key=lambda x:x['name'].casefold()),builtins=builtins,file_count=len(files),errors=errors,system=installed)
         return _catalog
 
 def font_file(file_id,version=None):

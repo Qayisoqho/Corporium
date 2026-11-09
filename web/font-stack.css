@@ -1,0 +1,25 @@
+/* Ordered tags share the settings surface; font samples alone use the draft. */
+.font-settings-intro{margin:0 0 .9rem;color:var(--muted);max-width:65ch}
+.font-stack-heading{display:flex;align-items:baseline;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
+.font-stack-heading button{padding:var(--ui-control-padding);font-size:var(--ui-text-size);min-height:var(--ui-field-height)}
+.font-stack-tags{display:flex;flex-wrap:wrap;gap:.5rem;list-style:none;margin:.7rem 0;padding:0;min-width:0}
+.font-stack-tag{display:flex;align-items:baseline;gap:.35em;min-width:0;max-width:100%;border:1px solid var(--line);border-radius:.35rem;padding:.3rem .4rem .3rem .15rem;background:var(--surface,var(--paper));line-height:1.5}
+.font-stack-caption{display:flex;align-items:baseline;gap:.35em;min-width:0;flex:1}.font-stack-name{overflow-wrap:anywhere;min-width:0;font-weight:600}.font-stack-tag small{font-size:var(--ui-help-size);white-space:nowrap}
+.font-stack-rank{font-size:var(--ui-text-size);color:var(--muted);font-variant-numeric:tabular-nums}
+.font-stack-tag button{font-family:var(--ui-font);align-self:center;padding:0 .25em;min-height:var(--ui-field-height);line-height:var(--ui-text-leading);border:0;background:transparent;color:var(--muted);flex:none}
+.font-stack-handle{cursor:grab;touch-action:none}.font-stack-handle:active{cursor:grabbing}.font-stack-remove:hover{color:var(--danger,var(--ink))}
+.font-stack-tag.font-unavailable{border-style:dashed}.font-stack-tag.font-drop-target{outline:2px solid var(--green)}.font-stack-tag.font-dragging{opacity:.5}
+.font-stack-help{font-size:var(--ui-help-size);color:var(--muted);margin:.5rem 0 1rem;max-width:70ch}
+.font-catalog-tools{display:flex;align-items:end;gap:.7rem;flex-wrap:wrap}.font-catalog-tools label{display:flex;flex-direction:column;gap:.3rem;margin:0;font-size:var(--ui-text-size);min-width:0}.font-catalog-tools label:first-child{flex:1;min-width:min(13rem,100%)}
+.font-catalog-tools input[type=search],.font-catalog-tools select{margin:0;width:100%;min-width:0;padding:var(--ui-control-padding)}
+.font-catalog-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(15rem,100%),1fr));align-content:start;gap:.35rem;max-height:13rem;overflow:auto;overscroll-behavior:contain;padding:.5rem .25rem .5rem 0;margin:.4rem 0;border-block:1px solid var(--line);scrollbar-gutter:stable}
+.font-catalog-results .font-candidate{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:baseline;text-align:start;gap:.4rem;min-width:0;min-height:2.2rem;margin:0;padding:.35rem .55rem;font-size:var(--ui-text-size);line-height:1.5;border:1px solid transparent;background:transparent}
+.font-candidate-name{overflow-wrap:anywhere}.font-candidate small{font-size:var(--ui-help-size);white-space:nowrap}.font-candidate-action{color:var(--green);align-self:baseline;font:inherit;font-weight:600}
+.font-catalog-results .font-candidate:hover{background:var(--accent);border-color:var(--line)}.font-catalog-results .font-candidate[aria-pressed=true]{background:color-mix(in srgb,var(--accent) 50%,transparent)}
+.font-catalog-empty{grid-column:1/-1;color:var(--muted);margin:.4rem;font-size:var(--ui-help-size)}.font-stack-status{min-height:1.4em;margin:.3rem 0;font-size:var(--ui-help-size);color:var(--muted)}
+.font-stack-preview{border-inline-start:2px solid var(--line);padding:.5rem .9rem;margin:.3rem 0 1rem;min-width:0}.font-stack-preview>small{font-size:var(--ui-help-size)}.font-stack-preview p{font-size:1.05rem;line-height:1.8;margin:.1rem 0;overflow-wrap:anywhere}
+.language-font-help{grid-column:1/-1;font-size:var(--ui-help-size);color:var(--muted);margin:.5rem 0}
+.language-font-preview{grid-column:1/-1;border-top:1px solid var(--line);margin-top:.7rem;padding-top:.7rem}.language-font-preview p{margin:.4rem 0;line-height:1.8;overflow-wrap:anywhere}.language-font-preview small{display:inline-block;font: .75rem/1.5 var(--ui-font);color:var(--muted);min-width:6em;margin-inline-end:.5em}
+.font-stack-caption{flex-wrap:wrap}.font-stack-rank,.font-stack-tag small{flex:none}
+.font-stack-tag .font-stack-handle, .font-stack-tag .font-stack-remove{align-self:baseline;font-size:inherit;line-height:1.5}
+@media(max-width:600px){.font-stack-tag{flex-wrap:wrap}.font-stack-name{max-width:70vw}.font-catalog-tools{gap:.4rem}.font-stack-heading{align-items:center}}

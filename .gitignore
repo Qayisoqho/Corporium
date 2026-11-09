@@ -40,7 +40,7 @@ venv/
 .aws/
 .DS_Store
 Thumbs.db
-# Only the redistributable Junicode faces belong to the source distribution.
+# Only explicitly redistributable bundled fonts belong to the source distribution.
 /font/*
 !/font/Junicode/
 /font/Junicode/*
@@ -49,6 +49,31 @@ Thumbs.db
 !/font/Junicode/Junicode-Bold.ttf
 !/font/Junicode/Junicode-BoldItalic.ttf
 !/font/Junicode/OFL.txt
+!/font/NotoSans/
+/font/NotoSans/*
+!/font/NotoSans/NotoSans-VF.ttf
+!/font/NotoSans/NotoSans-Italic-VF.ttf
+!/font/NotoSans/OFL.txt
+!/font/NotoSans/SOURCE.json
+!/font/SourceHanSansSC/
+/font/SourceHanSansSC/*
+!/font/SourceHanSansSC/SourceHanSansSC-Regular.otf
+!/font/SourceHanSansSC/SourceHanSansSC-Medium.otf
+!/font/SourceHanSansSC/SourceHanSansSC-Bold.otf
+!/font/SourceHanSansSC/OFL.txt
+!/font/SourceHanSansSC/SOURCE.json
+!/font/STIXTwoText/
+/font/STIXTwoText/*
+!/font/STIXTwoText/STIXTwoText-Regular.ttf
+!/font/STIXTwoText/STIXTwoText-Italic.ttf
+!/font/STIXTwoText/STIXTwoText-Medium.ttf
+!/font/STIXTwoText/STIXTwoText-MediumItalic.ttf
+!/font/STIXTwoText/STIXTwoText-SemiBold.ttf
+!/font/STIXTwoText/STIXTwoText-SemiBoldItalic.ttf
+!/font/STIXTwoText/STIXTwoText-Bold.ttf
+!/font/STIXTwoText/STIXTwoText-BoldItalic.ttf
+!/font/STIXTwoText/OFL.txt
+!/font/STIXTwoText/SOURCE.json
 
 # Development handoff/history and private reports are maintained outside this export.
 /DEVELOPMENT_HANDOFF.md

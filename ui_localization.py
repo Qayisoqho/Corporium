@@ -58,7 +58,20 @@ def fields(row,*names):
     return result
 
 def annotations(row):
-    return fields(row,'warnings')
+    """Translate derived warnings in known sentence/group response wrappers."""
+    if not isinstance(row,dict):return row
+    def warning(value):
+        if not isinstance(value,str):return value
+        match=re.match(r'^第 (\d+) ([词格])：(.*)$',value,re.S)
+        if match:
+            kind='Word' if match[2]=='词' else 'Cell'
+            return f'{kind} {match[1]}: '+message(match[3],'en')
+        return message(value,'en')
+    result={**row,'warnings':[warning(v) for v in row['warnings']]} if isinstance(row.get('warnings'),list) else row
+    for key in ('body','entry','record'):
+        if isinstance(row.get(key),dict):result={**result,key:annotations(row[key])}
+    if isinstance(row.get('members'),list):result={**result,'members':[annotations(item) for item in row['members']]}
+    return result
 
 def homophone_group(group):
     return {**group,'items':[fields(r,'reason','origin') for r in group.get('items',[])],
@@ -79,12 +92,12 @@ def present(value,path,locale):
         if result.get('kind')=='operation':route=result.get('operation')
         if route and isinstance(result.get('result'),dict):result['result']=present(result['result'],'/api/'+route,locale)
     if path=='/api/grammar-audit':
-        result={**result,'items':[fields(item,'message',*(['title'] if item.get('title_default') else [])) for item in result.get('items',[])]}
-    if path in {'/api/entries','/api/example-library'}:
-        result={**result,'items':[{**annotations(item),**({'body':annotations(item['body'])} if isinstance(item.get('body'),dict) else {})} for item in result.get('items',[])]}
-    if path in {'/api/entry','/api/independent-example'}:result=annotations(result)
+        result={**result,'items':[annotations(fields(item,'message',*(['title'] if item.get('title_default') else []))) for item in result.get('items',[])]}
+    if path in {'/api/entries','/api/example-library','/api/example-groups-library','/api/survey-detail','/api/dictionary-examples'}:
+        result={**result,'items':[annotations(item) for item in result.get('items',[])]}
+    if path in {'/api/entry','/api/independent-example','/api/annotations','/api/segmentation','/api/example-group'}:result=annotations(result)
     if path in {'/api/timeline','/api/timeline-detail'} and isinstance(result.get('media'),dict):result={**result,'media':fields(result['media'],'unavailable')}
-    if path=='/api/lexeme-examples':result={**result,'items':[fields(item,'review_reason') for item in result.get('items',[])]}
+    if path=='/api/lexeme-examples':result={**result,'items':[annotations(fields(item,'review_reason')) for item in result.get('items',[])]}
     if path=='/api/unit-dictionary' and isinstance(result.get('link'),dict):result={**result,'link':fields(result['link'],'review_reason')}
     if path=='/api/homophones':
         result={**result,'groups':[homophone_group(g) for g in result.get('groups',[])],

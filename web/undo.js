@@ -12,7 +12,8 @@ async function refreshUndo(){
     const b=$(''+kind+'-action'),step=undoState[kind];
     b.disabled=undoBusy||!step;
     b.textContent=(kind==='undo'?(globalThis.CorporiumI18n?.f("25068bc08a6d18",()=>[])??'撤销'):(globalThis.CorporiumI18n?.f("77ef2b0c16106f",()=>[])??'重做'))+(step?'：'+step.label:'');
-    b.title=activeLanguage==='all'?(globalThis.CorporiumI18n?.f("8bfd25c8cbc0c7",()=>[])??'请先选择一种语言'):((globalThis.CorporiumI18n?.f("10f8922d7d39e2",()=>[languageList.find(l=>l.id===activeLanguage)?.name])??'作用范围：'+languageList.find(l=>l.id===activeLanguage)?.name));
+    // Icon buttons show the pending step in their tooltip, followed by its scope.
+    b.title=b.textContent+'\n'+(activeLanguage==='all'?(globalThis.CorporiumI18n?.f("8bfd25c8cbc0c7",()=>[])??'请先选择一种语言'):((globalThis.CorporiumI18n?.f("10f8922d7d39e2",()=>[languageList.find(l=>l.id===activeLanguage)?.name])??'作用范围：'+languageList.find(l=>l.id===activeLanguage)?.name)));
   }
   $('undo-limit').value=String(undoState.step_limit);
   $('undo-limit').disabled=activeLanguage==='all';

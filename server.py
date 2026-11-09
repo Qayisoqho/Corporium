@@ -139,7 +139,8 @@ def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False,
         db.close()
 
 
-def init():
+def init(*, seed_default_language=True):
+    """Initialize or migrate; an example can supply its own first language."""
     import storage_optimization
     DB.parent.mkdir(exist_ok=True)
     # Preserve the complete pre-migration database, including old undo records.
@@ -172,7 +173,7 @@ def init():
         CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY,entry_id TEXT,created TEXT,body TEXT,revision INTEGER);''')
         metadata.initialize(db)
         journal.initialize(db)
-        languages.initialize(db)
+        languages.initialize(db,seed_default=seed_default_language)
         code_switching.initialize(db)
         lexicon.initialize(db)
         analysis_workspace.initialize(db)
@@ -269,7 +270,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path=='/licenses/document':return self.send(legal_notices.document(q.get('id','')))
         if url.path=='/licenses/developer-font':
             return self.send((ROOT/'font'/'Junicode'/'Junicode.ttf').read_bytes(),mime='font/ttf')
-        if url.path in {'/licenses','/license-notices.js','/license-notices.css','/style.css','/workbench.css'}:
+        if url.path in {'/licenses','/license-notices.js','/license-notices.css','/style.css','/workbench.css','/dictionary-evidence.js','/dictionary-evidence.css','/font-stack.js','/font-stack.css','/ui-standards.css'}:
             name='licenses.html' if url.path=='/licenses' else url.path[1:]
             mime='text/html' if url.path=='/licenses' else 'text/css' if url.path.endswith('.css') else 'text/javascript'
             return self.send((ROOT/'web'/name).read_bytes(),mime=mime+'; charset=utf-8')
@@ -312,7 +313,7 @@ class Handler(BaseHTTPRequestHandler):
             data,mime=font_catalog.font_file(q.get('id',''),q.get('v'))
             return self.send(data,mime=mime)
         if url.path in {'/font/'+r[1] for r in font_catalog.BUILTIN_FILES}:
-            return self.send(font_catalog.read_file(font_catalog.builtin_path(url.path[6:]),q.get('v')),mime='font/ttf')
+            return self.send(font_catalog.read_file(font_catalog.builtin_path(url.path[6:]),q.get('v')),mime='font/otf' if url.path.endswith('.otf') else 'font/ttf')
         with connect(observe_snapshot=url.path in ('/api/grammar-audit','/api/lexemes','/api/morphemes')) as db:
             # Sentence bodies and stable units must come from the same snapshot.
             db.execute('BEGIN')
@@ -497,6 +498,8 @@ class Handler(BaseHTTPRequestHandler):
         files.update({'/reduplication.js':'reduplication.js','/text-tools.js':'text-tools.js','/word-structure.js':'word-structure.js','/punctuation.js':'punctuation.js','/workspace-layout.js':'workspace-layout.js','/typography.js':'typography.js','/morphology.js':'morphology.js','/segmentation.js':'segmentation.js','/multipart-forms.js':'multipart-forms.js','/multipart-forms.css':'multipart-forms.css','/favicon.ico':'favicon.ico'})
         files['/layer-order.js']='layer-order.js'
         files['/line-spacing.js']='line-spacing.js'
+        files['/font-stack.js']='font-stack.js'
+        files['/font-stack.css']='font-stack.css'
         files['/dictionary-layers.js']='dictionary-layers.js'
         files['/analysis-workspace.js']='analysis-workspace.js'
         files['/vocabulary-statistics.js']='vocabulary-statistics.js'

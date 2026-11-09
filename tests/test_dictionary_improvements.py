@@ -9,6 +9,23 @@ class DictionaryImprovements(unittest.TestCase):
     def word(self,name):
         return self.call('/api/lexeme-save',dict(headword=name,body=dict(usages=[dict(pos='名词',senses=[dict(short_gloss=name),dict(short_gloss='other')])])))[1]
 
+    def test_synonym_display_parts_distinguish_glosses_without_changing_link_storage(self):
+        import json
+        a=self.call('/api/lexeme-save',dict(headword='display',body=dict(usages=[dict(pos='GEN',senses=[dict(short_gloss='postp#sub[SIM]'),dict(definition='GEN')])])))[1]
+        b=self.word('peer')
+        refs=[dict(kind='lexeme',id=x['id'],sense=x['body']['usages'][0]['senses'][0]['id']) for x in (a,b)]
+        self.assertEqual(self.call('/api/synonym-save',dict(source=refs[0],target=refs[1]))[0],200)
+        data=self.call('/api/synonyms?language=ordos&kind=lexeme&id='+a['id'])[1]
+        self.assertEqual(data['senses'][0]['label'],'GEN · postp#sub[SIM]')
+        self.assertEqual(data['senses'][0]['label_parts'],[dict(kind='text',text='GEN'),dict(kind='gloss',text='postp#sub[SIM]')])
+        self.assertEqual(data['senses'][1]['label_parts'],[dict(kind='text',text='GEN'),dict(kind='text',text='GEN')])
+        stored=json.loads(self.call('/api/backup')[1]['synonym_links'][0]['body'])
+        self.assertTrue(all('label_parts' not in ref for ref in stored))
+        m=self.call('/api/morpheme-save',dict(form='display-m',body=dict(gloss='GEN',senses=[dict(definition='GEN')])))[1]
+        meanings=self.call('/api/synonyms?language=ordos&kind=morpheme&id='+m['id'])[1]['senses']
+        self.assertEqual(meanings[0]['label_parts'],[dict(kind='gloss',text='GEN')])
+        self.assertEqual(meanings[1]['label_parts'],[dict(kind='text',text='GEN')])
+
     def test_sense_synonyms_bidirectional_undo_and_exchange(self):
         a=self.word('one');b=self.word('two')
         refs=[dict(kind='lexeme',id=x['id'],sense=x['body']['usages'][0]['senses'][0]['id']) for x in (a,b)]

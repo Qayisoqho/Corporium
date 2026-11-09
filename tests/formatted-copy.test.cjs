@@ -5,6 +5,12 @@ const row=()=>clone(fixtures.rows[0]);
 const frozen=x=>{if(x&&typeof x==='object'){Object.values(x).forEach(frozen);Object.freeze(x);}return x;};
 const cells=(html,key)=>[...html.matchAll(new RegExp('<tr[^>]* data-copy-row="'+key+'">([\\s\\S]*?)</tr>','g'))].map(m=>(m[1].match(/<td\b/g)||[]).length);
 
+test('font fallback arrays survive editable clipboard HTML and still reject unsafe family names',()=>{
+ const item=row();item.metadata={ipa_font:['Research Sans','Noto Sans','sans-serif'],annotation_font:['Junicode','Research Sans','sans-serif']};
+ const out=core.build([item]);assert.match(out.html,/Research Sans&quot;,&quot;Noto Sans&quot;,&quot;Segoe UI/);assert.match(out.html,/Junicode&quot;,&quot;Research Sans/);assert.doesNotMatch(out.html,/@global|systemfont-/);
+ for(const value of [[],[['Junicode']],['Bad; color:red']]){item.metadata.ipa_font=value;assert.throws(()=>core.build([item]));}
+});
+
 test('Word numbers follow only selected occurrences, with one number per group and original member labels',()=>{
  const a=row(),b=row(),c=row(),d=row();[a,b,c,d].forEach((x,i)=>{x.key='position'+i;x.label='('+[127,205,300,400][i]+')';});
  b.group={key:'group',name:'问答',context:''};b.label='b. Q:';c.group={...b.group};c.label='c. A:';d.sourceId=a.sourceId;

@@ -47,3 +47,91 @@
   $('dictionary-list').querySelector('[data-dictionary-class="'+CSS.escape(path)+'"]')?.focus({preventScroll:true});
  });
 })();
+
+// Form summaries depend on their own editor inputs and reading containers.
+// Sentence typing and unrelated status updates must not refresh hidden tables.
+function createCompactFormUpdates(doc,render,frame=requestAnimationFrame,Observer=MutationObserver){
+ let pending=0;
+ const queue=()=>{if(!pending)pending=frame(()=>{pending=0;render();});};
+ const observer=new Observer(queue);
+ for(const id of ['lexeme-variants','morpheme-variants','dictionary-detail','morpheme-detail']){
+  const root=doc.getElementById(id);if(root)observer.observe(root,{childList:true,subtree:true});
+ }
+ for(const type of ['input','change'])doc.addEventListener(type,event=>{
+  if(event.target.closest?.('#lexeme-variants,#morpheme-variants'))queue();
+ });
+ doc.addEventListener('lx-layout',queue);queue();
+ return observer;
+}
+/* Forms are compared in common columns. This layer moves no editor input out
+   of its original row, so the authoritative serializers and draft IDs stay put. */
+(()=>{
+ const ui=(zh,en)=>globalThis.CorporiumI18n?.ui(zh,en)??zh;
+ const make=(tag,cls,text)=>{const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node;};
+ const put=(node,value)=>{if(node&&node.textContent!==value)node.textContent=value;};
+ const headings=[ui('形式','Form'),ui('形式类型','Form type'),ui('变体性质','Variation'),ui('特征与说明','Features and notes'),''];
+ const heads=new WeakMap();let detailSequence=0;
+ function commonHead(owner,first,kind){
+  let head=heads.get(owner);if(!head){head=make('div','compact-form-head '+kind);head.setAttribute('aria-hidden','true');head.append(...headings.map(text=>make('span','',text)));heads.set(owner,head);}
+  if(head.parentElement!==first.parentElement||head.nextElementSibling!==first)first.before(head);
+  owner.parentElement?.classList.add('compact-form-container');return head;
+ }
+ function labelText(label,text){
+  if(!label)return;let caption=label.querySelector(':scope>.compact-form-label');
+  if(!caption){const nodes=[...label.childNodes].filter(node=>node.nodeType===3);caption=make('span','compact-form-label',text||nodes.map(node=>node.textContent).join('').trim());for(const node of nodes)node.remove();label.prepend(caption);}else if(text)put(caption,text);
+ }
+ function editorRows(list){
+  const rows=[...list.children].filter(row=>row.classList.contains('variant-editor'));
+  const head=commonHead(list,list,'compact-form-editor-head'),hidden=!rows.length||!list.closest('.lx-arranged');if(head.hidden!==hidden)head.hidden=hidden;list.classList.add('compact-form-editor-list');
+  for(const row of rows){
+   row.classList.add('compact-form-row');
+   const form=row.querySelector('.variant-form'),kind=row.querySelector('.morph-kind'),variation=row.querySelector('.morph-variation');if(!form||!kind||!variation)continue;
+   const formCell=form.closest('.multipart-form-editor')||form.closest('label'),kindCell=kind.closest('label'),variationCell=variation.closest('label');
+   formCell.classList.add('compact-form-form-cell');kindCell.classList.add('compact-form-kind-cell');variationCell.classList.add('compact-form-variation-cell');
+   for(const [selector,name] of [['.morph-pronunciation','pronunciation'],['.morph-conditions','conditions'],['.morph-source','source'],['.variant-notes','notes']])row.querySelector(selector)?.closest('label')?.classList.add('compact-form-'+name+'-cell');
+   row.querySelector('.form-features')?.closest('details')?.classList.add('compact-form-features-cell');
+   labelText(kindCell,headings[1]);labelText(variationCell,headings[2]);if(formCell.tagName==='LABEL')labelText(formCell,headings[0]);
+   form.setAttribute('aria-label',headings[0]);kind.setAttribute('aria-label',headings[1]);variation.setAttribute('aria-label',headings[2]);
+   const unknown=variation.querySelector('option[value="unknown"]');if(unknown)put(unknown,ui('未判定','Unresolved'));
+   let summary=row.querySelector(':scope>.compact-form-summary');if(!summary){summary=make('span','compact-form-summary');row.append(summary);}
+   const features=row.querySelectorAll('.form-features input:checked').length,conditions=row.querySelector('.morph-conditions')?.value.trim()||row.querySelector('.morph-condition-types input:checked'),notes=row.querySelector('.variant-notes')?.value.trim(),tags=row.querySelectorAll('.variant-tags .tag-row').length,multipart=row.querySelector('.multipart-toggle input')?.checked;
+   const text=[multipart?ui('多部分','Multipart'):'',features?(ui(features+' 项特征',features+' feature'+(features===1?'':'s'))):'',conditions?ui('有条件','Conditions'):'',notes?ui('有备注','Note'):'',tags?ui('有标签','Usage tags'):''].filter(Boolean).join(' · ')||'—';put(summary,text);summary.title=text;
+  }
+ }
+ function splitMeta(text,row){
+  if(row.hasAttribute('data-compact-kind')){const kind=row.dataset.compactKind,variation=row.dataset.compactVariation;return {kind:morphFormTypes[kind]||kind||'—',variation:variation==='unknown'?ui('未判定','Unresolved'):morphVariations[variation]||variation||'—',full:morphVariations[variation]||''};}
+  const labels=typeof morphVariations==='object'?Object.values(morphVariations):[];
+  const variation=labels.sort((a,b)=>b.length-a.length).find(label=>text.endsWith(' · '+label));
+  const kind=variation?text.slice(0,-variation.length).replace(/ · $/,''):text;
+  return {kind:kind||'—',variation:variation===morphVariations.unknown?ui('未判定','Unresolved'):variation||'—',full:variation||''};
+ }
+ function readingRow(row){
+  if(row.dataset.compactReading)return;row.dataset.compactReading='true';row.classList.add('compact-form-reading-row');
+  const oldHead=row.querySelector(':scope>.usage-heading'),strong=oldHead?.querySelector('strong')||row.querySelector(':scope>strong');if(!strong)return;
+  const features=make('div','compact-form-reading-features'),form=make('div','compact-form-reading-form'),kind=make('div','compact-form-reading-kind'),variation=make('div','compact-form-reading-variation'),actions=make('div','compact-form-reading-actions');
+  let metadata;
+  if(oldHead){const spans=[...oldHead.children].filter(node=>node.tagName==='SPAN');if(spans[0])features.append(spans[0]);metadata=spans[1];}
+  else{metadata=row.querySelector(':scope>p');let node=strong.nextSibling;while(node&&node!==metadata){const next=node.nextSibling;features.append(node);node=next;}}
+  const meta=splitMeta(metadata?.textContent.trim()||'',row);kind.textContent=meta.kind;variation.textContent=meta.variation;variation.title=meta.full;
+  form.append(strong);metadata?.remove();
+  const evidence=row.querySelector(':scope>button[data-morph-form]');if(evidence){const title=evidence.textContent.trim();evidence.title=title;evidence.setAttribute('aria-label',title+' · '+strong.textContent.trim());evidence.textContent=ui('例证','Examples');actions.append(evidence);}
+  const extra=[...row.childNodes].filter(node=>node!==oldHead&&node!==strong&&(node.nodeType!==3||node.textContent.trim()));
+  if(oldHead)for(const node of [...oldHead.children])if(node!==strong&&node!==metadata&&node!==features.firstElementChild)extra.unshift(node);
+  oldHead?.remove();
+  for(const node of extra)if(node.nodeType===1&&node.matches('p')&&!node.textContent.trim())node.remove();
+  const present=extra.filter(node=>node.nodeType!==1||!node.matches('p')||node.textContent.trim());
+  let extraBody;
+  if(present.length){const details=make('details','compact-form-reading-details'),summary=make('summary','',ui('详情','Details'));details.append(summary);extraBody=make('div','compact-form-reading-detail-body');extraBody.id='compact-form-detail-'+(++detailSequence);extraBody.hidden=true;extraBody.append(...present);summary.setAttribute('aria-controls',extraBody.id);details.addEventListener('toggle',()=>{extraBody.hidden=!details.open;});actions.append(details);}
+  if(!features.textContent.trim())features.textContent=present.length?ui('有说明','Details available'):'—';row.replaceChildren(form,kind,variation,features,actions,...(extraBody?[extraBody]:[]));
+  for(const [node,label] of [[form,headings[0]],[kind,headings[1]],[variation,headings[2]],[features,headings[3]]])node.dataset.label=label;
+ }
+ function render(){
+  for(const id of ['lexeme-variants','morpheme-variants']){const list=document.getElementById(id);if(list)editorRows(list);}
+  for(const parent of document.querySelectorAll('#dictionary-detail .morphology-view,#morpheme-detail .morpheme-variants-view')){
+   const rows=[...parent.children].filter(node=>node.matches('.morph-form-view'));if(!rows.length)continue;
+   const head=commonHead(parent,rows[0],'compact-form-reading-head');parent.classList.add('compact-forms-reading','compact-form-container');head.hidden=false;for(const row of rows)readingRow(row);
+  }
+ }
+ function start(){createCompactFormUpdates(document,render);}
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+})();

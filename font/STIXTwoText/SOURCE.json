@@ -1,0 +1,114 @@
+{
+  "family": "STIX Two Text",
+  "license": "SIL OFL 1.1",
+  "license_source": "https://github.com/stipub/stixfonts/blob/master/OFL.txt",
+  "copied_on": "2026-11-07",
+  "source": "Installed STIX Two Text static TTF files; byte-identical to existing project originals",
+  "unchanged_font_files": true,
+  "files": [
+    {
+      "file": "STIXTwoText-Regular.ttf",
+      "sha256": "0566a1be411c0b2463fad8563b33f1c299442b8882c7fce9ef95e079f43233da",
+      "metadata": {
+        "0": "Copyright 2001-2021 The STIX Fonts Project Authors (https://github.com/stipub/stixfonts)",
+        "1": "STIX Two Text",
+        "2": "Regular",
+        "5": "Version 2.13 b171",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL",
+        "14": "https://scripts.sil.org/OFL"
+      },
+      "existing_project_matches": true
+    },
+    {
+      "file": "STIXTwoText-Italic.ttf",
+      "sha256": "5a0ed1c0c1d3d4f83f2d00bcd4a0a991a7b0755beacee0a57b26762327a84c22",
+      "metadata": {
+        "0": "Copyright 2001-2021 The STIX Fonts Project Authors (https://github.com/stipub/stixfonts)",
+        "1": "STIX Two Text",
+        "2": "Italic",
+        "5": "Version 2.13 b171",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL",
+        "14": "https://scripts.sil.org/OFL"
+      },
+      "existing_project_matches": true
+    },
+    {
+      "file": "STIXTwoText-Medium.ttf",
+      "sha256": "b4e1e8e889ce42836b5d20dd75981b0f531cf43d93be3cd41ec5eb1b79584d04",
+      "metadata": {
+        "0": "Copyright 2001-2021 The STIX Fonts Project Authors (https://github.com/stipub/stixfonts)",
+        "1": "STIX Two Text Medium",
+        "2": "Regular",
+        "5": "Version 2.13 b171",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL",
+        "14": "https://scripts.sil.org/OFL"
+      },
+      "existing_project_matches": true
+    },
+    {
+      "file": "STIXTwoText-MediumItalic.ttf",
+      "sha256": "c25aec1b2b25dce4bb13dd1047384a736100786d4f89ad1a70644b5284aae537",
+      "metadata": {
+        "0": "Copyright 2001-2021 The STIX Fonts Project Authors (https://github.com/stipub/stixfonts)",
+        "1": "STIX Two Text Medium",
+        "2": "Italic",
+        "5": "Version 2.13 b171",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL",
+        "14": "https://scripts.sil.org/OFL"
+      },
+      "existing_project_matches": true
+    },
+    {
+      "file": "STIXTwoText-SemiBold.ttf",
+      "sha256": "242c7cfb1e8ffb0b52e85faf18e9b18bacc45ce8d4046dc47215b2cf06ac77e0",
+      "metadata": {
+        "0": "Copyright 2001-2021 The STIX Fonts Project Authors (https://github.com/stipub/stixfonts)",
+        "1": "STIX Two Text SemiBold",
+        "2": "Regular",
+        "5": "Version 2.13 b171",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL",
+        "14": "https://scripts.sil.org/OFL"
+      },
+      "existing_project_matches": true
+    },
+    {
+      "file": "STIXTwoText-SemiBoldItalic.ttf",
+      "sha256": "0aaa247dda367d751c8a5609b28bb5eb2a0f26833c3ee72a455fdc25989dffae",
+      "metadata": {
+        "0": "Copyright 2001-2021 The STIX Fonts Project Authors (https://github.com/stipub/stixfonts)",
+        "1": "STIX Two Text SemiBold",
+        "2": "Italic",
+        "5": "Version 2.13 b171",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL",
+        "14": "https://scripts.sil.org/OFL"
+      },
+      "existing_project_matches": true
+    },
+    {
+      "file": "STIXTwoText-Bold.ttf",
+      "sha256": "89adbb9907c40465e061f084598dbebd5a802e30c6e2d38612205b9c87281cae",
+      "metadata": {
+        "0": "Copyright 2001-2021 The STIX Fonts Project Authors (https://github.com/stipub/stixfonts)",
+        "1": "STIX Two Text",
+        "2": "Bold",
+        "5": "Version 2.13 b171",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL",
+        "14": "https://scripts.sil.org/OFL"
+      },
+      "existing_project_matches": true
+    },
+    {
+      "file": "STIXTwoText-BoldItalic.ttf",
+      "sha256": "f11eced04bcd8919ad92ccc0251878be9a46fa45fa76c514e3abfbf605a3160f",
+      "metadata": {
+        "0": "Copyright 2001-2021 The STIX Fonts Project Authors (https://github.com/stipub/stixfonts)",
+        "1": "STIX Two Text",
+        "2": "Bold Italic",
+        "5": "Version 2.13 b171",
+        "13": "This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL",
+        "14": "https://scripts.sil.org/OFL"
+      },
+      "existing_project_matches": true
+    }
+  ]
+}

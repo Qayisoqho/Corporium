@@ -3,12 +3,13 @@ function grammarLabel(s,lid=activeLanguage){const description=grammarDefinitions
 function phonologicalBoundary(form){return /^(#+)$/.test(String(form).trim().replace(/\\#/g,'#'));}
 function boundaryName(form,lid){const hashes=String(form).trim().replace(/\\#/g,'#'),m=JSON.parse(languageList.find(l=>l.id===lid)?.metadata||'{}');return m.phonological_boundaries?.[hashes]||(globalThis.CorporiumI18n?.f("d738c4eae1b27d",()=>[hashes.length])??`音系单位边界（${hashes.length} 个 #）`);}
 function boundaryGloss(w,lid){return '';}
-const grammarDisplayCache=new Map();
+const grammarDisplayCache=new Map(),renderedGlossCache=new Map();
+let grammarDisplayVersion=0,renderedGlossLocale,renderedGlossFormatter;
 function registeredTags(lid){
  const metadata=languageList.find(l=>l.id===lid)?.metadata||'{}',cached=grammarDisplayCache.get(lid);
  if(cached?.metadata===metadata)return cached.names;
  const definitions=new Map(Object.entries(JSON.parse(metadata).glossary||{}).map(([name,description])=>[name.toLowerCase(),description]));
- const names=new Set(definitions.keys()),spellings=new Set(Object.keys(JSON.parse(metadata).glossary||{}));grammarDisplayCache.set(lid,{metadata,names,definitions,spellings});return names;
+ const names=new Set(definitions.keys()),spellings=new Set(Object.keys(JSON.parse(metadata).glossary||{}));grammarDisplayCache.set(lid,{metadata,names,definitions,spellings,version:++grammarDisplayVersion});return names;
 }
 function grammarDefinitions(lid){registeredTags(lid);return grammarDisplayCache.get(lid).definitions;}
 function hasRegisteredTag(s,lid,explicit=false){const names=registeredTags(lid);return names.has(s.toLowerCase())&&(explicit||!['a','all','art','pass'].includes(s.toLowerCase())||s===s.toUpperCase()||grammarDisplayCache.get(lid).spellings.has(s));}
@@ -20,6 +21,11 @@ function glossAtomParts(text){
 }
 function richGloss(s,lid=activeLanguage,grammatical=false){
  const known=registeredTags(lid);
+ const locale=globalThis.CorporiumI18n?.locale,formatter=globalThis.CorporiumI18n?.f;
+ if(locale!==renderedGlossLocale||formatter!==renderedGlossFormatter){renderedGlossCache.clear();renderedGlossLocale=locale;renderedGlossFormatter=formatter;}
+ const text=String(s||'').replace(/\\([~?\[\]#])/g,'$1');
+ const cacheKey=text.length<=512?JSON.stringify([grammarDisplayCache.get(lid).version,Boolean(grammatical),text]):null;
+ if(cacheKey!==null&&renderedGlossCache.has(cacheKey)){const value=renderedGlossCache.get(cacheKey);renderedGlossCache.delete(cacheKey);renderedGlossCache.set(cacheKey,value);return value;}
  function token(t,bracketed){if(!t)return '';if(hasRegisteredTag(t,lid,bracketed))return grammarLabel(t,lid);const m=t.match(/^([123])([A-Za-z]+)$/);return m&&hasRegisteredTag(m[2],lid,bracketed)?m.slice(1).map(p=>hasRegisteredTag(p,lid,bracketed)?grammarLabel(p,lid):esc(p)).join(''):esc(t);}
  const plain=(t,bracketed=false)=>t.split(/([\s.\-=:+~/;\\,!?，。；：！？\[\](){}<>«»“”"']+)/).map((p,i)=>i%2?p.split('>').map(esc).join((globalThis.CorporiumI18n?.f("1c10f9928c8ba6",()=>[])??'<span class="gloss-relation" title="语义与论元关系：左侧 → 右侧">&gt;</span>')):token(p,bracketed)).join('');
  function fragment(t,bracketed=false){
@@ -36,14 +42,25 @@ function richGloss(s,lid=activeLanguage,grammatical=false){
  }
  // Identify grammatical brackets before rendering script runs. Splitting a
  // decorated tag first would detach it from <...> and lose the infix context.
- const text=String(s||'').replace(/\\([~?\[\]#])/g,'$1');let out='',buffer='',at=0;
+ let out='',buffer='',at=0;
  for(const m of text.matchAll(/#(?:sub|super|sup)\[[^\[\]]*\]|<[^<]*>|\[(?:#(?:sub|super|sup)\[[^\[\]]*\]|[^\[\]])*\]/g)){
   buffer+=text.slice(at,m.index);at=m.index+m[0].length;
   if(m[0].startsWith('#')){buffer+=m[0];continue;}
   out+=fragment(buffer,grammatical);buffer='';const infix=m[0].startsWith('<');
   out+='<span class="'+(infix?'gloss-infix':'gloss-bracket')+'">'+(infix?'&lt;':'[')+fragment(m[0].slice(1,-1),true)+(infix?'&gt;':']')+'</span>';
  }
- return out+fragment(buffer+text.slice(at),grammatical);
+ const html=out+fragment(buffer+text.slice(at),grammatical);
+ if(cacheKey!==null&&html.length<=8192){renderedGlossCache.set(cacheKey,html);if(renderedGlossCache.size>1024)renderedGlossCache.delete(renderedGlossCache.keys().next().value);}
+ return html;
+}
+// Display a gloss outside its sentence/entry container using its own language.
+function glossDisplay(value,lid=activeLanguage){
+ const metadata=JSON.parse(languageList.find(l=>l.id===lid)?.metadata||'{}');
+ return `<span class="gloss" style="${languageTypography(metadata)}">${richGloss(value,lid)}</span>`;
+}
+function senseDisplay(sense,lid=activeLanguage){
+ const gloss=senseGloss(sense);
+ return gloss?glossDisplay(gloss,lid):rich(sense.definition||'');
 }
 function glossEditParts(text,gloss=true){
  const parts=[],ranges=[...text.matchAll(/<[^<]*>/g)].map(m=>[m.index,m.index+m[0].length]);let start=0,depth=0;
@@ -75,4 +92,4 @@ function usageLabel(u){return (u.pos||(globalThis.CorporiumI18n?.f("fb89ce96fec4
 function dictionaryTargetDescription(x){return x.target_kind==='morpheme'?[...new Set((x.body?.usages||[]).flatMap(u=>u.senses||[]).map(s=>s.short_gloss||s.definition||'').filter(Boolean))].join(' / '):(x.body?.usages||[]).map(usageLabel).join(' / ');}
 function dictionaryCandidateLabel(x){const form=lexemePlainLabel({headword:x.headword,body:{homonym_number:x.homonym_number}});return x.target_kind==='morpheme'?(globalThis.CorporiumI18n?.f("0e0d695823d03f",()=>[form])??'语素 · '+form):form+' / '+(x.pos||(globalThis.CorporiumI18n?.f("a817187226de22",()=>[])??'词类未定'));}
 
-function uiIcon(name){const paths={copy:'M9 8h11v13H9z M5 16H3V3h12v2',delete:'M4 6h16 M9 6V3h6v3 M6 6l1 15h10l1-15 M10 10v7 M14 10v7',import:'M4 15v5h16v-5 M12 3v12 M7 10l5 5 5-5',export:'M4 15v5h16v-5 M12 15V3 M7 8l5-5 5 5',intervalDelete:'M3 6h18v12H3z M9 9l6 6 M15 9l-6 6',merge:'M2 6h7v12H2z M15 6h7v12h-7z M5 12h14 M10 9l3 3-3 3',context:'M4 4h16 M4 8h16 M4 16h16 M4 20h16 M3 11h18v2H3z'};return `<svg class="ui-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]||''}"/></svg>`;}
+function uiIcon(name){const paths={list:'M4 5h2 M10 5h10 M4 12h2 M10 12h10 M4 19h2 M10 19h10',settings:'M9.5 2.5h5l.5 2 2 1.2 2-.6 2.5 4.4-1.5 1.4v2.2l1.5 1.4-2.5 4.4-2-.6-2 1.2-.5 2h-5l-.5-2-2-1.2-2 .6-2.5-4.4 1.5-1.4v-2.2L2.5 9.5 5 5.1l2 .6 2-1.2.5-2 M15.5 12a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0',copy:'M9 8h11v13H9z M5 16H3V3h12v2',delete:'M4 6h16 M9 6V3h6v3 M6 6l1 15h10l1-15 M10 10v7 M14 10v7',import:'M4 15v5h16v-5 M12 3v12 M7 10l5 5 5-5',export:'M4 15v5h16v-5 M12 15V3 M7 8l5-5 5 5',intervalDelete:'M3 6h18v12H3z M9 9l6 6 M15 9l-6 6',merge:'M2 6h7v12H2z M15 6h7v12h-7z M5 12h14 M10 9l3 3-3 3',context:'M4 4h16 M4 8h16 M4 16h16 M4 20h16 M3 11h18v2H3z'};return `<svg class="ui-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]||''}"/></svg>`;}

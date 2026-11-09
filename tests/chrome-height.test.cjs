@@ -1,0 +1,11 @@
+const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),source=fs.readFileSync('web/workbench.js','utf8');
+function setup(){
+ const values=new Map(),events=[],state={visible:true,height:48,minimum:'48px',reads:0};
+ const width=n=>({hidden:false,getBoundingClientRect:()=>({width:n})}),nav={children:[width(600)],querySelector:()=>null},identity=width(200),tools=width(300);
+ const bar={clientWidth:1440,getClientRects:()=>state.visible?[{}]:[],querySelector:s=>s==='.app-identity'?identity:tools,getBoundingClientRect(){state.reads++;return {height:state.height};}},root={classList:{toggle(){}},style:{getPropertyValue:k=>values.get(k)||'',setProperty:(k,v)=>values.set(k,v),removeProperty:k=>values.delete(k)}};
+ const c=vm.createContext({bar,nav,root,frame:0,getComputedStyle:n=>n===bar?{minHeight:state.minimum}:{display:'flex',paddingLeft:'0',paddingRight:'0',columnGap:'0'},document:{dispatchEvent:e=>events.push(e.type)},Event:class{constructor(type){this.type=type;}}});
+ const start=source.indexOf(' function layout(){\n  frame=0;if(!bar.getClientRects()'),end=source.indexOf(' const resize=new ResizeObserver(schedule)',start);assert.ok(start>0&&end>start);vm.runInContext(source.slice(start,end),c);return {c,values,events,state};
+}
+test('a home-hidden header never replaces the CSS fallback with zero',()=>{const h=setup();h.state.visible=false;h.state.height=0;h.c.layout();assert.equal(h.state.reads,0);assert.equal(h.values.size,0);assert.equal(h.events.length,0);});
+test('an unwrapped header uses the existing CSS height without waking unrelated layouts',()=>{const h=setup();h.c.layout();h.c.layout();assert.equal(h.values.size,0);assert.equal(h.events.length,0);});
+test('wrapped and restored headers notify once and keep the original fractional-pixel rounding',()=>{const h=setup();h.state.height=96;h.c.layout();assert.equal(h.values.get('--app-bar-measured-height'),'96px');h.c.layout();assert.equal(h.events.length,1);h.state.height=48;h.c.layout();assert.equal(h.values.size,0);assert.equal(h.events.length,2);h.state.height=43.2;h.state.minimum='43.2px';h.c.layout();assert.equal(h.values.get('--app-bar-measured-height'),'44px');});

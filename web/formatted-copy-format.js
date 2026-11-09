@@ -22,9 +22,13 @@
     return value;
   };
   function family(value, fallback) {
+    if(Array.isArray(value)){
+      if(!value.length||value.length>34||value.some(v=>typeof v!=='string'))throw Error((globalThis.CorporiumI18n?.ui('字体名称无效','Invalid font name')??'字体名称无效'));
+      return [...new Set(value)].map(v=>family(v,fallback)).join(',');
+    }
     value = value || fallback;
     value = ({serif:'Times New Roman','sans-serif':'Segoe UI','system-ui':'Segoe UI'})[value] || value;
-    if (typeof value !== 'string' || value.length > 120 || /[;{}<>\r\n\x00-\x1f]/u.test(value)) throw Error((globalThis.CorporiumI18n?.f("104f6330ac1962",()=>[])??'字体名称无效'));
+    if (typeof value !== 'string' || value.length > 256 || /[;{}<>\r\n\x00-\x1f]/u.test(value)) throw Error((globalThis.CorporiumI18n?.f("104f6330ac1962",()=>[])??'字体名称无效'));
     return '"' + value.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
   }
   function finite(value, fallback, min, max, label) {
@@ -63,7 +67,8 @@
   function runs(value, glossary = {}, grammatical = false) {
     if (Array.isArray(value)) return value.map(r => {
       if (!r || typeof r !== 'object' || !['sub','sup',undefined].includes(r.script)) throw Error((globalThis.CorporiumI18n?.f("a48fd3916a86ad",()=>[])??'文字格式片段无效'));
-      return {text: text(r.text), script: r.script, bold: r.bold===undefined?undefined:!!r.bold, italic: r.italic===undefined?undefined:!!r.italic, smallCaps: !!r.smallCaps};
+      return {text: text(r.text), script: r.script, bold: r.bold===undefined?undefined:!!r.bold, italic: r.italic===undefined?undefined:!!r.italic, smallCaps: !!r.smallCaps,
+        ...(r.code?{code:true}:{}),...(r.codeLabel?{codeLabel:true,smallCaps:false,italic:false}:{})};
     });
     if (!glossary || typeof glossary !== 'object' || Array.isArray(glossary)) throw Error((globalThis.CorporiumI18n?.f("44317ed4312364",()=>[])??'语法标签定义须为对象'));
     value=text(value);
@@ -102,7 +107,9 @@
       if (r.smallCaps && !r.script) s = '<span style="font-variant:small-caps">' + s.replace(/\p{Lu}+/gu,c=>'<span style="font-size:80%">'+c+'</span>') + '</span>';
       if (r.bold) s = '<b>' + s + '</b>';
       if (r.italic) s = '<i>' + s + '</i>';
-      if (r.italic===false) s = '<span style="font-style:normal">'+s+'</span>';
+      if (r.italic===false && !r.codeLabel) s = '<span style="font-style:normal">'+s+'</span>';
+      if (r.code) s = '<span style="background:#eef1f3;border-bottom:1px solid #617783">'+s+'</span>';
+      if (r.codeLabel) s = '<span style="font-variant:normal;font-style:normal;font-weight:normal">'+s+'</span>';
       return s;
     }).join('') || '&#160;';
   }

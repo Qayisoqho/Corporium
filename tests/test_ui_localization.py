@@ -102,12 +102,12 @@ class InterfaceLanguageTests(unittest.TestCase):
         self.assertEqual(result['fields'][1]['name'],'Word form')
         self.assertEqual(original['fields'][0]['name'],'自定义书写 › 语素')
 
-    def test_builtin_usage_label_field_names_translate_but_custom_names_remain_literal(self):
+    def test_builtin_usage_tag_field_names_translate_but_custom_names_remain_literal(self):
         original={'fields':[{'id':'tag:语域','name':'使用标签 › 语域'},
                             {'id':'tag:私人备注','name':'使用标签 › 私人备注'}],'groups':[]}
         result=ui.present(original,'/api/vocabulary-options','en')
-        self.assertEqual(result['fields'][0],{'id':'tag:语域','name':'Usage label › Register'})
-        self.assertEqual(result['fields'][1],{'id':'tag:私人备注','name':'Usage label › 私人备注'})
+        self.assertEqual(result['fields'][0],{'id':'tag:语域','name':'Usage tag › Register'})
+        self.assertEqual(result['fields'][1],{'id':'tag:私人备注','name':'Usage tag › 私人备注'})
         self.assertEqual(original['fields'][0]['name'],'使用标签 › 语域')
 
     def test_native_file_type_captions_keep_extensions_and_need_no_project(self):

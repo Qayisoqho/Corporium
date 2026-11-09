@@ -24,7 +24,7 @@
  function preview(prefix){
   const sample=document.getElementById(prefix+'-spacing-sample');apply(sample,read(prefix));
   const font=document.getElementById(prefix+'-font')?.value;
-  if(typeof validFont==='function'&&validFont(font))sample.style.fontFamily=JSON.stringify(font)+',serif';
+  if(typeof rowFontCSS==='function'&&(font==='@global'||validFont(font)))sample.style.fontFamily=rowFontCSS(font)+',serif';
   if(prefix==='layer'){
    const size=Number(document.getElementById('layer-size').value)||100,variant=document.getElementById('layer-style').value;
    sample.style.fontSize=`calc(.9375rem * ${Math.max(50,Math.min(200,size))/100})`;

@@ -83,8 +83,14 @@ class CorporiumWorkspaceViews{
   }
   if(name==='analysis')await window.corporiumRefreshAnalysisCatalog?.();
  };
- if(typeof search==='function'){const previous=search;search=async function(...args){return views.run('corpus',()=>previous(...args));};}
- if(typeof selectText==='function'){const previous=selectText;selectText=async function(...args){views.invalidate('corpus');return previous(...args);};}
+ let corpusReaders=0,corpusInert=false,corpusBusy=null;
+ async function corpusRead(read){
+  const results=$('results');
+  if(!corpusReaders++){corpusInert=results.inert;corpusBusy=results.getAttribute('aria-busy');results.inert=true;results.setAttribute('aria-busy','true');}
+  try{return await read();}finally{if(!--corpusReaders){results.inert=corpusInert;if(corpusBusy===null)results.removeAttribute('aria-busy');else results.setAttribute('aria-busy',corpusBusy);}}
+ }
+ if(typeof search==='function'){const previous=search;search=async function(...args){return corpusRead(()=>views.run('corpus',()=>previous(...args)));};}
+ if(typeof selectText==='function'){const previous=selectText;selectText=async function(...args){views.invalidate('corpus');return corpusRead(()=>previous(...args));};}
  if(typeof loadLibrary==='function'){const previous=loadLibrary;loadLibrary=async function(...args){return views.run('library',()=>previous(...args));};}
  views.register('corpus',()=>workspace==='corpus',async()=>{await loadTexts();await search();});
  views.register('library',()=>workspace==='library',()=>loadLibrary());

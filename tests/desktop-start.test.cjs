@@ -23,3 +23,27 @@ test('failed desktop preference write stays on startup and restores the current 
  const s=startup('zh-CN',true,true);s.select.value='en';await s.select.onchange();
  assert.deepEqual(s.saved,[]);assert.deepEqual(s.calls,[['bridge','en']]);assert.equal(s.select.value,'zh-CN');assert.equal(s.select.disabled,false);assert.equal(s.ids['desktop-error'].textContent,'write failed');
 });
+
+const html=fs.readFileSync('web/desktop-start.html','utf8'),bootstrap=html.match(/<script>([\s\S]*?)<\/script>/)[1];
+function preferences(saved={}){
+ const values={},root={dataset:{theme:'docoid'},style:{setProperty:(name,value)=>values[name]=value}};
+ const context={document:{documentElement:root},localStorage:{getItem:key=>saved[key]??null}};
+ vm.createContext(context);vm.runInContext(bootstrap,context);return {root,values};
+}
+test('startup applies local font order, scale and density without project APIs',()=>{
+ const s=preferences({'corporium-typography':JSON.stringify({uiFonts:['Junicode','Microsoft JhengHei'],uiVariant:'bolditalic'}),'ordos-text-scale':'1.5','corporium-density':'compact'});
+ assert.equal(s.values['--global-font-stack'],'"Junicode","Microsoft JhengHei",sans-serif');
+ assert.equal(s.values['--ui-weight'],'700');assert.equal(s.values['--ui-style'],'italic');assert.equal(s.values['--text-scale'],'1.5');assert.equal(s.root.dataset.density,'compact');
+});
+test('startup accepts an installed family and retains safe fallbacks for project-only fonts',()=>{
+ const family='STIX Two Text',id='systemfont-'+Buffer.from(family).toString('hex'),folder='localfont-'+'a'.repeat(24);
+ const s=preferences({'corporium-typography':JSON.stringify({uiFonts:[id,folder,'sans-serif']})});
+ assert.equal(s.values['--global-font-stack'],'"STIX Two Text","'+folder+'",sans-serif');
+});
+test('startup handles legacy defaults, corrupt preferences and unavailable storage',()=>{
+ const old=preferences({'corporium-typography':JSON.stringify({uiFonts:['Noto Sans','Source Han Sans SC']})});
+ assert.equal(old.values['--global-font-stack'],'"STIX Two Text","Microsoft JhengHei",sans-serif');
+ assert.doesNotThrow(()=>preferences({'corporium-typography':'{bad json'}));
+ assert.doesNotThrow(()=>vm.runInNewContext(bootstrap,{document:{documentElement:{}},localStorage:{getItem(){throw Error('blocked');}}}));
+ assert.equal(preferences({'ordos-theme':'untrusted','ordos-text-scale':'999'}).root.dataset.theme,'docoid');
+});

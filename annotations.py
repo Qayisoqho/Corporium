@@ -196,7 +196,7 @@ def mutate(db,action,b,lid):
             if b.get('confirmed') is not True:raise ValueError('删除标注层及其内容需要确认')
             db.execute('DELETE FROM annotation_cells WHERE layer_id=?',(b['id'],));db.execute('DELETE FROM annotation_layers WHERE id=?',(b['id'],));return {'ok':True}
         name=b.get('name','').strip();font=b.get('font','Junicode');style=b.get('style','normal');position=b.get('position',0)
-        if not name or not font_catalog.valid_font(font) or style not in ('normal','italic','bold','bolditalic','small-caps') or not isinstance(position,int):raise ValueError('请检查标注层名称、字体、样式及顺序')
+        if not name or not font_catalog.valid_row_font(font) or style not in ('normal','italic','bold','bolditalic','small-caps') or not isinstance(position,int):raise ValueError('请检查标注层名称、字体、样式及顺序')
         anchor=b.get('anchor',old['anchor'] if old else 'word')
         if anchor not in ('word','ipa','translation'):raise ValueError('附加行位置无效')
         if old and old['anchor']!=anchor and db.execute('SELECT 1 FROM annotation_cells WHERE layer_id=?',(old['id'],)).fetchone():raise ValueError('已有内容的层不能改换对应单位；请新建附加行')

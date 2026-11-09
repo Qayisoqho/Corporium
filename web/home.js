@@ -52,7 +52,6 @@ function drawHomeExample(){
   $('home-example-audio').innerHTML=sentenceAudioMarkup((e.kind==='independent'?'independent:':'')+e.id,{compact:true});
   const original=$('home-example-original');original.innerHTML=rich(e.ipa||e.original);original.classList.toggle('home-ipa',!!e.ipa);
   applyLanguageTypography($('home-example'),JSON.parse(languageList.find(l=>l.id===e.language_id)?.metadata||'{}'));
-  const font=(e.ipa?e.ipa_font:e.annotation_font)||'Junicode';original.style.fontFamily=validFont(font)?(['serif','sans-serif'].includes(font)?font:`"${font}", serif`):'Junicode, serif';
   $('home-example-translation').innerHTML=rich(e.translation);
   $('home-example-source').textContent=(e.kind==='corpus'?(globalThis.CorporiumI18n?.f("3feffcaac44b55",()=>[e.source,e.position])??'语料引用 · '+e.source+' · 第 '+e.position+' 句'):e.source_default?(globalThis.CorporiumI18n?.ui('独立例句','Independent example')??'独立例句'):(globalThis.CorporiumI18n?.f("11b273517bae20",()=>[e.source])??'独立例句 · '+e.source));
   $('home-example-source').title=$('home-example-source').textContent;

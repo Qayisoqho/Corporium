@@ -251,8 +251,8 @@ def classify_audit(db,q,facts):
         return result
     for event in long_tasks.steps(facts['events']):
         if event[0]==1:issues.append(event[1]);continue
-        _,bi,position,form,gloss,labels=event;base=facts['bases'][bi];lang=base['language_id']
-        detail=dict(word=position,form=form,gloss=gloss)
+        _,bi,position,number,form,gloss,labels=event;base=facts['bases'][bi];lang=base['language_id']
+        detail=dict(word=position,word_number=number,form=form,gloss=gloss)
         for mi,label in enumerate(labels):
             if mi and mi%64==0:long_tasks.checkpoint()
             seen=set()
@@ -317,17 +317,18 @@ def audit(db,q):
                     if x is None or component_links.review(x,target.get('component_ref')):add(base,'pending','独立例句关联的词条组分已变化，待核对')
                     if target.get('review_reason'):add(base,'pending',target['review_reason'])
                     if target.get('segmentation_review'):add(base,'pending','独立例句的词或语素已变化，旧关联待核对')
+            numbers=corpus.word_numbers(b['words'])
             for i,w in enumerate(b['words']):
                 if i%64==0:long_tasks.checkpoint()
                 if w.get('unit_type') in ('phonological_boundary','punctuation'): continue
-                detail=dict(word=i+1,form=w['form'],gloss=w['gloss'])
+                detail=dict(word=i+1,word_number=numbers[i],form=w['form'],gloss=w['gloss'])
                 if w.get('group_reviews') or w.get('infix_ambiguous'):add(base,'pending','语素组合或中缀分析待核对',**detail)
                 if not w['morphemes']:add(base,'boundary','语素数量或连接符不一致',**detail)
                 labels=[]
                 for mi,m in enumerate(w['morphemes'] or [w]):
                     if mi and mi%64==0:long_tasks.checkpoint()
                     display=m.get('display_gloss',m['gloss']);labels.append('<'+display+'>' if m.get('kind')=='infix' else display)
-                events.append([0,bi,i+1,w['form'],w['gloss'],labels])
+                events.append([0,bi,i+1,numbers[i],w['form'],w['gloss'],labels])
     for r in long_tasks.steps(db.execute('SELECT r.reason,u.entry_id,u.form,u.gloss FROM lexical_reviews r JOIN lexical_links l ON l.id=r.id JOIN corpus_units u ON u.id=l.unit_id')):
         base=records.get(('corpus',r['entry_id']))
         if base:add(base,'pending',r['reason'],form=r['form'],gloss=r['gloss'])

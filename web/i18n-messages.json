@@ -699,19 +699,19 @@
     },
     "T0117": {
       "zh": "使用标签",
-      "en": "Usage label",
+      "en": "Usage tag",
       "symbol": "",
       "category": "词典与语义"
     },
     "T0118": {
       "zh": "使用标签类型",
-      "en": "Label type",
+      "en": "Usage tag type",
       "symbol": "",
       "category": "词典与语义"
     },
     "T0119": {
       "zh": "使用标签值",
-      "en": "Label value",
+      "en": "Usage tag value",
       "symbol": "",
       "category": "词典与语义"
     },
@@ -5487,7 +5487,7 @@
     "莱比锡标注规则": "Leipzig Glossing Rules",
     "标签与检查": "Labels & checks",
     "标注检查": "Checks",
-    "附加标签": "Additional tags",
+    "附加标签": "Additional labels",
     "词条": "Entry",
     "词典词条": "Dictionary entries",
     "条目类型": "Entry type",
@@ -5516,9 +5516,9 @@
     "语义类": "Semantic class",
     "语义分类": "Semantic classes",
     "语义归类": "Classify",
-    "使用标签": "Usage label",
-    "使用标签类型": "Label type",
-    "使用标签值": "Label value",
+    "使用标签": "Usage tag",
+    "使用标签类型": "Usage tag type",
+    "使用标签值": "Usage tag value",
     "语域": "Register",
     "地域": "Region",
     "使用地区": "Region",
@@ -6613,7 +6613,7 @@
     "尚未建立合作者": "No contributors yet",
     "形式、标签或词条；留空统计全部": "Form, label, or entry; blank counts all",
     "填写附加条件": "Enter an additional condition",
-    "填写该类标签的值，例如口语": "Enter a label value, e.g. colloquial",
+    "填写该类标签的值，例如口语": "Enter a tag value, e.g. colloquial",
     "填写内容；首项留空统计全部": "Enter text; leave the first query blank to count all",
     "字段已不存在，请重新选择": "This field no longer exists. Select another field.",
     "此旧查询仍保留范围条件：⟦0⟧": "This legacy query retains scope filters: ⟦0⟧",
@@ -6839,7 +6839,7 @@
     "批量操作用于词条，请先切换到“词条”": "Batch operations apply to entries. Switch to Entries first.",
     "请先选择一种语言": "Select a language first",
     "请先保存或取消正在编辑的词条": "Save or cancel entry edits first",
-    "整个词条的使用标签": "Usage labels for the entire entry",
+    "整个词条的使用标签": "Usage tags for the entire entry",
     "选中 ⟦0⟧ 个词条，将修改 ⟦1⟧ 个。整批可用一步撤销或重做。": "Selected: ⟦0⟧ entries; to change: ⟦1⟧. The entire batch is one undo or redo step.",
     "以下 ⟦0⟧ 个词条已有内容：": "Entries with existing content: ⟦0⟧",
     "没有需要覆盖的已有内容。": "No existing content needs overwriting.",
@@ -6948,7 +6948,7 @@
     "预览实际词条顺序": "Preview actual entry order",
     "复制当前方案": "Copy current scheme",
     "删除当前方案": "Delete current scheme",
-    "词类及子类、语义类、形态类、形式类型、使用标签类型和语法标签分类按语言管理。": "POS, subclasses, semantic classes, morphological classes, form types, usage-label types, and grammatical-label categories are managed per language.",
+    "词类及子类、语义类、形态类、形式类型、使用标签类型和语法标签分类按语言管理。": "POS, subclasses, semantic classes, morphological classes, form types, usage-tag types, and grammatical-label categories are managed per language.",
     "新建分类": "New class",
     "新建方案": "New scheme",
     "顶级分类": "Top-level class",
@@ -7769,7 +7769,7 @@
     "其他": "Other",
     "LEXICON · 词典与语料例证": "LEXICON · Dictionary & examples",
     "词条 → 词类用法 → 义项。语料中的简短标注独立保留。": "Entry → POS group → Sense. Local corpus glosses are retained separately.",
-    "检索词形、释义、变体、使用标签或备注": "Search forms, meanings, variants, usage labels, or notes",
+    "检索词形、释义、变体、使用标签或备注": "Search forms, meanings, variants, usage tags, or notes",
     "每页条目数": "Entries per page",
     "词典上方分页": "Top dictionary pagination",
     "选择一个词条查看详细释义与语料例证。": "Select an entry to view its definition and examples.",
@@ -7809,21 +7809,21 @@
     "可选，例如：同形词 Ⅰ；动词来源未定": "Optional, e.g. homograph I; verbal origin uncertain",
     "词类用法与义项": "POS groups & senses",
     "可有多个词类和义项；没有把握时可留空。关联例句默认跟随所选义项的简单释义；本句单独标注保留不变，可撤销。": "Multiple POS groups and senses are allowed; leave uncertain fields blank. Linked examples use the selected sense's gloss by default. Local overrides are retained. You can undo this.",
-    "标签类型": "Label type",
-    "标签内容": "Label value",
+    "标签类型": "Tag type",
+    "标签内容": "Tag value",
     "如：文语、西部、新用法": "E.g. literary, western, new usage",
-    "标签说明": "Label description",
+    "标签说明": "Tag description",
     "补充说明（可选）": "Additional details (optional)",
-    "移除此标签": "Remove this label",
+    "移除此标签": "Remove this tag",
     "如：家": "E.g. house",
     "词典详细释义": "Dictionary definition",
     "完整解释这个意义": "Explain this sense in full",
-    "仅此义项的使用标签": "Usage labels for this sense only",
+    "仅此义项的使用标签": "Usage tags for this sense only",
     "此义项的语法特征": "Grammatical features of this sense",
     "移除此用法": "Remove this POS group",
     "如：名词；尚未确定时可留空": "E.g. noun; leave blank if uncertain",
     "如：分布数词、II 类": "E.g. distributive numeral, class II",
-    "此词类用法的使用标签": "Usage labels for this POS group",
+    "此词类用法的使用标签": "Usage tags for this POS group",
     "放弃尚未保存的词条修改？": "Discard unsaved entry changes?",
     "此词形与已有词条「⟦0⟧」同形。确认建立独立同形词条？系统会分配互不重复的下标。": "This form matches existing entry “⟦0⟧”. Create a separate homograph entry? Distinct subscripts will be assigned.",
     "查找关联词条": "Find entry to link",
@@ -8000,7 +8000,7 @@
     "词条 · ⟦0⟧": "Entry · ⟦0⟧",
     "请先保存或关闭正在编辑的词条。": "Save or close the current entry editor first.",
     "删除空语素": "Delete empty morpheme",
-    "意义／功能与标签": "Meanings/functions & labels",
+    "意义／功能与标签": "Meanings/functions & usage tags",
     "关联组分 · ⟦9⟧": "Linked components · ⟦9⟧",
     "组分保留各自的形式、标注和分析；同形不代表同一语素。可在词条中批量整理。": "Components retain their own forms, glosses, and analyses. Identical forms need not be one morpheme. Organize them in batches from entries.",
     "解除此组分关联": "Unlink this component",
@@ -8062,7 +8062,7 @@
     "与基本条目的关系": "Relationship to base entry",
     "可将带语法信息的形式单独立为词条，同时关联到基本条目；没有此关系时留空。": "A form carrying grammatical information may have its own entry linked to a base entry. Leave blank if no such relationship applies.",
     "形式、变体与语法特征": "Forms, variants & grammatical features",
-    "条件目前用于记录和人工判断，不自动套用。地域、语体和代际信息使用下方的使用标签；原有变体保留为“关系尚未确定”。": "Conditions are recorded for manual assessment, not applied automatically. Use usage labels below for regional, register, and generational information. Existing variants retain an unspecified relationship.",
+    "条件目前用于记录和人工判断，不自动套用。地域、语体和代际信息使用下方的使用标签；原有变体保留为“关系尚未确定”。": "Conditions are recorded for manual assessment, not applied automatically. Use usage tags below for regional, register, and generational information. Existing variants retain an unspecified relationship.",
     "原引用不属于当前语言，请调整": "The original reference belongs to another language. Adjust it.",
     "每批显示50项；可输入词形筛选，当前已选项始终保留。": "Shows 50 items per batch. Filter by form; selected items are always retained.",
     "匹配 ⟦0⟧ 项⟦1⟧⟦2⟧": "Matches: ⟦0⟧⟦1⟧⟦2⟧",
@@ -8445,7 +8445,7 @@
     "请先保存或取消正在编辑的句子。": "Save or cancel sentence edits first.",
     "保存后建立记录，可保存空句": "Creates a record on save; empty sentences are allowed",
     "请先保存或取消标注编辑。": "Save or cancel annotation editing first.",
-    "Tab 编辑": "Tab to edit",
+    "使用代码进行编辑": "Edit as code",
     "检索选项": "Search options",
     "批量操作": "Batch operations",
     "关闭快捷入典": "Close Add to dictionary",
@@ -8993,7 +8993,7 @@
     "请选择同语言、同类型的顶层类作为父类": "Select a top-level class of the same language and type as the parent",
     "已有类的类型和父类不能直接修改，请新建类后调整引用": "An existing class's type and parent cannot be changed directly. Create a new class and update references.",
     "同一范围已有这个类名": "This class name already exists in the same scope",
-    "使用标签类型不存在，请先在类管理中建立": "The usage label type does not exist. Create it in class management first.",
+    "使用标签类型不存在，请先在类管理中建立": "The usage tag type does not exist. Create it in class management first.",
     "形式类型不存在，请先在类管理中建立": "The form type does not exist. Create it in class management first.",
     "请先指定词类，再指定子类": "Specify a part of speech before a subclass",
     "此类仍有子类或被词条或标签使用，请先调整引用": "This class has subclasses or is used by entries or labels. Update references first.",
@@ -9382,7 +9382,7 @@
     "解除独立例句词典关联": "Unlink example from dictionary",
     "调整句子顺序": "Reorder sentences",
     "查找替换词典": "Find and replace in dictionary",
-    "批量编辑词条分类与标签": "Batch edit entry categories and labels",
+    "批量编辑词条分类与标签": "Batch edit entry categories and usage tags",
     "查找替换文本": "Find and replace in text",
     "跨句复制或移动词格": "Copy or move word cells between sentences",
     "编辑例句标注与备注": "Edit example annotations and notes",
@@ -9474,7 +9474,7 @@
     "未找到这份许可文件": "This license file was not found",
     "未知词典操作": "Unknown dictionary action",
     "该操作会使已有词典关联失效；请先解除相关关联，再删除或撤销词条": "This action would invalidate existing dictionary links. Unlink them before deleting or undoing the entry.",
-    "使用标签格式不正确": "Incorrect usage label format",
+    "使用标签格式不正确": "Incorrect usage tag format",
     "词典字段应为文本": "Dictionary fields must be text",
     "词条格式不正确": "Incorrect entry format",
     "关联的词类用法已不存在，请先调整语料关联": "The linked POS group no longer exists. Update corpus links first.",
@@ -9488,8 +9488,8 @@
     "忽略词形标记的设置无效": "Invalid ignored word form marker settings",
     "词格数量已变化，请重新核对关联后保存": "The word cell count changed. Recheck links before saving.",
     "语素数量已变化，请重新核对关联后保存": "The morpheme count changed. Recheck links before saving.",
-    "使用标签类型不正确": "Incorrect usage label type",
-    "请填写标签内容": "Enter label content",
+    "使用标签类型不正确": "Incorrect usage tag type",
+    "请填写标签内容": "Enter tag content",
     "词类、义项或变体的格式不正确": "Incorrect part-of-speech, sense, or variant format",
     "词类、义项或变体的标识重复": "Duplicate part-of-speech, sense, or variant IDs",
     "请填写书写形式的名称和内容，或移除空白项": "Enter a written form name and content, or remove empty items",
@@ -10058,7 +10058,7 @@
     "⟦0⟧ · 原词类用法": "⟦0⟧ · Original POS group",
     "自定义书写 › ⟦0⟧": "Written form › ⟦0⟧",
     "例句附加标注 › ⟦0⟧": "Example extra annotations › ⟦0⟧",
-    "使用标签 › ⟦0⟧": "Usage label › ⟦0⟧",
+    "使用标签 › ⟦0⟧": "Usage tag › ⟦0⟧",
     "主要部分 › ⟦0⟧ / ⟦1⟧": "Principal parts › ⟦0⟧ / ⟦1⟧",
     "词条全部内容": "All entry content",
     "未命名": "Unnamed",
@@ -10164,7 +10164,7 @@
     "管理词类与子类": "Manage POS & subclasses",
     "请选择形式类型": "Select form type",
     "管理形式类型": "Manage form type",
-    "管理使用标签类型": "Manage label type",
+    "管理使用标签类型": "Manage usage tag types",
     "管理语言": "Manage language",
     "选择合作者": "Select contributor",
     "请选择合作者": "Select contributor",
@@ -10251,7 +10251,7 @@
     "＋ 添加词类用法": "＋ Add POS group",
     "＋ 添加变体": "＋ Add variant",
     "保存词条": "Save entry",
-    "＋ 添加使用标签": "＋ Add usage label",
+    "＋ 添加使用标签": "＋ Add usage tag",
     "移除义项": "Remove sense",
     "＋ 添加义项": "＋ Add sense",
     "移除变体": "Remove variant",
@@ -10552,13 +10552,13 @@
     "修改时间": "Modified at",
     "各类按语言保存，可拖动行首把手排序。重命名同步更新引用；删除时解除条目绑定，保留条目内容，可撤销。": "Classes are stored per language. Drag the handle to reorder. Renaming updates references; deleting detaches entries and preserves their contents. You can undo these changes.",
     "点号分隔，如 LOC.PL": "Separate with dots, e.g. LOC.PL",
-    "已登记的语法标签": "Registered grammatical tags",
-    "选择标签以附加": "Choose a tag to append",
-    "显示附加标签": "Show additional tags",
+    "已登记的语法标签": "Registered grammatical labels",
+    "选择标签以附加": "Choose a label to append",
+    "显示附加标签": "Show additional labels",
     "拖动排序分类": "Drag to reorder classes",
     "拖动排序；Alt＋上下方向键移动": "Drag to reorder; Alt + Up/Down to move",
     "未关联形态类": "No morphological class assigned",
-    "附加标签显示设置无效": "Invalid additional-tag display setting",
+    "附加标签显示设置无效": "Invalid additional-label display setting",
     "分类顺序已变化，请刷新后重试": "The class order has changed. Refresh and try again",
     "分类顺序无效": "Invalid class order",
     "分类类型无效": "Invalid class type",
@@ -10619,7 +10619,28 @@
     "附着成分与词缀同等计词": "Clitics counted like affixes",
     "附着成分另计词数": "Additional words when clitics are separate",
     "内部行距须留空或填写 -300–300 的数字（%）": "Internal line spacing must be blank or a number from -300 to 300 (%).",
-    "附着成分计词选项无效": "Invalid clitic word-count option."
+    "附着成分计词选项无效": "Invalid clitic word-count option.",
+    "请选择现有语素；切分不一致时请先在标注编辑器中整理": "Select current morphemes. Resolve inconsistent segmentation in the annotation editor first",
+    "新标记请选择连续语素；多部分语素作为一个整体选择": "Select consecutive morphemes for a new tag; multipart morphemes are selected as one unit",
+    "所选语素已有语码标记，请先编辑或移除原标记": "These morphemes already have language tags. Edit or remove the existing tag first",
+    "语码标记的语素快照无效": "Invalid morpheme snapshot for the language tag",
+    "同一语素不能有重叠的语码标记": "Language tags cannot overlap on the same morpheme",
+    "原语素范围已变化，请重新点选范围后保存": "The original morphemes changed. Select their current range before saving",
+    "选择一个项目": "Choose a project",
+    "在同一个项目中整理文本、词典与调查资料。": "Keep texts, your lexicon and survey materials together in one project.",
+    "项目操作": "Project actions",
+    "选择空文件夹，建立一个多语言项目。": "Choose an empty folder to create a multilingual project.",
+    "选择已有项目的最外层文件夹。": "Choose the outermost folder of an existing project.",
+    "打开 Tëlira 示例": "Open Tëlira example",
+    "选择空文件夹，用随附材料建立可自由编辑的示例项目。": "Choose an empty folder to create an editable project from the bundled example.",
+    "未找到随附的 Tëlira 示例材料，请重新安装 Corporium。": "The bundled Tëlira example is missing. Please reinstall Corporium.",
+    "示例项目检查失败，请重新安装 Corporium。": "The example project failed its integrity check. Please reinstall Corporium.",
+    "恢复完整备份": "Restore full backup",
+    "将完整备份恢复为一个新项目。": "Restore a full backup into a new project.",
+    "已有网页版资料？": "Moving from the web version?",
+    "选择包含 data 和 font 的语料库文件夹。首次打开会先备份数据库。": "Choose the corpus folder containing data and font. The database is backed up before the first opening.",
+    "正在读取最近项目…": "Loading recent projects…",
+    "资料保存在你选择的项目文件夹中。": "Your materials stay in the project folder you choose."
   },
   "backend": {
     "正在更新有效标注检索索引…": "Updating effective gloss search…",
@@ -10704,7 +10725,7 @@
     "请选择同语言、同类型的顶层类作为父类": "Select a top-level class of the same language and type as the parent",
     "已有类的类型和父类不能直接修改，请新建类后调整引用": "An existing class's type and parent cannot be changed directly. Create a new class and update references.",
     "同一范围已有这个类名": "This class name already exists in the same scope",
-    "使用标签类型不存在，请先在类管理中建立": "The usage label type does not exist. Create it in class management first.",
+    "使用标签类型不存在，请先在类管理中建立": "The usage tag type does not exist. Create it in class management first.",
     "形式类型不存在，请先在类管理中建立": "The form type does not exist. Create it in class management first.",
     "请先指定词类，再指定子类": "Specify a part of speech before a subclass",
     "分类不存在": "Category not found",
@@ -11141,7 +11162,7 @@
     "复制句子": "Copy sentence",
     "调整句子顺序": "Reorder sentences",
     "查找替换词典": "Find and replace in dictionary",
-    "批量编辑词条分类与标签": "Batch edit entry categories and labels",
+    "批量编辑词条分类与标签": "Batch edit entry categories and usage tags",
     "查找替换文本": "Find and replace in text",
     "识别并拆分标点": "Detect & split punctuation",
     "跨句复制或移动词格": "Copy or move word cells between sentences",
@@ -11286,7 +11307,7 @@
     "未找到这份许可文件": "This license file was not found",
     "未知词典操作": "Unknown dictionary action",
     "该操作会使已有词典关联失效；请先解除相关关联，再删除或撤销词条": "This action would invalidate existing dictionary links. Unlink them before deleting or undoing the entry.",
-    "使用标签格式不正确": "Incorrect usage label format",
+    "使用标签格式不正确": "Incorrect usage tag format",
     "词典字段应为文本": "Dictionary fields must be text",
     "词条格式不正确": "Incorrect entry format",
     "关联的词类用法已不存在，请先调整语料关联": "The linked POS group no longer exists. Update corpus links first.",
@@ -11300,8 +11321,8 @@
     "忽略词形标记的设置无效": "Invalid ignored word form marker settings",
     "词格数量已变化，请重新核对关联后保存": "The word cell count changed. Recheck links before saving.",
     "语素数量已变化，请重新核对关联后保存": "The morpheme count changed. Recheck links before saving.",
-    "使用标签类型不正确": "Incorrect usage label type",
-    "请填写标签内容": "Enter label content",
+    "使用标签类型不正确": "Incorrect usage tag type",
+    "请填写标签内容": "Enter tag content",
     "词类、义项或变体的格式不正确": "Incorrect part-of-speech, sense, or variant format",
     "词类、义项或变体的标识重复": "Duplicate part-of-speech, sense, or variant IDs",
     "请填写书写形式的名称和内容，或移除空白项": "Enter a written form name and content, or remove empty items",
@@ -11815,7 +11836,7 @@
     "形态类": "Morphological class",
     "形式分类": "Form classes",
     "语法标签分类": "Grammatical-label categories",
-    "使用标签": "Usage label",
+    "使用标签": "Usage tag",
     "语域": "Register",
     "地域": "Region",
     "使用状态": "Usage status",
@@ -11827,7 +11848,7 @@
     "词类及子类": "POS & subclasses",
     "语义分类": "Semantic classes",
     "形式类型": "Form type",
-    "使用标签类型": "Label type",
+    "使用标签类型": "Usage tag type",
     "词形": "Word form",
     "备注": "Notes",
     "同形词辨析": "Homograph note",
@@ -12007,7 +12028,7 @@
     "⟦0⟧ · 原词类用法": "⟦0⟧ · Original POS group",
     "自定义书写 › ⟦0⟧": "Written form › ⟦0⟧",
     "例句附加标注 › ⟦0⟧": "Example extra annotations › ⟦0⟧",
-    "使用标签 › ⟦0⟧": "Usage label › ⟦0⟧",
+    "使用标签 › ⟦0⟧": "Usage tag › ⟦0⟧",
     "主要部分 › ⟦0⟧ / ⟦1⟧": "Principal parts › ⟦0⟧ / ⟦1⟧",
     "词条全部内容": "All entry content",
     "未命名": "Unnamed",
@@ -12228,7 +12249,15 @@
     "同一词格请选择整词分析或逐语素补全，不能同时采用": "Choose either whole-word analysis or morpheme-by-morpheme completion for this word cell.",
     "重叠分析需要目标句子": "Reduplication analysis requires a target sentence.",
     "内部行距须留空或填写 -300–300 的数字（%）": "Internal line spacing must be blank or a number from -300 to 300 (%).",
-    "附着成分计词选项无效": "Invalid clitic word-count option."
+    "附着成分计词选项无效": "Invalid clitic word-count option.",
+    "请选择现有语素；切分不一致时请先在标注编辑器中整理": "Select current morphemes. Resolve inconsistent segmentation in the annotation editor first",
+    "新标记请选择连续语素；多部分语素作为一个整体选择": "Select consecutive morphemes for a new tag; multipart morphemes are selected as one unit",
+    "所选语素已有语码标记，请先编辑或移除原标记": "These morphemes already have language tags. Edit or remove the existing tag first",
+    "语码标记的语素快照无效": "Invalid morpheme snapshot for the language tag",
+    "同一语素不能有重叠的语码标记": "Language tags cannot overlap on the same morpheme",
+    "原语素范围已变化，请重新点选范围后保存": "The original morphemes changed. Select their current range before saving",
+    "疑似语法标签尚未登记（请确认） ⟦0⟧": "Possible unregistered grammatical labels (please confirm): ⟦0⟧",
+    "含未支持的 Typst 命令，保留源码显示": "Contains unsupported Typst commands; source code is displayed"
   },
   "messages": {
     "9ad6d8c888c8c3": {
@@ -12445,7 +12474,7 @@
     },
     "7dd303e40ae14e": {
       "zh": "填写该类标签的值，例如口语",
-      "en": "Enter a label value, e.g. colloquial"
+      "en": "Enter a tag value, e.g. colloquial"
     },
     "df669bf4193c19": {
       "zh": "填写内容；首项留空统计全部",
@@ -12993,7 +13022,7 @@
     },
     "8f2e7b4f762035": {
       "zh": "<h2>类管理</h2><p>各类按语言保存，可拖动行首把手排序。重命名同步更新引用；删除时解除条目绑定，保留条目内容，可撤销。</p><label>语言<select id=\"class-language\"></select></label><label>类别<select id=\"class-kind\"><option value=\"pos\">词类与子类</option><option value=\"grammar\">语法标签分类</option><option value=\"form\">形式类型</option><option value=\"morph\">形态类</option><option value=\"usage_tag\">使用标签类型</option></select></label><div id=\"class-list\"></div><button id=\"class-new\">＋ 新建类</button><form id=\"class-form\"><h3 id=\"class-title\">新建类</h3><label>名称<input id=\"class-name\" required></label><label>父类<select id=\"class-parent\"></select></label><label>备注<textarea id=\"class-notes\" rows=\"2\"></textarea></label><p id=\"class-error\" role=\"alert\"></p><button class=\"primary\" type=\"submit\">保存类</button></form><h3>语法标签定义</h3><p>如 2poss 等标签仍在标签库中统一定义，并在词条及用例的语法特征选择区复用。</p><button id=\"class-tags-open\">打开语法标签库</button>",
-      "en": "<h2>Classes</h2><p>Classes are stored per language. Drag the handle to reorder. Renaming updates references; deleting detaches entries and preserves their contents. You can undo these changes.</p><label>Language<select id=\"class-language\"></select></label><label>Category<select id=\"class-kind\"><option value=\"pos\">POS &amp; subclasses</option><option value=\"grammar\">Grammatical-label categories</option><option value=\"form\">Form type</option><option value=\"morph\">Morphological class</option><option value=\"usage_tag\">Label type</option></select></label><div id=\"class-list\"></div><button id=\"class-new\">＋ New class</button><form id=\"class-form\"><h3 id=\"class-title\">New class</h3><label>Name<input id=\"class-name\" required></label><label>Parent class<select id=\"class-parent\"></select></label><label>Notes<textarea id=\"class-notes\" rows=\"2\"></textarea></label><p id=\"class-error\" role=\"alert\"></p><button class=\"primary\" type=\"submit\">Save class</button></form><h3>Grammatical-label definitions</h3><p>Define labels such as 2poss in the label inventory. They are shared by grammatical-feature selectors in entries and occurrences.</p><button id=\"class-tags-open\">Open label inventory</button>"
+      "en": "<h2>Classes</h2><p>Classes are stored per language. Drag the handle to reorder. Renaming updates references; deleting detaches entries and preserves their contents. You can undo these changes.</p><label>Language<select id=\"class-language\"></select></label><label>Category<select id=\"class-kind\"><option value=\"pos\">POS &amp; subclasses</option><option value=\"grammar\">Grammatical-label categories</option><option value=\"form\">Form type</option><option value=\"morph\">Morphological class</option><option value=\"usage_tag\">Usage tag type</option></select></label><div id=\"class-list\"></div><button id=\"class-new\">＋ New class</button><form id=\"class-form\"><h3 id=\"class-title\">New class</h3><label>Name<input id=\"class-name\" required></label><label>Parent class<select id=\"class-parent\"></select></label><label>Notes<textarea id=\"class-notes\" rows=\"2\"></textarea></label><p id=\"class-error\" role=\"alert\"></p><button class=\"primary\" type=\"submit\">Save class</button></form><h3>Grammatical-label definitions</h3><p>Define labels such as 2poss in the label inventory. They are shared by grammatical-feature selectors in entries and occurrences.</p><button id=\"class-tags-open\">Open label inventory</button>"
     },
     "377bf415213fa7": {
       "zh": "尚未指定",
@@ -13073,7 +13102,7 @@
     },
     "c66bc7bd878eb0": {
       "zh": "管理使用标签类型",
-      "en": "Manage label type"
+      "en": "Manage usage tag types"
     },
     "c1c3ed48a4661c": {
       "zh": "<button type=\"button\" data-code-open>语码标记</button>",
@@ -13541,7 +13570,7 @@
     },
     "e433c0eb0b4488": {
       "zh": "整个词条的使用标签",
-      "en": "Usage labels for the entire entry"
+      "en": "Usage tags for the entire entry"
     },
     "c023a88dbf9337": {
       "zh": "条目固有语法特征",
@@ -13921,7 +13950,7 @@
     },
     "cae8d60462ff93": {
       "zh": "使用标签值",
-      "en": "Label value"
+      "en": "Usage tag value"
     },
     "375d51553e0151": {
       "zh": "全部可替换文字",
@@ -13961,7 +13990,7 @@
     },
     "a6a57f6d4cc82e": {
       "zh": "使用标签值",
-      "en": "Label value"
+      "en": "Usage tag value"
     },
     "bf380776a9f518": {
       "zh": "<h2>词典查找替换</h2><p class=\"dr-help\">先查找、预览，再逐处或全部替换；每次应用可一步撤销。</p><div class=\"replace-options\"><label>范围<select id=\"dr-scope\"></select></label><label>字段<select id=\"dr-field\"></select></label></div><details id=\"dr-conditions\"><summary>搜索条件<span id=\"dr-condition-count\"></span></summary><label class=\"dr-query-label\">范围检索<input id=\"dr-query\" placeholder=\"进一步限制条目范围…\"></label><div id=\"dr-condition-controls\"></div></details><div class=\"replace-options\"><label>查找<textarea id=\"dr-find\" rows=\"1\"></textarea></label><label>替换为<textarea id=\"dr-value\" rows=\"1\" placeholder=\"留空表示删除匹配文字\"></textarea></label><label>匹配方式<select id=\"dr-mode\"><option value=\"contains\">包含（逐处匹配）</option><option value=\"exact\">整个字段相同</option><option value=\"prefix\">开头</option><option value=\"suffix\">结尾</option></select></label><label><input id=\"dr-case\" type=\"checkbox\"> 区分大小写</label></div><div class=\"dr-actions\"><button id=\"dr-find-search\" aria-label=\"查找匹配\"></button><button id=\"dr-preview\">预览替换</button></div><p id=\"dr-status\" role=\"status\"></p><p id=\"dr-error\" role=\"alert\"></p><div id=\"dr-results\"></div><div class=\"replace-pagination\"><button id=\"dr-prev\">上一页</button><span id=\"dr-page\"></span><button id=\"dr-next\">下一页</button></div><button id=\"dr-all\" class=\"primary\" disabled>替换全部匹配</button>",
@@ -14089,7 +14118,7 @@
     },
     "104c4721ec8346": {
       "zh": "使用标签类型",
-      "en": "Label type"
+      "en": "Usage tag type"
     },
     "52f5944f4176b1": {
       "zh": "语法标签分类",
@@ -17085,7 +17114,7 @@
     },
     "a702d9cdfee309": {
       "zh": "<div class=\"dictionary-heading\"><div><div class=\"eyebrow\">LEXICON · 词典与语料例证</div><h1 id=\"dictionary-title\">词典</h1><p>词条 → 词类用法 → 义项。语料中的简短标注独立保留。</p></div><button id=\"new-lexeme\" class=\"primary\">＋ 新建词条</button></div><div class=\"search-row\"><input id=\"dictionary-query\" aria-label=\"检索词典\" placeholder=\"检索词形、释义、变体、使用标签或备注\"><button id=\"dictionary-search\">检索词典</button></div><p id=\"dictionary-notice\" role=\"status\"></p><div class=\"dictionary-columns\"><div class=\"dictionary-list-panel\"><div class=\"dictionary-list-controls\"><div id=\"dictionary-count\"></div><label>每页 <select id=\"dictionary-page-size\" aria-label=\"每页条目数\"><option>10</option><option>20</option><option selected>30</option><option>50</option><option>100</option><option>200</option><option>500</option><option>1000</option><option value=\"all\">全部</option></select></label></div><nav id=\"dictionary-top-pagination\" aria-label=\"词典上方分页\"></nav><div id=\"dictionary-list\"></div><div class=\"pagination\"><button id=\"dictionary-prev\">上一页</button><span id=\"dictionary-page\"></span><button id=\"dictionary-next\">下一页</button></div></div><section id=\"dictionary-detail\"><div class=\"empty\">选择一个词条查看详细释义与语料例证。</div></section></div>",
-      "en": "<div class=\"dictionary-heading\"><div><div class=\"eyebrow\">LEXICON · Dictionary &amp; examples</div><h1 id=\"dictionary-title\">Dictionary</h1><p>Entry → POS group → Sense. Local corpus glosses are retained separately.</p></div><button id=\"new-lexeme\" class=\"primary\">＋ New entry</button></div><div class=\"search-row\"><input id=\"dictionary-query\" aria-label=\"Search dictionary\" placeholder=\"Search forms, meanings, variants, usage labels, or notes\"><button id=\"dictionary-search\">Search dictionary</button></div><p id=\"dictionary-notice\" role=\"status\"></p><div class=\"dictionary-columns\"><div class=\"dictionary-list-panel\"><div class=\"dictionary-list-controls\"><div id=\"dictionary-count\"></div><label>Per page <select id=\"dictionary-page-size\" aria-label=\"Entries per page\"><option value=\"10\">10</option><option value=\"20\">20</option><option selected value=\"30\">30</option><option value=\"50\">50</option><option value=\"100\">100</option><option value=\"200\">200</option><option value=\"500\">500</option><option value=\"1000\">1000</option><option value=\"all\">All</option></select></label></div><nav id=\"dictionary-top-pagination\" aria-label=\"Top dictionary pagination\"></nav><div id=\"dictionary-list\"></div><div class=\"pagination\"><button id=\"dictionary-prev\">Previous</button><span id=\"dictionary-page\"></span><button id=\"dictionary-next\">Next</button></div></div><section id=\"dictionary-detail\"><div class=\"empty\">Select an entry to view its definition and examples.</div></section></div>"
+      "en": "<div class=\"dictionary-heading\"><div><div class=\"eyebrow\">LEXICON · Dictionary &amp; examples</div><h1 id=\"dictionary-title\">Dictionary</h1><p>Entry → POS group → Sense. Local corpus glosses are retained separately.</p></div><button id=\"new-lexeme\" class=\"primary\">＋ New entry</button></div><div class=\"search-row\"><input id=\"dictionary-query\" aria-label=\"Search dictionary\" placeholder=\"Search forms, meanings, variants, usage tags, or notes\"><button id=\"dictionary-search\">Search dictionary</button></div><p id=\"dictionary-notice\" role=\"status\"></p><div class=\"dictionary-columns\"><div class=\"dictionary-list-panel\"><div class=\"dictionary-list-controls\"><div id=\"dictionary-count\"></div><label>Per page <select id=\"dictionary-page-size\" aria-label=\"Entries per page\"><option value=\"10\">10</option><option value=\"20\">20</option><option selected value=\"30\">30</option><option value=\"50\">50</option><option value=\"100\">100</option><option value=\"200\">200</option><option value=\"500\">500</option><option value=\"1000\">1000</option><option value=\"all\">All</option></select></label></div><nav id=\"dictionary-top-pagination\" aria-label=\"Top dictionary pagination\"></nav><div id=\"dictionary-list\"></div><div class=\"pagination\"><button id=\"dictionary-prev\">Previous</button><span id=\"dictionary-page\"></span><button id=\"dictionary-next\">Next</button></div></div><section id=\"dictionary-detail\"><div class=\"empty\">Select an entry to view its definition and examples.</div></section></div>"
     },
     "caa7b38aeca15b": {
       "zh": "⟦0⟧ · 词典",
@@ -17196,8 +17225,8 @@
       "en": "<p class=\"usage-subclass-view\">Subclass: ⟦0⟧</p>"
     },
     "f671b7004fd9f6": {
-      "zh": "<div class=\"lex-sense-view\"><div class=\"sense-heading\"><div class=\"sense-identity\"><strong class=\"⟦0⟧\">义项 ⟦1⟧.⟦2⟧</strong><span class=\"sense-grammar-features\">⟦3⟧</span><span class=\"sense-tags\">⟦4⟧</span></div><span class=\"sense-short-gloss ⟦5⟧\">简短标注释义：<b>⟦6⟧</b></span></div>⟦7⟧⟦8⟧</div>",
-      "en": "<div class=\"lex-sense-view\"><div class=\"sense-heading\"><div class=\"sense-identity\"><strong class=\"⟦0⟧\">Sense ⟦1⟧.⟦2⟧</strong><span class=\"sense-grammar-features\">⟦3⟧</span><span class=\"sense-tags\">⟦4⟧</span></div><span class=\"sense-short-gloss ⟦5⟧\">Gloss:<b>⟦6⟧</b></span></div>⟦7⟧⟦8⟧</div>"
+      "zh": "<div class=\"lex-sense-view\"><div class=\"sense-heading\"><div class=\"sense-identity\"><strong class=\"⟦0⟧\">义项 ⟦1⟧.⟦2⟧</strong><span class=\"sense-grammar-features\">⟦3⟧</span><span class=\"sense-tags\">⟦4⟧</span></div><span class=\"sense-short-gloss ⟦5⟧\"><span class=\"sense-gloss-caption\">简短标注释义：</span><b>⟦6⟧</b></span></div>⟦7⟧⟦8⟧</div>",
+      "en": "<div class=\"lex-sense-view\"><div class=\"sense-heading\"><div class=\"sense-identity\"><strong class=\"⟦0⟧\">Sense ⟦1⟧.⟦2⟧</strong><span class=\"sense-grammar-features\">⟦3⟧</span><span class=\"sense-tags\">⟦4⟧</span></div><span class=\"sense-short-gloss ⟦5⟧\"><span class=\"sense-gloss-caption\">Gloss:</span><b>⟦6⟧</b></span></div>⟦7⟧⟦8⟧</div>"
     },
     "086ac665ff85e3": {
       "zh": "未填写",
@@ -17217,23 +17246,23 @@
     },
     "a4c39b67aae890": {
       "zh": "<h2 id=\"lexeme-editor-title\">词条</h2><form id=\"lexeme-form\"><div class=\"metadata-grid\"><label>词条所属语言<select id=\"lexeme-language\"></select></label><label>词形<input id=\"lexeme-headword\" required></label></div><h3>书写形式</h3><p><small>选择书写类型后统一使用该类型的名称和字体。可先在顶部“管理 → 书写类型管理”中建立类型；未归类的旧内容仍保留单独设置。</small></p><div id=\"lexeme-orthographies\"></div><button type=\"button\" id=\"add-orthography\">＋ 添加书写形式</button><label>同形词下标（可选，正整数）<input id=\"lexeme-number\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"同形时自动分配\"></label><label>同形词区分说明<input id=\"lexeme-homonym\" placeholder=\"可选，例如：同形词 Ⅰ；动词来源未定\"></label><label>词条备注<textarea id=\"lexeme-notes\" rows=\"2\"></textarea></label><details><summary>整个词条的使用标签</summary><div id=\"lexeme-tags\"></div></details><h3>词类用法与义项</h3><p><small>可有多个词类和义项；没有把握时可留空。关联例句默认跟随所选义项的简单释义；本句单独标注保留不变，可撤销。</small></p><div id=\"lexeme-usages\"></div><button type=\"button\" id=\"add-usage\">＋ 添加词类用法</button><details><summary>形式变体</summary><div id=\"lexeme-variants\"></div><button type=\"button\" id=\"add-variant\">＋ 添加变体</button></details><p id=\"lexeme-error\" role=\"alert\"></p><button class=\"primary\" id=\"save-lexeme\" type=\"submit\">保存词条</button></form>",
-      "en": "<h2 id=\"lexeme-editor-title\">Entry</h2><form id=\"lexeme-form\"><div class=\"metadata-grid\"><label>Entry language<select id=\"lexeme-language\"></select></label><label>Word form<input id=\"lexeme-headword\" required></label></div><h3>Written form</h3><p><small>Choose a writing system to share its name and font. Create systems in Manage → Writing systems. Unclassified legacy content retains individual settings.</small></p><div id=\"lexeme-orthographies\"></div><button type=\"button\" id=\"add-orthography\">＋ Add written form</button><label>Homograph subscript (optional positive integer)<input id=\"lexeme-number\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"Assign automatically for homographs\"></label><label>Homograph note<input id=\"lexeme-homonym\" placeholder=\"Optional, e.g. homograph I; verbal origin uncertain\"></label><label>Notes<textarea id=\"lexeme-notes\" rows=\"2\"></textarea></label><details><summary>Usage labels for the entire entry</summary><div id=\"lexeme-tags\"></div></details><h3>POS groups &amp; senses</h3><p><small>Multiple POS groups and senses are allowed; leave uncertain fields blank. Linked examples use the selected sense's gloss by default. Local overrides are retained. You can undo this.</small></p><div id=\"lexeme-usages\"></div><button type=\"button\" id=\"add-usage\">＋ Add POS group</button><details><summary>Variant</summary><div id=\"lexeme-variants\"></div><button type=\"button\" id=\"add-variant\">＋ Add variant</button></details><p id=\"lexeme-error\" role=\"alert\"></p><button class=\"primary\" id=\"save-lexeme\" type=\"submit\">Save entry</button></form>"
+      "en": "<h2 id=\"lexeme-editor-title\">Entry</h2><form id=\"lexeme-form\"><div class=\"metadata-grid\"><label>Entry language<select id=\"lexeme-language\"></select></label><label>Word form<input id=\"lexeme-headword\" required></label></div><h3>Written form</h3><p><small>Choose a writing system to share its name and font. Create systems in Manage → Writing systems. Unclassified legacy content retains individual settings.</small></p><div id=\"lexeme-orthographies\"></div><button type=\"button\" id=\"add-orthography\">＋ Add written form</button><label>Homograph subscript (optional positive integer)<input id=\"lexeme-number\" type=\"number\" min=\"1\" step=\"1\" placeholder=\"Assign automatically for homographs\"></label><label>Homograph note<input id=\"lexeme-homonym\" placeholder=\"Optional, e.g. homograph I; verbal origin uncertain\"></label><label>Notes<textarea id=\"lexeme-notes\" rows=\"2\"></textarea></label><details><summary>Usage tags for the entire entry</summary><div id=\"lexeme-tags\"></div></details><h3>POS groups &amp; senses</h3><p><small>Multiple POS groups and senses are allowed; leave uncertain fields blank. Linked examples use the selected sense's gloss by default. Local overrides are retained. You can undo this.</small></p><div id=\"lexeme-usages\"></div><button type=\"button\" id=\"add-usage\">＋ Add POS group</button><details><summary>Variant</summary><div id=\"lexeme-variants\"></div><button type=\"button\" id=\"add-variant\">＋ Add variant</button></details><p id=\"lexeme-error\" role=\"alert\"></p><button class=\"primary\" id=\"save-lexeme\" type=\"submit\">Save entry</button></form>"
     },
     "5a689f3de6c2ab": {
       "zh": "<div class=\"tag-rows\"></div><button type=\"button\" class=\"add-tag\">＋ 添加使用标签</button>",
-      "en": "<div class=\"tag-rows\"></div><button type=\"button\" class=\"add-tag\">＋ Add usage label</button>"
+      "en": "<div class=\"tag-rows\"></div><button type=\"button\" class=\"add-tag\">＋ Add usage tag</button>"
     },
     "e24432533827b9": {
       "zh": "<select aria-label=\"标签类型\">⟦0⟧</select><input aria-label=\"标签内容\" placeholder=\"如：文语、西部、新用法\" value=\"⟦1⟧\"><input aria-label=\"标签说明\" placeholder=\"补充说明（可选）\" value=\"⟦2⟧\"><button type=\"button\" aria-label=\"移除此标签\">×</button>",
-      "en": "<select aria-label=\"Label type\">⟦0⟧</select><input aria-label=\"Label value\" placeholder=\"E.g. literary, western, new usage\" value=\"⟦1⟧\"><input aria-label=\"Label description\" placeholder=\"Additional details (optional)\" value=\"⟦2⟧\"><button type=\"button\" aria-label=\"Remove this label\">×</button>"
+      "en": "<select aria-label=\"Tag type\">⟦0⟧</select><input aria-label=\"Tag value\" placeholder=\"E.g. literary, western, new usage\" value=\"⟦1⟧\"><input aria-label=\"Tag description\" placeholder=\"Additional details (optional)\" value=\"⟦2⟧\"><button type=\"button\" aria-label=\"Remove this tag\">×</button>"
     },
     "179969cd1fb9b6": {
       "zh": "<div class=\"lex-row-heading\"><strong>义项</strong><button type=\"button\" class=\"remove-sense\">移除义项</button></div><label>简短标注释义<input class=\"sense-short\" value=\"⟦0⟧\" placeholder=\"如：家\"></label><label>词典详细释义<textarea class=\"sense-definition\" rows=\"3\" placeholder=\"完整解释这个意义\">⟦1⟧</textarea></label><label>用法说明<textarea class=\"sense-notes\" rows=\"2\">⟦2⟧</textarea></label><details><summary>仅此义项的使用标签</summary><div class=\"sense-tags\"></div></details><details><summary>此义项的语法特征</summary><div class=\"sense-features morph-feature-editor\">⟦3⟧</div></details>",
-      "en": "<div class=\"lex-row-heading\"><strong>Sense</strong><button type=\"button\" class=\"remove-sense\">Remove sense</button></div><label>Gloss<input class=\"sense-short\" value=\"⟦0⟧\" placeholder=\"E.g. house\"></label><label>Dictionary definition<textarea class=\"sense-definition\" rows=\"3\" placeholder=\"Explain this sense in full\">⟦1⟧</textarea></label><label>Usage notes<textarea class=\"sense-notes\" rows=\"2\">⟦2⟧</textarea></label><details><summary>Usage labels for this sense only</summary><div class=\"sense-tags\"></div></details><details><summary>Grammatical features of this sense</summary><div class=\"sense-features morph-feature-editor\">⟦3⟧</div></details>"
+      "en": "<div class=\"lex-row-heading\"><strong>Sense</strong><button type=\"button\" class=\"remove-sense\">Remove sense</button></div><label>Gloss<input class=\"sense-short\" value=\"⟦0⟧\" placeholder=\"E.g. house\"></label><label>Dictionary definition<textarea class=\"sense-definition\" rows=\"3\" placeholder=\"Explain this sense in full\">⟦1⟧</textarea></label><label>Usage notes<textarea class=\"sense-notes\" rows=\"2\">⟦2⟧</textarea></label><details><summary>Usage tags for this sense only</summary><div class=\"sense-tags\"></div></details><details><summary>Grammatical features of this sense</summary><div class=\"sense-features morph-feature-editor\">⟦3⟧</div></details>"
     },
     "3e77a4482c7421": {
       "zh": "<div class=\"lex-row-heading\"><strong>词类用法</strong><button type=\"button\" class=\"remove-usage\">移除此用法</button></div><label>词类<input class=\"usage-pos\" value=\"⟦0⟧\" placeholder=\"如：名词；尚未确定时可留空\"></label><label>子类<input class=\"usage-subclass\" value=\"⟦1⟧\" placeholder=\"如：分布数词、II 类\"></label><label>用法备注<textarea class=\"usage-notes\" rows=\"2\">⟦2⟧</textarea></label><details><summary>此词类用法的使用标签</summary><div class=\"usage-tags\"></div></details><div class=\"sense-editors\"></div><button type=\"button\" class=\"add-sense\">＋ 添加义项</button>",
-      "en": "<div class=\"lex-row-heading\"><strong>POS group</strong><button type=\"button\" class=\"remove-usage\">Remove this POS group</button></div><label>POS<input class=\"usage-pos\" value=\"⟦0⟧\" placeholder=\"E.g. noun; leave blank if uncertain\"></label><label>Subclass<input class=\"usage-subclass\" value=\"⟦1⟧\" placeholder=\"E.g. distributive numeral, class II\"></label><label>Usage notes<textarea class=\"usage-notes\" rows=\"2\">⟦2⟧</textarea></label><details><summary>Usage labels for this POS group</summary><div class=\"usage-tags\"></div></details><div class=\"sense-editors\"></div><button type=\"button\" class=\"add-sense\">＋ Add sense</button>"
+      "en": "<div class=\"lex-row-heading\"><strong>POS group</strong><button type=\"button\" class=\"remove-usage\">Remove this POS group</button></div><label>POS<input class=\"usage-pos\" value=\"⟦0⟧\" placeholder=\"E.g. noun; leave blank if uncertain\"></label><label>Subclass<input class=\"usage-subclass\" value=\"⟦1⟧\" placeholder=\"E.g. distributive numeral, class II\"></label><label>Usage notes<textarea class=\"usage-notes\" rows=\"2\">⟦2⟧</textarea></label><details><summary>Usage tags for this POS group</summary><div class=\"usage-tags\"></div></details><div class=\"sense-editors\"></div><button type=\"button\" class=\"add-sense\">＋ Add sense</button>"
     },
     "4b8c500681fcd2": {
       "zh": "<label>变体<input class=\"variant-form\" value=\"⟦0⟧\"></label><label>变体说明<input class=\"variant-notes\" value=\"⟦1⟧\"></label><div class=\"variant-tags\"></div><button type=\"button\" class=\"remove-variant\">移除变体</button>",
@@ -17941,7 +17970,7 @@
     },
     "2648e31aed898f": {
       "zh": "<div class=\"metadata-grid\"><label>形式<input class=\"variant-form\" value=\"⟦0⟧\"></label><label>变体关系<select class=\"morph-variation\">⟦1⟧</select></label><label>形式类型<select class=\"morph-kind\">⟦2⟧</select></label><label>读音（IPA）<input class=\"morph-pronunciation\" value=\"⟦3⟧\"></label></div><details><summary>本形式表达的语法特征</summary><div class=\"form-features\">⟦4⟧</div></details><div class=\"morph-condition-types\">⟦5⟧</div><label>分布条件（可选）<textarea class=\"morph-conditions\" rows=\"2\">⟦6⟧</textarea></label><label>研究依据<input class=\"morph-source\" value=\"⟦7⟧\"></label><label>备注<input class=\"variant-notes\" value=\"⟦8⟧\"></label><details><summary>使用标签</summary><div class=\"variant-tags\"></div></details><button type=\"button\" class=\"remove-variant\">移除变体</button>",
-      "en": "<div class=\"metadata-grid\"><label>Form<input class=\"variant-form\" value=\"⟦0⟧\"></label><label>Variant relationship<select class=\"morph-variation\">⟦1⟧</select></label><label>Form type<select class=\"morph-kind\">⟦2⟧</select></label><label>Pronunciation (IPA)<input class=\"morph-pronunciation\" value=\"⟦3⟧\"></label></div><details><summary>Grammatical features expressed by this form</summary><div class=\"form-features\">⟦4⟧</div></details><div class=\"morph-condition-types\">⟦5⟧</div><label>Distributional conditions (optional)<textarea class=\"morph-conditions\" rows=\"2\">⟦6⟧</textarea></label><label>Basis<input class=\"morph-source\" value=\"⟦7⟧\"></label><label>Notes<input class=\"variant-notes\" value=\"⟦8⟧\"></label><details><summary>Usage label</summary><div class=\"variant-tags\"></div></details><button type=\"button\" class=\"remove-variant\">Remove variant</button>"
+      "en": "<div class=\"metadata-grid\"><label>Form<input class=\"variant-form\" value=\"⟦0⟧\"></label><label>Variant relationship<select class=\"morph-variation\">⟦1⟧</select></label><label>Form type<select class=\"morph-kind\">⟦2⟧</select></label><label>Pronunciation (IPA)<input class=\"morph-pronunciation\" value=\"⟦3⟧\"></label></div><details><summary>Grammatical features expressed by this form</summary><div class=\"form-features\">⟦4⟧</div></details><div class=\"morph-condition-types\">⟦5⟧</div><label>Distributional conditions (optional)<textarea class=\"morph-conditions\" rows=\"2\">⟦6⟧</textarea></label><label>Basis<input class=\"morph-source\" value=\"⟦7⟧\"></label><label>Notes<input class=\"variant-notes\" value=\"⟦8⟧\"></label><details><summary>Usage tag</summary><div class=\"variant-tags\"></div></details><button type=\"button\" class=\"remove-variant\">Remove variant</button>"
     },
     "e9cba27b669784": {
       "zh": "语素变体",
@@ -18461,7 +18490,7 @@
     },
     "f96ea5f7954104": {
       "zh": "条件目前用于记录和人工判断，不自动套用。地域、语体和代际信息使用下方的使用标签；原有变体保留为“关系尚未确定”。",
-      "en": "Conditions are recorded for manual assessment, not applied automatically. Use usage labels below for regional, register, and generational information. Existing variants retain an unspecified relationship."
+      "en": "Conditions are recorded for manual assessment, not applied automatically. Use usage tags below for regional, register, and generational information. Existing variants retain an unspecified relationship."
     },
     "e49c8e74d63afc": {
       "zh": "原引用不属于当前语言，请调整",
@@ -20108,12 +20137,12 @@
       "en": "Save or cancel annotation editing first."
     },
     "944a91dc4066c2": {
-      "zh": "Tab 编辑",
-      "en": "Tab to edit"
+      "zh": "使用代码进行编辑",
+      "en": "Edit as code"
     },
     "cb5ddd4afc34f9": {
-      "zh": "<div class=\"inline-tools\"><button type=\"button\" data-tab-edit>Tab 编辑</button>",
-      "en": "<div class=\"inline-tools\"><button type=\"button\" data-tab-edit>Tab to edit</button>"
+      "zh": "<div class=\"inline-tools\"><button type=\"button\" data-tab-edit>使用代码进行编辑</button>",
+      "en": "<div class=\"inline-tools\"><button type=\"button\" data-tab-edit>Edit as code</button>"
     },
     "838c79b3796c67": {
       "zh": "<summary>检索选项</summary>",
@@ -20505,7 +20534,7 @@
     },
     "99d5268f1d0268": {
       "zh": "<div class=\"morpheme-core-fields\"><label>简短标注<input class=\"morpheme-sense-gloss\" value=\"⟦0⟧\"></label><label>意义／功能<textarea rows=\"1\">⟦1⟧</textarea></label><button type=\"button\" data-remove-sense aria-label=\"移除此意义\">×</button></div><details><summary>使用标签</summary><div class=\"morpheme-sense-tags\"></div></details>",
-      "en": "<div class=\"morpheme-core-fields\"><label>Gloss<input class=\"morpheme-sense-gloss\" value=\"⟦0⟧\"></label><label>Meaning/function<textarea rows=\"1\">⟦1⟧</textarea></label><button type=\"button\" data-remove-sense aria-label=\"Remove this meaning\">×</button></div><details><summary>Usage label</summary><div class=\"morpheme-sense-tags\"></div></details>"
+      "en": "<div class=\"morpheme-core-fields\"><label>Gloss<input class=\"morpheme-sense-gloss\" value=\"⟦0⟧\"></label><label>Meaning/function<textarea rows=\"1\">⟦1⟧</textarea></label><button type=\"button\" data-remove-sense aria-label=\"Remove this meaning\">×</button></div><details><summary>Usage tag</summary><div class=\"morpheme-sense-tags\"></div></details>"
     },
     "13b45c5bfd1eb1": {
       "zh": "拖动到文件夹，或拖到其他文本的上方或下方排序",

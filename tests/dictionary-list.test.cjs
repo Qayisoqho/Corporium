@@ -24,8 +24,8 @@ test('class folding retains its own heading, hides descendants and preserves sib
 });
 
 test('collapsing a 5000-word branch removes its rows before mounting, and rebuilding keeps the source intact',()=>{
- const host={style:{},scrollTop:0,hidden:false,isConnected:true,addEventListener(){},removeEventListener(){},removeAttribute(){}};
- const c={window:{},document:{getElementById:()=>host},ResizeObserver:class{disconnect(){}},requestAnimationFrame(){}};vm.createContext(c);vm.runInContext(source,c);
+ const host={style:{getPropertyValue(){return '';},setProperty(){}},scrollTop:0,hidden:false,isConnected:true,addEventListener(){},removeEventListener(){},removeAttribute(){}};
+ const c={window:{},document:{getElementById:id=>id==='workbench-module-nav'?host:null},ResizeObserver:class{observe(){}disconnect(){}},requestAnimationFrame(){}};vm.createContext(c);vm.runInContext(source,c);
  const items=Array.from({length:5000},(_,i)=>({id:String(i),body:{},sort_path:[{key:'root',label:'词类'}]})),closed=new Set(['["root"]']);
  assert.equal(c.dictionaryClassRows(items,closed).length,1);
  c.renderDictionaryList(host,items,{transform:rows=>c.dictionaryClassRows(rows,closed),html:r=>r.dictionaryClass?'heading':r.id,attribute:'data-word',select(){},empty:'empty'});

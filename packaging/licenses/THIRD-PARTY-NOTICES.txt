@@ -2,6 +2,11 @@ Corporium 第三方组件说明
 
 本发行包使用 Python、pywebview、Python.NET、NumPy、PyAV、Junicode 等第三方组件。各组件的版权及许可原文保存在本目录中；Corporium 的使用许可不替代这些许可。
 
+默认界面字体
+默认顺序为 STIX Two Text → Microsoft JhengHei（微软正黑体）→ 系统通用回退。STIX Two Text 2.13 随软件提供，包含 Regular、Medium、SemiBold、Bold 及对应斜体，原文件不作修改，不安装到系统。许可原文：STIXTwoText-OFL.txt（SIL Open Font License 1.1）。来源及校验值见 font/STIXTwoText/SOURCE.json。
+Microsoft JhengHei 仅通过字体名称调用用户系统已有字体，软件不附带、复制、转换或安装其字体文件；系统缺少时继续使用通用回退，显示效果可能不同。Windows 字体分发和应用嵌入需要另行授权，不能以文档嵌入权限代替。官方说明：https://learn.microsoft.com/en-us/typography/fonts/font-faq 。
+原随附默认字体 Noto Sans 与 Source Han Sans SC 已移除。既有自定义字体选择及语料行设置保留；这些旧字体如在系统上已安装，仍可使用。字体遵循各自许可，不受 Corporium 应用许可替代。
+
 Microsoft Edge WebView2
 Corporium 的 Windows 桌面界面使用 Microsoft Edge WebView2。缺少运行库时，安装程序会安装随包附带的微软官方 Evergreen 运行库。点击安装页的“同意并安装”，表示接受 Corporium 使用许可及 Microsoft Edge WebView2 Runtime 许可。
 微软许可原文：Microsoft-WebView2-Runtime-LICENSE.txt。

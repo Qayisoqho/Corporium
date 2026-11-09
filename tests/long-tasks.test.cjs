@@ -53,6 +53,22 @@ test('commit status disables cancellation, then finishes successfully',async()=>
  assert.equal(disabled,true);assert.equal(result.ok,true);assert.equal(h.dialogs[0].open,false);
 });
 
+test('short foreground tasks recheck promptly and restart the backoff for each job',async()=>{
+ const h=harness([{state:'running',message:'working'},{state:'done',message:'done',result:{ok:true}},{state:'running',message:'working'}]),delays=[];
+ h.context.setTimeout=(fn,ms)=>{delays.push(ms);fn();};
+ await h.context.api('analysis-result?id=one');await h.context.api('analysis-result?id=two');
+ assert.deepEqual(delays,[40,40]);assert.equal(h.dialogs[0].open,false);
+});
+
+test('sustained tasks retain the 400ms cap and dictionary searches keep their 80ms interval',async()=>{
+ const h=harness(Array.from({length:8},()=>({state:'running',message:'working'}))),delays=[];
+ h.context.setTimeout=(fn,ms)=>{delays.push(ms);fn();};await h.context.api('homophones');
+ assert.deepEqual(delays,[40,80,160,320,400,400,400,400]);
+ const search=harness([{state:'running',message:'working'}]),searchDelays=[];
+ search.context.setTimeout=(fn,ms)=>{searchDelays.push(ms);fn();};await search.context.api('lexemes?q=word');
+ assert.deepEqual(searchDelays,[80]);assert.equal(search.context.window.corporiumLongTaskActive(),false);
+});
+
 test('existing dictionary saves use cancellable tasks while new records keep the quick save path',async()=>{
  const h=harness([]);let leaves=0;h.context.window.corporiumLeaveMorpheme=async()=>{leaves++;return true;};
  for(const path of ['lexeme-save','morpheme-save'])await h.context.api(path,{body:{notes:'new'}});

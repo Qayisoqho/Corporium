@@ -46,13 +46,13 @@ async function saveNewCorpusInPlace(r,d){
  const previousLanguage=switchLanguage;switchLanguage=async function(id){if(id!==activeLanguage)await leaveSentenceDrafts();return previousLanguage(id);};
  const previousText=selectText;selectText=async function(id,...options){await leaveSentenceDrafts();return previousText(id,...options);};
  const previousLexeme=showLexeme;showLexeme=async function(...args){await leaveSentenceDrafts();return previousLexeme(...args);};
- // Add Tab editing to every shared sentence's More menu, including timeline cards.
+ // Add code editing (one Tab-separated line per word) to every shared sentence's More menu, including timeline cards.
  document.addEventListener('click',safe(async e=>{const b=e.target.closest('[data-tab-edit]');if(!b)return;const card=b.closest('.editable-example'),kind=card.dataset.exampleKind,id=card.dataset.exampleId;
   if(inlineDrafts.has(inlineKey(kind,id)))throw Error((globalThis.CorporiumI18n?.f("4b2bd730b0b71d",()=>[])??'请先保存或取消标注编辑。'));
   if(kind==='independent'){const record=await api('independent-example?id='+encodeURIComponent(id));await oldStandalone({language_id:record.language_id},record);}
-  else{const d=await api('annotations?'+new URLSearchParams({kind,id}));await edit({...d.body,id,revision:d.revision,text_language_id:d.owner_language,title:(globalThis.CorporiumI18n?.f("944a91dc4066c2",()=>[])??'Tab 编辑'),position:''});}
+  else{const d=await api('annotations?'+new URLSearchParams({kind,id}));await edit({...d.body,id,revision:d.revision,text_language_id:d.owner_language,title:(globalThis.CorporiumI18n?.f("944a91dc4066c2",()=>[])??'使用代码进行编辑'),position:''});}
  }));
- const previousRender=renderEditableExample;renderEditableExample=function(e,kind,id){let html=previousRender(e,kind,id);if(!briefMode&&!inlineDrafts.has(inlineKey(kind,id)))html=html.replace('<div class="inline-tools">',(globalThis.CorporiumI18n?.f("cb5ddd4afc34f9",()=>[])??'<div class="inline-tools"><button type="button" data-tab-edit>Tab 编辑</button>'));return html;};
+ const previousRender=renderEditableExample;renderEditableExample=function(e,kind,id){let html=previousRender(e,kind,id);if(!briefMode&&!inlineDrafts.has(inlineKey(kind,id)))html=html.replace('<div class="inline-tools">',(globalThis.CorporiumI18n?.f("cb5ddd4afc34f9",()=>[])??'<div class="inline-tools"><button type="button" data-tab-edit>使用代码进行编辑</button>'));return html;};
  // Use the same compact search structure as the text workspace.
  $('library-source').value='independent';$('library-source').closest('label').hidden=true;
  const searchBox=document.createElement('section');searchBox.className='search';

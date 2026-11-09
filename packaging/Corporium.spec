@@ -5,6 +5,10 @@ datas=[(str(root/'packaging'/'Corporium.ico'),'packaging'),(str(root/'web'),'web
 for name in ('Junicode.ttf','Junicode-Italic.ttf','Junicode-Bold.ttf','Junicode-BoldItalic.ttf'):
     datas.append((str(root/'font'/'Junicode'/name),'font/Junicode'))
 datas.append((str(root/'packaging'/'licenses'/'Junicode-OFL.txt'),'font/Junicode'))
+for family,names in (('STIXTwoText',tuple('STIXTwoText-'+face+'.ttf' for face in
+                     ('Regular','Italic','Medium','MediumItalic','SemiBold','SemiBoldItalic','Bold','BoldItalic'))),):
+    for name in (*names,'OFL.txt','SOURCE.json'):
+        datas.append((str(root/'font'/family/name),'font/'+family))
 datas.append((str(root/'packaging'/'examples'/'Telira.corporium'),'packaging/examples'))
 datas.append((str(root/'packaging'/'examples'/'README.txt'),'packaging/examples'))
 a=Analysis([str(root/'desktop.py')],pathex=[str(root)],binaries=[],datas=datas,

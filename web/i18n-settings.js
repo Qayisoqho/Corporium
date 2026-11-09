@@ -47,10 +47,11 @@
   form.onsubmit=async function(event){
    event.preventDefault();const changed=select.value!==I.locale;
    if(changed&&!await readyToSwitch())return;
-   await submit.call(this,event);
-   if(changed&&!document.getElementById('typography-dialog').open){
-    try{await apply();}catch(error){document.getElementById('typography-dialog').showModal();if(typeof corporiumAlert==='function')await corporiumAlert(error.message);}
+   const result=await submit.call(this,event);
+   if(changed&&result?.saved){
+    try{await apply();}catch(error){window.CorporiumGlobalSettings?.open();if(typeof corporiumAlert==='function')await corporiumAlert(error.message);}
    }
+   return result;
   };
  }else if(document.getElementById('desktop-recent')){
   const field=document.createElement('label');field.className='startup-interface-language';field.append(document.createTextNode(I.ui('语言 / Language','Language / 语言')),select);

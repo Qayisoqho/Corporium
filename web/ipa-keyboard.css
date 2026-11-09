@@ -7,15 +7,15 @@
 #ipa-keyboard #ipa-toggle{width:64px;height:36px;padding:2px;box-shadow:0 2px 8px #0003;font:.92rem/1 var(--ui-font,system-ui),sans-serif;white-space:nowrap;background:var(--sidebar,var(--paper))}
 #ipa-board{display:flex;flex-direction:column;width:100%;height:100%;min-width:0;min-height:0;border:1px solid var(--line);border-radius:7px;box-shadow:0 4px 22px #0004;background:var(--paper);overflow:hidden}
 #ipa-board>header{display:flex;align-items:center;gap:6px;flex:none;margin:0;padding:4px 7px;background:var(--sidebar,var(--paper));border-bottom:1px solid var(--line);cursor:move;touch-action:none}
-#ipa-keyboard :is(#ipa-home,#ipa-collapse){display:grid;place-items:center;flex:none;width:30px;height:30px;padding:3px;line-height:1}
+#ipa-keyboard #ipa-home, #ipa-keyboard #ipa-collapse{display:grid;place-items:center;flex:none;width:30px;height:30px;padding:3px;line-height:1}
 #ipa-keyboard :is(#ipa-home,#ipa-collapse) svg{width:22px;height:22px;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #ipa-keyboard #ipa-collapse svg{width:24px;stroke-width:2.6}
-#ipa-target{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.75rem;color:var(--muted)}
+#ipa-target{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--ui-help-size);color:var(--muted)}
 #ipa-filter{display:flex;gap:5px;padding:5px 7px;flex:none}
 #ipa-filter input{min-width:0;flex:1;width:0}
 #ipa-filter select{max-width:48%}
 #ipa-keys{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:0 7px 6px}
-#ipa-keys h3{font-size:.76rem;color:var(--muted);margin:5px 0 3px;line-height:1.3}
+#ipa-keys h3{font-size:var(--ui-heading-size);color:var(--muted);margin:5px 0 3px;line-height:1.3}
 .ipa-key-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(2.9rem,1fr));gap:4px}
 .ipa-key-cell{position:relative;min-width:0}
 #ipa-keyboard .ipa-insert{width:100%;min-height:39px;padding:5px 13px 4px 3px;font:1.32rem/1.25 IPAPANNEW,Junicode,serif;white-space:nowrap}
@@ -23,6 +23,6 @@
 #ipa-keyboard .ipa-star[aria-pressed=true]{color:var(--green)}
 #ipa-keyboard .ipa-fav-grip{position:absolute;bottom:0;right:0;width:15px;min-height:17px;padding:0;border:0;background:transparent;font-size:12px;line-height:17px;cursor:grab}
 #ipa-keyboard [data-ipa-drop]{outline:2px solid var(--green)}
-#ipa-board>footer{display:block;position:relative;flex:none;margin:0;padding:3px 19px 4px 7px;border-top:1px solid var(--line);font-size:.72rem;color:var(--muted);line-height:1.4;min-height:22px}
+#ipa-board>footer{display:block;position:relative;flex:none;margin:0;padding:3px 19px 4px 7px;border-top:1px solid var(--line);font-size:var(--ui-help-size);color:var(--muted);line-height:1.4;min-height:22px}
 #ipa-size{position:absolute;right:0;bottom:0;width:19px;height:19px;cursor:nwse-resize;touch-action:none;background:linear-gradient(135deg,transparent 45%,var(--muted) 46%,var(--muted) 51%,transparent 52%,transparent 65%,var(--muted) 66%,var(--muted) 71%,transparent 72%)}
 #ipa-message{white-space:normal}

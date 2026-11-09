@@ -98,6 +98,41 @@ class Projects:
         self.current=path;self.generation=secrets.token_urlsafe(16);self.startup_error=''
         return self.status()
 
+    def create_example(self,path):
+        """Prepare the bundled example separately, then open its independent copy."""
+        import tempfile
+        import language_exchange
+        import journal
+        if server.recorder.SERVICE.busy():raise ValueError('请先停止录音，再切换项目')
+        path=Path(path).resolve()
+        if path.exists() and any(path.iterdir()):raise ValueError('请选择一个空文件夹，新建项目不会覆盖现有文件。')
+        source=ASSETS/'packaging'/'examples'/'Telira.corporium'
+        if not source.is_file():raise ValueError('未找到随附的 Tëlira 示例材料，请重新安装 Corporium。')
+        path.parent.mkdir(parents=True,exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='.corporium-example-',dir=path.parent) as pending:
+            prepared=Path(pending)/'project';(prepared/'data').mkdir(parents=True)
+            old=server.DB;scope=journal.scope.set(journal.scope.get());action=journal.action.set(None)
+            try:
+                server.DB=prepared/'data'/'corpus.sqlite3'
+                # Start in Tëlira rather than an unrelated, empty default language.
+                server.init(seed_default_language=False)
+                # Use the normal save lifecycle to rebuild effective gloss
+                # inheritance and validate links before publishing the project.
+                journal.action.set(journal.LABELS['/api/language-package-import'])
+                with server.connect() as db:
+                    language_exchange.import_new(db,server.DB,source,'Tëlira',[])
+                with server.connect(audit=False) as db:
+                    if db.execute('PRAGMA quick_check').fetchone()[0]!='ok' or db.execute('PRAGMA foreign_key_check').fetchone():
+                        raise ValueError('示例项目检查失败，请重新安装 Corporium。')
+            finally:
+                server.DB=old;journal.scope.reset(scope);journal.action.reset(action)
+            # Only an empty chosen folder may be replaced; a failed import has
+            # not touched it or changed the active project / recent-project list.
+            if path.exists():path.rmdir()
+            prepared.rename(path)
+        # A failed activation leaves a complete example available via Open.
+        return self.open(path,new=True)
+
     def status(self):
         locale=self.settings.get('ui_language','zh-CN')
         return {'version':VERSION,'project':str(self.current) if self.current else None,'recent':self.settings['recent'],'startup_error':server.ui_localization.message(self.startup_error,locale),'ui_language':locale}
@@ -135,7 +170,7 @@ def make_handler(projects,token):
                 if parsed.path=='/desktop.js':return self.send((ASSETS/'web'/'desktop.js').read_bytes(),mime='text/javascript; charset=utf-8')
                 if parsed.path=='/desktop-status':return self.send(projects.status())
                 # Legal notices are available before choosing a project, still within the desktop session.
-                if parsed.path in server.legal_notices.ASSET_PATHS|server.ui_localization.ASSET_PATHS|{'/workbench.css'}:return super().do_GET()
+                if parsed.path in server.legal_notices.ASSET_PATHS|server.ui_localization.ASSET_PATHS|{'/workbench.css','/ui-standards.css'}|{'/font/'+r[1] for r in server.font_catalog.BUILTIN_FILES if r[0] in ('STIX Two Text','Junicode')}:return super().do_GET()
                 if parsed.path=='/':
                     file='index.html' if projects.current else 'desktop-start.html'
                     html=(ASSETS/'web'/file).read_text(encoding='utf-8').replace('</body>','<script src="/desktop.js"></script></body>')
@@ -282,12 +317,13 @@ class Bridge:
                 files=self._window.create_file_dialog(webview.FileDialog.OPEN,file_types=self._file_types(('Corporium 备份 (*.*)','旧版 JSON 备份 (*.json)','ZIP 备份包 (*.zip)')))
                 if not files:return {'cancelled':True}
                 backup=files[0]
-            if action in ('open','new','restore'):
+            if action in ('open','new','restore','example'):
                 paths=self._window.create_file_dialog(webview.FileDialog.FOLDER)
                 if not paths:return {'cancelled':True}
                 path=paths[0]
             with LOCK:
                 if action in ('new','restore'):self._projects.create(path,backup)
+                elif action=='example':self._projects.create_example(path)
                 elif action in ('open','recent'):
                     if action=='recent' and path not in self._projects.settings.get('recent',[]):raise ValueError('不在最近项目列表中')
                     self._projects.open(path)

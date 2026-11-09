@@ -173,6 +173,23 @@ def boundary_count(form):
     return len(value) if re.fullmatch(r'#+', value) else 0
 
 
+def is_word(word):
+    """The shared lexical-word rule for statistics and displayed diagnostics."""
+    value=plain(word.get('form','')).strip()
+    if not value or boundary_count(value):return False
+    if word.get('punctuation') and word.get('punctuation_form')==word.get('form'):return False
+    return any(not c.isspace() and c!='#' and not unicodedata.category(c).startswith('P') for c in value)
+
+
+def word_numbers(words):
+    """One-based lexical ordinals; excluded cells keep their physical positions."""
+    number=0;result=[]
+    for word in words:
+        if is_word(word):number+=1;result.append(number)
+        else:result.append(None)
+    return result
+
+
 def split_gloss_morphemes(text):
     """Only outside brackets can a connector introduce another morpheme."""
     parts, separators, start, depth = [], [], 0, 0
@@ -254,10 +271,17 @@ def reanalyze(entry,previous,positions,*,cache=None):
     Rebuild word warnings in sentence order, then all sentence/reference checks.
     """
     if len(entry['words'])!=len(previous['words']):return analyze(entry,cache=cache)
+    # Public warnings contain lexical ordinals, while edit positions are physical
+    # cells. Undo that display mapping before reusing unchanged diagnostics.
+    by_number={number:n for n,number in enumerate(word_numbers(previous['words'])) if number is not None}
     by_position={}
     for warning in previous['warnings']:
-        match=re.match(r'^第 (\d+) [词格]：',warning)
-        if match:by_position.setdefault(int(match[1])-1,[]).append(warning)
+        match=re.match(r'^第 (\d+) ([词格])：',warning)
+        if match:
+            position=by_number.get(int(match[1])) if match[2]=='词' else int(match[1])-1
+            if position is not None:
+                physical=f'第 {position+1} {match[2]}：'+warning[match.end():]
+                by_position.setdefault(position,[]).append(physical)
     warnings=[]
     for n,word in enumerate(entry['words']):
         if n in positions:
@@ -298,6 +322,19 @@ def _analyze(entry):
 
 
 def _finish_analysis(entry,warnings):
+    # Analyzer/cache prefixes address physical cells internally. Translate only
+    # their displayed word numbers; references and edit indices never change.
+    if warnings:
+        numbers=word_numbers(entry['words'])
+        def display(warning):
+            match=re.match(r'^第 (\d+) 词：',warning)
+            if not match:return warning
+            cell=int(match[1])-1
+            if not 0<=cell<len(numbers):return warning
+            number=numbers[cell]
+            prefix=f'第 {number} 词：' if number is not None else f'第 {cell+1} 格：'
+            return prefix+warning[match.end():]
+        warnings=[display(warning) for warning in warnings]
     import reduplication
     reduplication.decorate(entry,warnings)
     for key in ('ipa', 'translation'):

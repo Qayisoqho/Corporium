@@ -19,6 +19,6 @@ if python_license.exists():shutil.copyfile(python_license,root/'Python-LICENSE.t
 for artifact in root.iterdir():
     if artifact.is_file() and artifact.suffix.lower() in {'.py','.pyc','.pyo'}:
         artifact.unlink()
-required=('Corporium-LICENSE.txt','Microsoft-WebView2-Runtime-LICENSE.txt','THIRD-PARTY-NOTICES.txt','Junicode-OFL.txt')
+required=('Corporium-LICENSE.txt','Microsoft-WebView2-Runtime-LICENSE.txt','THIRD-PARTY-NOTICES.txt','Junicode-OFL.txt','STIXTwoText-OFL.txt')
 for name in required:
     if not (root/name).is_file():raise RuntimeError('Missing distribution notice: '+name)

@@ -39,18 +39,29 @@
    if(node.nodeType===3){if(node.nodeValue)result.push({...state,text:node.nodeValue});return;}
    if(node.nodeType!==1)return;
    const tag=node.tagName,next={...state};if(tag==='SUB')next.script='sub';if(tag==='SUP')next.script='sup';
+   if(node.classList.contains('code-morpheme'))next.code=true;
+   const codeLabel=node.classList.contains('code-word-label');
+   if(codeLabel){next.codeLabel=true;next.smallCaps=false;next.italic=false;result.push({text:' '});}
    if(node.classList.contains('grammar-label')){next.smallCaps=true;next.italic=false;}
    if(tag==='SUB'||tag==='SUP'){next.smallCaps=false;next.italic=false;}
    if(tag==='B'||tag==='STRONG')next.bold=true;if(tag==='I'||tag==='EM')next.italic=true;
    if(tag==='BR'){result.push({...state,text:'\n'});return;}
    for(const child of node.childNodes)visit(child,next);
+   if(codeLabel)result.push({text:' '});
   }
   for(const child of holder.childNodes)visit(child);return result;
  }
  function itemFor(card,index){
   const source=records.get(card.dataset.formattedSource),body=source.body,lid=body.language_id||body.text_language_id||activeLanguage;
   const metadata=JSON.parse(languageList.find(l=>l.id===lid)?.metadata||'{}');Object.assign(metadata,languageTypographySettings(metadata));
+  for(const key of ['ipa','annotation','gloss','translation'])metadata[key+'_font']=clipboardFontStack(metadata[key+'_font']);
   const forms=v=>core.runs(String(v||''),{}).map(r=>r.script?{...r,italic:false}:r),gloss=v=>readRuns(richGloss(v||'',lid));
+  const wordRuns=w=>{
+   if(w.code_cells?.length){const pair=window.CorporiumCodes.pair(w,lid,{});if(pair.code)return {form:readRuns(pair.form),gloss:readRuns(pair.gloss)};}
+   const f=forms(w.form),g=phonologicalBoundary(w.form)?[]:gloss(w.gloss);
+   if(!w.code_mark)return {form:f,gloss:g};
+   return {form:f.map(r=>({...r,code:true})),gloss:[...g.map(r=>({...r,code:true})),...(w.code_mark.end?[{text:' '+w.code_mark.short+' ',codeLabel:true,italic:false}]:[])]};
+  };
   const layers=new Map();
   for(const w of body.words||[])for(const l of w.extra_layers||[])if(l.visible)layers.set(l.id||l.name,l);
   const group=groupFor(card);let groupInfo=null;
@@ -58,9 +69,9 @@
   const local=card.closest('.example-group-member')?.querySelector('.example-group-local');
   const judgment=source.kind==='independent'?window.CorporiumGrammaticality?.item(body,lid):null;
   return {key:card.dataset.formattedSource,sourceId:source.kind+':'+source.id,label:labelFor(card,index),metadata,group:groupInfo,judgment:{symbol:judgment?.symbol||''},
-   body:{ipa:forms(body.ipa),translation:forms(body.translation),notes:body.notes||'',words:(body.words||[]).map(w=>({form:forms(w.form),gloss:phonologicalBoundary(w.form)?[]:gloss(w.gloss)}))},
-   layers:[...layers].map(([key,l])=>({space_before:l.space_before,space_after:l.space_after,line_spacing:l.line_spacing,name:l.name,font:l.font||'Junicode',size:l.size||100,variant:l.style||'regular',values:(body.words||[]).map(w=>{const value=(w.extra_layers||[]).find(x=>(x.id||x.name)===key)?.value||'';const projected=(w.extra_layers||[]).find(x=>(x.id||x.name)===key);const text=projected?.derived?window.CorporiumDictionaryLayers.text(projected):value;return l.style==='small-caps'?[{text,smallCaps:true}]:projected?.dictionary_field==='short_gloss'?gloss(text):forms(text);})})),
-   sentenceLayers:(body.sentence_layers||[]).filter(l=>l.visible&&l.value).map(l=>({space_before:l.space_before,space_after:l.space_after,line_spacing:l.line_spacing,anchor:l.anchor,font:l.font||'Junicode',pt:11*(l.size||100)/100,bold:['bold','bolditalic'].includes(l.style),italic:['italic','bolditalic'].includes(l.style),value:forms(l.value)})),
+   body:{ipa:forms(body.ipa),translation:forms(body.translation),notes:body.notes||'',words:(body.words||[]).map(wordRuns)},
+   layers:[...layers].map(([key,l])=>({space_before:l.space_before,space_after:l.space_after,line_spacing:l.line_spacing,name:l.name,font:clipboardFontStack(l.font||'Junicode'),size:l.size||100,variant:l.style||'regular',values:(body.words||[]).map(w=>{const value=(w.extra_layers||[]).find(x=>(x.id||x.name)===key)?.value||'';const projected=(w.extra_layers||[]).find(x=>(x.id||x.name)===key);const text=projected?.derived?window.CorporiumDictionaryLayers.text(projected):value;return l.style==='small-caps'?[{text,smallCaps:true}]:projected?.dictionary_field==='short_gloss'?gloss(text):forms(text);})})),
+   sentenceLayers:(body.sentence_layers||[]).filter(l=>l.visible&&l.value).map(l=>({space_before:l.space_before,space_after:l.space_after,line_spacing:l.line_spacing,anchor:l.anchor,font:clipboardFontStack(l.font||'Junicode'),pt:11*(l.size||100)/100,bold:['bold','bolditalic'].includes(l.style),italic:['italic','bolditalic'].includes(l.style),value:forms(l.value)})),
    localJudgment:local?(local.innerText||'').trim().replace(/^(?:本处判断|Local judgment)[:：]\s*/,''):''};
  }
  function updateControls(){
@@ -69,7 +80,9 @@
   // Complete all visibility reads before changing any button or caption.
   const states=controls.map(c=>({c,disabled:busy||(!active&&!cards(c.root,true).length)}));
   for(const {c,disabled} of states){
-   if(c.copy.textContent!==label)c.copy.textContent=label;
+   const caption=c.copy.querySelector('.chrome-caption');
+   if(caption){const short=globalThis.CorporiumI18n?.ui('复制','Copy')??'复制';if(caption.textContent!==short)caption.textContent=short;}
+   else if(c.copy.textContent!==label)c.copy.textContent=label;
    c.copy.classList.toggle('is-copying',active);
    if(c.copy.getAttribute('aria-pressed')!==String(active))c.copy.setAttribute('aria-pressed',String(active));
    if(c.copy.disabled!==disabled)c.copy.disabled=disabled;
@@ -82,14 +95,15 @@
  function finish(){
   active=false;selected.clear();pageKeys='';owner=null;document.documentElement.classList.remove('formatted-copy-mode');
   for(const [box,{card,listener}] of borrowed){box.removeEventListener('change',listener);box.classList.remove('formatted-copy-pick');delete box.dataset.copyOwner;boxes.delete(card);}
-  borrowed.clear();window.CorporiumSentenceSelection?.lock(false);
+  borrowed.clear();window.CorporiumSentenceSelection?.lock(false);window.CorporiumLibrarySelection?.lock(false);
   document.querySelectorAll('.formatted-copy-choice,.formatted-copy-pick,.formatted-copy-group-pick').forEach(el=>el.remove());updateControls();
  }
- function syncShared(){if(!active)return;for(const [box,{card}] of borrowed){box.checked?selected.add(card.dataset.formattedSource):selected.delete(card.dataset.formattedSource);}updateControls();}
+ function syncShared(){if(!active)return;for(const [box,{card}] of borrowed){box.checked?selected.add(card.dataset.formattedSource):selected.delete(card.dataset.formattedSource);}paint();}
  document.addEventListener('corporium-sentence-selection',syncShared);
+ document.addEventListener('corporium-library-selection',syncShared);
  function addBox(card,index){
   if(boxes.get(card)?.isConnected)return;
-  const entry=card.closest('.example-group-member,.entry,.lex-example'),shared=entry?.querySelector(':scope>.entry-head [data-pick]');
+  const entry=card.closest('.example-group-member,.entry,.lex-example'),shared=entry?.querySelector(':scope>.entry-head [data-pick],:scope>.example-group-pick [data-group-select]');
   if(shared){const listener=()=>{syncShared();};borrowed.set(shared,{card,listener});shared.addEventListener('change',listener);shared.classList.add('formatted-copy-pick');shared.dataset.copyOwner=card.dataset.formattedSource;boxes.set(card,shared);if(shared.checked)selected.add(card.dataset.formattedSource);return;}
   const box=document.createElement('input');box.type='checkbox';box.className='formatted-copy-pick';box.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("0d3a04f4c383d0",()=>[labelFor(card,index)])??'复制例句 '+labelFor(card,index)));box.title=(globalThis.CorporiumI18n?.f("d578cda27a1f32",()=>[])??'选择带格式复制');box.checked=selected.has(card.dataset.formattedSource);
   box.onchange=()=>{if(busy)return;box.checked?selected.add(card.dataset.formattedSource):selected.delete(card.dataset.formattedSource);paint();};
@@ -101,16 +115,17 @@
  function paint(list=cards(owner)){
   list.forEach(addBox);
   window.CorporiumSentenceSelection?.lock(busy);
+  window.CorporiumLibrarySelection?.lock(busy);
   document.querySelectorAll('.formatted-copy-pick').forEach(box=>{const key=box.dataset.copyOwner||box.closest('[data-formatted-source]')?.dataset.formattedSource;box.checked=selected.has(key);box.disabled=busy;});
   const groups=new Set(list.map(groupFor).filter(Boolean));
-  for(const group of groups){let box=group.querySelector(':scope>.entry-head .formatted-copy-group-pick');if(!box){box=document.createElement('input');box.type='checkbox';box.className='formatted-copy-group-pick';box.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("fa1b9f88fbe90d",()=>[])??'复制整组例句'));box.title=(globalThis.CorporiumI18n?.f("03a49d88b809b7",()=>[])??'选择整组');const head=group.querySelector(':scope>.entry-head'),heading=head?.querySelector('summary,strong')||head?.firstElementChild;if(heading)heading.prepend(box);else continue;box.onchange=()=>{if(busy)return;for(const card of cards(owner).filter(c=>groupFor(c)===group)){box.checked?selected.add(card.dataset.formattedSource):selected.delete(card.dataset.formattedSource);}paint();};}
+  for(const group of groups){let box=group.querySelector(':scope>.entry-head .formatted-copy-group-pick');if(!box){box=document.createElement('input');box.type='checkbox';box.className='formatted-copy-group-pick';box.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("fa1b9f88fbe90d",()=>[])??'复制整组例句'));box.title=(globalThis.CorporiumI18n?.f("03a49d88b809b7",()=>[])??'选择整组');const head=group.querySelector(':scope>.entry-head'),heading=head?.querySelector('summary,strong')||head?.firstElementChild;if(heading)heading.prepend(box);else continue;box.onchange=()=>{if(busy)return;const checked=box.checked;for(const card of cards(owner).filter(c=>groupFor(c)===group)){const shared=boxes.get(card);if(shared&&borrowed.has(shared)){shared.checked=checked;shared.dispatchEvent(new Event('change',{bubbles:true}));}else checked?selected.add(card.dataset.formattedSource):selected.delete(card.dataset.formattedSource);}paint();};}
    const members=list.filter(c=>groupFor(c)===group),n=members.filter(c=>selected.has(c.dataset.formattedSource)).length;box.checked=n===members.length;box.indeterminate=n>0&&n<members.length;box.setAttribute('aria-checked',box.indeterminate?'mixed':String(box.checked));box.disabled=busy;
   }
   updateControls();
  }
  async function clickCopy(root){
   if(busy)return;
-  if(!active){if(inlineDrafts.size)throw Error((globalThis.CorporiumI18n?.f("d94bc4f1fcb435",()=>[])??'请先保存或取消正在编辑的例句。'));if($('example-group-select')?.getAttribute('aria-pressed')==='true')throw Error((globalThis.CorporiumI18n?.f("80ff85dc1ae823",()=>[])??'请先结束“选择成组”，再使用带格式复制。'));if(!cards(root).length)throw Error((globalThis.CorporiumI18n?.f("47cc37e0ab1e68",()=>[])??'本页暂无可复制的例句。'));active=true;owner=root;selected.clear();pageKeys=cards(root).map(c=>c.dataset.formattedSource).join('|');document.documentElement.classList.add('formatted-copy-mode');paint();return;}
+  if(!active){if(inlineDrafts.size)throw Error((globalThis.CorporiumI18n?.f("d94bc4f1fcb435",()=>[])??'请先保存或取消正在编辑的例句。'));if(!cards(root).length)throw Error((globalThis.CorporiumI18n?.f("47cc37e0ab1e68",()=>[])??'本页暂无可复制的例句。'));active=true;owner=root;selected.clear();pageKeys=cards(root).map(c=>c.dataset.formattedSource).join('|');document.documentElement.classList.add('formatted-copy-mode');paint();return;}
   if(root!==owner)throw Error((globalThis.CorporiumI18n?.f("534f46cd990b3d",()=>[])??'请先结束当前页面的复制选择。'));
   const list=cards(owner);if(list.map(c=>c.dataset.formattedSource).join('|')!==pageKeys){finish();throw Error((globalThis.CorporiumI18n?.f("5692cfbdeadcdc",()=>[])??'页面内容已变化，请重新选择例句。'));}
   if(inlineDrafts.size)throw Error((globalThis.CorporiumI18n?.f("28fcad63c3c001",()=>[])??'请先保存或取消正在编辑的例句，再复制。'));

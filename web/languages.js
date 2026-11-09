@@ -1,6 +1,7 @@
 const languagePanel=document.createElement('section');
 languagePanel.className='language-panel';
 languagePanel.innerHTML=(globalThis.CorporiumI18n?.f("56692335f8715f",()=>[])??'<select id="language-select" aria-label="切换语言"></select><div class="language-tools"><button id="add-language" class="language-icon" title="新建语言" aria-label="新建语言">＋</button><button id="edit-language" class="language-icon" title="语言信息与设置" aria-label="语言信息与设置">⚙</button><button id="import-language-package" class="language-icon" title="导入语言数据包" aria-label="导入语言数据包">↥</button><button id="export-language" class="language-icon" title="导出当前语言" aria-label="导出当前语言">↧</button></div>');
+languagePanel.querySelector('#edit-language').classList.add('ui-icon-button');languagePanel.querySelector('#edit-language').innerHTML=uiIcon('settings');
 languagePanel.querySelector('#import-language-package').innerHTML=uiIcon('import');
 languagePanel.querySelector('#export-language').innerHTML=uiIcon('export');
 document.querySelector('aside .eyebrow').before(languagePanel);
@@ -65,10 +66,11 @@ function renderLanguage(){
   const lang=languageList.find(l=>l.id===activeLanguage),m=lang?JSON.parse(lang.metadata):{};
   $('brand-home').textContent='Corporium';
   $('brand-language').textContent=lang?.name||(globalThis.CorporiumI18n?.f("b8b14ae9203c91",()=>[])??'全部语言');
+  $('brand-language').title=$('brand-language').textContent;
   $('brand-native').textContent=m.native_name||'';
   $('brand-native').hidden=!m.native_name;
-  const ipaFont=validFont(m.ipa_font)?m.ipa_font:'IPAPANNEW';
-  $('brand-native').style.fontFamily=['serif','sans-serif'].includes(ipaFont)?ipaFont:`"${ipaFont}", serif`;
+  const ipaFont=languageTypographySettings(m).ipa_font;
+  $('brand-native').style.fontFamily=rowFontCSS(ipaFont);
   document.title='Corporium · '+(lang?.name||(globalThis.CorporiumI18n?.f("e822013a30e77d",()=>[])??'全部语言'));
   $('edit-language').disabled=!lang;$('export-language').disabled=!lang;$('new-folder').disabled=!lang;
   $('all').textContent=lang?(globalThis.CorporiumI18n?.f("9e3243c7cd08c3",()=>[])??'本语言全部文本'):(globalThis.CorporiumI18n?.f("a452ccb9974220",()=>[])??'所有语言的文本');
@@ -100,7 +102,7 @@ function openLanguage(lang=null){
   $('language-boundaries').value=Object.entries(m.phonological_boundaries||{}).map(([k,v])=>k+' = '+v).join('\n');
   $('language-glossary').value=Object.entries(m.glossary||{}).map(([k,v])=>k+' = '+v).join('\n');
   for(const [k,,def] of checkFields)$('language-'+k).checked=m[k]??def;
-  refreshLanguageIPA();$('language-error').textContent='';$('language-dialog').showModal();
+  refreshLanguageIPA();refreshLanguageFontPreview();$('language-error').textContent='';$('language-dialog').showModal();
 }
 $('add-language').onclick=()=>openLanguage();
 $('edit-language').onclick=()=>openLanguage(languageList.find(l=>l.id===activeLanguage));
@@ -145,7 +147,7 @@ $('new-text-form').onsubmit=async event=>{
   catch(e){$('new-text-error').textContent=e.message}finally{$('create-text').disabled=false;}
 };
 const languageReadEditor=readEditor;
-readEditor=function(){return {...languageReadEditor(),language_id:$('entry-language').value,language_notes:$('entry-language-notes').value};};
+readEditor=function(...args){return {...languageReadEditor(...args),language_id:$('entry-language').value,language_notes:$('entry-language-notes').value};};
 const languageEdit=edit;
 edit=async function(entry){
   $('entry-language').innerHTML=(globalThis.CorporiumI18n?.f("5aa2057be696e5",()=>[languageOptions()])??'<option value="">沿用文本默认语言</option>'+languageOptions());
@@ -202,5 +204,5 @@ selectText=async function(id,...options){
 try{activeLanguage=localStorage.getItem(projectStorageKey('corpus-language'))||'ordos'}catch{}
 const corpusReady=(async()=>{await loadLanguages();await selectText('');await refreshUndo();})().catch(e=>{$('notice').textContent=e.message;});
 
-function refreshLanguageIPA(){const v=variantStyle($('language-ipa-variant').value);Object.assign($('language-native_name').style,{fontFamily:cssFont($('language-ipa-font').value)+',serif',fontStyle:v.style,fontWeight:v.weight});}
+function refreshLanguageIPA(){const v=variantStyle($('language-ipa-variant').value);Object.assign($('language-native_name').style,{fontFamily:rowFontCSS($('language-ipa-font').value),fontStyle:v.style,fontWeight:v.weight});}
 $('language-ipa-font').addEventListener('change',refreshLanguageIPA);

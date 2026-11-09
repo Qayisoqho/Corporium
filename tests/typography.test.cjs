@@ -3,6 +3,29 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
+test('bundled UI defaults preserve saved selections and leave language typography separate', () => {
+  const source=fs.readFileSync('web/typography.js','utf8');
+  const body=source.slice(source.indexOf('function applyTypography(){'),source.indexOf('\napplyTypography();'));
+  function apply(ui,uiVariant='regular',uiFonts){
+    const styles={},classes=[];
+    const c=vm.createContext({typography:{ui,uiVariant,...(uiFonts?{uiFonts}:{})},cssFont:JSON.stringify,
+      variantStyle:v=>({style:v==='italic'?'italic':'normal',weight:400}),document:{documentElement:{style:{setProperty:(k,v)=>styles[k]=v},classList:{toggle:(...args)=>classes.push(args)}}}});
+    vm.runInContext(fs.readFileSync('web/fonts.js','utf8').split('let fontScanRequest')[0],c);
+    vm.runInContext(body+'\napplyTypography();',c);return {styles,classes};
+  }
+  assert.equal(apply('').styles['--global-font-stack'],'"STIX Two Text","Microsoft JhengHei",sans-serif');
+  assert.equal(apply('unrecognized').styles['--global-font-stack'],'"STIX Two Text","Microsoft JhengHei",sans-serif');
+  for(const ui of ['Junicode','Source Han Sans SC','localfont-aaaaaaaaaaaaaaaaaaaaaaaa']){
+    const result=apply(ui,'italic');assert.equal(result.styles['--global-font-stack'],JSON.stringify(ui)+',sans-serif');assert.equal(result.styles['--ui-font'],'var(--global-font-stack)');assert.equal(result.styles['--ui-style'],'italic');
+    assert.deepEqual(Object.keys(result.styles).sort(),['--global-font-stack','--ui-font','--ui-style','--ui-weight']);
+  }
+  assert.equal(apply('Junicode','regular',['Source Han Sans SC','Junicode']).styles['--global-font-stack'],'"Source Han Sans SC","Junicode",sans-serif');
+  const css=fs.readFileSync('web/style.css','utf8');
+  assert.match(css,/--default-ui-font:"STIX Two Text","Microsoft JhengHei"/);
+  // Startup preference behavior is covered by desktop-start.test.cjs; its
+  // controls now use the same interface roles as the workspaces.
+});
+
 test('language fonts distinguish DOM CSS from HTML attribute encoding', () => {
   const context = vm.createContext({
     validFont: value => typeof value === 'string' && !!value,

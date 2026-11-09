@@ -1,9 +1,9 @@
-.dictionary-order-note{display:block;margin:5px 0;color:var(--muted);font-size:.76rem}
+.dictionary-order-note{display:block;margin:5px 0;color:var(--muted);font-size:var(--ui-help-size)}
 #dictionary-order-manager[data-order-kind=morpheme]>.dialog-bottom{display:none}
-#dictionary-layout-open{margin:0 8px 0 0;font-size:.82rem;padding:4px 9px}
-#dictionary-layout-dialog{width:min(690px,94vw);padding:12px 16px;font:var(--ui-style,normal) var(--ui-weight,400) .85rem/1.5 var(--ui-font,system-ui),sans-serif}
-#dictionary-layout-dialog h2{margin:3px 0 8px;font-size:1.12rem}
-#dictionary-layout-dialog button,#dictionary-layout-dialog select{font:inherit;min-height:29px;padding:3px 7px;margin:0}
+#dictionary-layout-open{margin:0 8px 0 0;font-size:var(--ui-text-size);padding:4px 9px}
+#dictionary-layout-dialog{width:min(690px,94vw);padding:12px 16px;font:var(--ui-style,normal) var(--ui-weight,400) var(--ui-text-size)/var(--ui-text-leading) var(--ui-font,system-ui),sans-serif}
+#dictionary-layout-dialog h2{margin:3px 0 8px;font-size:var(--ui-heading-size)}
+#dictionary-layout-dialog button,#dictionary-layout-dialog select{font:inherit;min-height:var(--ui-field-height);padding:var(--ui-control-padding);margin:0}
 #dictionary-layout-levels{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 6px}
 .dictionary-layout-level{display:flex;gap:4px;align-items:center;border:1px solid var(--line);padding:2px;border-radius:4px;background:var(--surface,var(--paper))}
 #dictionary-layout-dialog .dictionary-layout-grip{cursor:grab;padding:2px 4px;touch-action:none;background:transparent;border-color:transparent;flex:none}
@@ -23,34 +23,575 @@
 .dictionary-layout-row[data-layout-kind=entries]>[data-layout-enter]{font-family:var(--annotation-font,Junicode),serif;font-size:1rem!important;font-weight:700}
 .dictionary-layout-row small{flex:none;color:var(--muted);padding-right:6px}
 [data-layout-drop=before]{box-shadow:inset 0 2px var(--green)}[data-layout-drop=after]{box-shadow:inset 0 -2px var(--green)}
-#dictionary-list .dictionary-class-heading{display:flex;align-items:center;gap:7px;width:100%;margin:0;padding:6px 7px 6px calc(7px + var(--class-depth,0)*9px);min-height:0;border:0;border-top:1px solid var(--line);border-radius:0;background:var(--accent);background:color-mix(in srgb,var(--green) 12%,var(--sidebar,var(--paper)));color:var(--green);font:var(--ui-style,normal) 700 1.02rem/1.4 var(--ui-font,system-ui),sans-serif;text-align:left;overflow-wrap:anywhere}
+#dictionary-list .dictionary-class-heading{display:flex;align-items:center;gap:7px;width:100%;margin:0;padding:6px 7px 6px calc(7px + var(--class-depth,0)*9px);min-height:0;border:0;border-top:1px solid var(--line);border-radius:0;background:var(--accent);background:color-mix(in srgb,var(--green) 12%,var(--sidebar,var(--paper)));color:var(--green);font:var(--ui-style,normal) 700 var(--ui-text-size)/var(--ui-text-leading) var(--ui-font,system-ui),sans-serif;text-align:left;overflow-wrap:anywhere}
 #dictionary-list .dictionary-class-heading:hover{background:var(--selected,var(--hover,var(--accent)))}
 .dictionary-class-heading>span:last-child{min-width:0}
 .dictionary-class-triangle{flex:none;width:0;height:0;border-block:4px solid transparent;border-left:6px solid currentColor;transform:rotate(90deg)}
 .dictionary-class-heading[aria-expanded=false] .dictionary-class-triangle{transform:none}
 
 /* The identity shares space with actions, not the full detail-column grid. */
-html[data-home=false] :is(#dictionary-detail,#morpheme-detail) :is(.lexeme-heading,.morpheme-detail-head){align-items:baseline;gap:6px 12px;min-width:0}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .lexeme-heading, html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .morpheme-detail-head{align-items:baseline;gap:6px 12px;min-width:0}
 html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .lexeme-identity{display:flex;grid-template-columns:none;align-items:baseline;flex-wrap:wrap;gap:2px 12px;flex:1 1 14rem;min-width:min(100%,14rem);max-width:100%}
 html[data-home=false] :is(#dictionary-detail,#morpheme-detail) :is(.lexeme-identity>h2,.morpheme-detail-head>h2){min-width:0;max-width:100%;margin:0;overflow-wrap:anywhere}
 html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .morpheme-detail-head>h2{flex:1 1 14rem;min-width:min(100%,14rem)}
 html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .lexeme-entry-type{flex:0 0 auto;max-width:100%;word-break:keep-all;overflow-wrap:normal}
 html[data-home=false] :is(#dictionary-detail,#morpheme-detail) :is(.lexeme-actions,.morpheme-detail-head>.morpheme-actions){flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:5px;margin:0 0 0 auto;min-width:0;max-width:100%}
-html[data-home=false] :is(#dictionary-detail,#morpheme-detail) :is(.lexeme-actions,.morpheme-detail-head>.morpheme-actions) button{flex:none;white-space:nowrap;font-size:.82rem;line-height:1.4;min-height:30px;padding:4px 8px;margin:0}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) :is(.lexeme-actions,.morpheme-detail-head>.morpheme-actions) button{flex:none;white-space:nowrap;font-size:var(--ui-text-size);line-height:var(--ui-text-leading);min-height:var(--ui-field-height);padding:var(--ui-control-padding);margin:0}
+
+/* Keep labels beside their readings, grouped directly below the headword.
+   Only the surrounding layout changes: each writing keeps its own font,
+   line box and configured before/after spacing. */
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-summary{display:flex;flex:1 1 14rem;flex-direction:column;gap:.375rem;min-width:min(100%,14rem);max-width:100%}
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-summary>.lexeme-identity{flex:none;min-width:0}
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-summary>small{flex:none;margin:0}
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-writing-classes{display:flex;flex:none;align-items:baseline;flex-wrap:wrap;gap:.375rem 1rem;margin:0;min-width:0}
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-writing-classes:not(:has(.orthography-display>div,.ws-membership-view)){display:none}
+html[data-home=false] #dictionary-detail>.lexeme-heading .orthography-display{display:flex;flex:0 1 auto;align-items:baseline;flex-wrap:wrap;gap:.375rem 1.25rem;min-width:0;max-width:100%;margin:0;padding-right:0}
+html[data-home=false] #dictionary-detail>.lexeme-heading .orthography-display:empty{display:none}
+html[data-home=false] #dictionary-detail>.lexeme-heading .orthography-display>div{display:inline-flex;align-items:baseline;flex-wrap:wrap;gap:0 .375rem;min-width:0;max-width:100%}
+html[data-home=false] #dictionary-detail>.lexeme-heading .orthography-display>div>small{margin:0;color:var(--muted);overflow-wrap:anywhere}
+html[data-home=false] #dictionary-detail>.lexeme-heading .orthography-display>div>span{min-width:0;max-width:100%}
+html[data-home=false] #morpheme-detail>.morpheme-detail-head{margin-bottom:.375rem}
+html[data-home=false] #morpheme-detail>p.ipa{margin-block:.25rem .375rem}
+html[data-home=false] #morpheme-detail>.morpheme-writings{display:flex;align-items:baseline;flex-wrap:wrap;gap:.375rem 1.25rem;margin-block:.375rem}
+html[data-home=false] #morpheme-detail>.morpheme-writings>.ws-writing-view{flex-direction:row;align-items:baseline;flex-wrap:wrap;gap:0 .375rem;min-width:0;max-width:100%;margin:0}
+html[data-home=false] #morpheme-detail>.morpheme-writings>.ws-writing-view>small{color:var(--muted);overflow-wrap:anywhere}
+html[data-home=false] #morpheme-detail>.morpheme-writings>.ws-writing-view>span{min-width:0;max-width:100%}
 
 /* Optional research notes occupy a single summary until opened. */
 :is(#lexeme-editor,#morpheme-editor) .dictionary-note{margin:4px 0;min-width:0}
-:is(#lexeme-editor,#morpheme-editor) .dictionary-note>summary{cursor:pointer;font-size:.8125rem;line-height:1.5}
+:is(#lexeme-editor,#morpheme-editor) .dictionary-note>summary{cursor:pointer;font-size:var(--ui-help-size);line-height:1.5}
 :is(#lexeme-editor,#morpheme-editor) .dictionary-note>label{margin:2px 0 0}
 :is(#lexeme-editor,#morpheme-editor) .dictionary-note textarea{margin-top:0}
 #lexeme-editor #lexeme-form>h3{margin:10px 0 2px;line-height:1.4}
 #lexeme-editor #lexeme-form>h3+p{margin:0 0 4px}
 #lexeme-editor #lexeme-orthographies:empty{display:none}
 #lexeme-editor #lexeme-usages>.usage-editor:first-child{margin-top:4px}
-html[data-home=false] :is(#lexeme-editor,#morpheme-editor){--dictionary-control-height:2.25rem}
-html[data-home=false] :is(#lexeme-editor,#morpheme-editor) :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select:not([multiple]):not([size])){height:var(--dictionary-control-height);box-sizing:border-box;line-height:1.4}
+html[data-home=false] #lexeme-editor, html[data-home=false] #morpheme-editor{--dictionary-control-height:2.25rem}
+html[data-home=false] :is(#lexeme-editor,#morpheme-editor) :is(input:not([type=checkbox]):not([type=radio]):not([type=hidden]),select:not([multiple]):not([size])){height:var(--dictionary-control-height);box-sizing:border-box;line-height:var(--ui-text-leading)}
 #lexeme-editor #lexeme-form>.metadata-grid{align-items:end}
 #lexeme-editor #lexeme-form>.metadata-grid>:is(label,.multipart-form-editor){margin:0;align-self:end}
 #lexeme-editor .morph-base-relation-fields{grid-column:1/-1;align-items:end;gap:8px 14px;margin:0}
 #lexeme-editor .morph-base-relation-fields>label{margin:0}
 #lexeme-editor .morph-base-filter{grid-column:1/-1;min-width:0;max-width:100%}
+
+/* ===== Dictionary entry editor (2026-11): sticky header, cards, one-line rows and focus panels. ===== */
+#lexeme-editor .dialog-content>#lexeme-editor-title{position:absolute;width:0.0625rem;height:0.0625rem;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) #lexeme-editor .dialog-content{padding:12px}
+#lexeme-form.lx-arranged, #morpheme-form.lx-arranged{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start;margin:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged>.lx-main{display:grid;gap:12px;min-width:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,21.25rem),1fr));gap:12px;align-items:start}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-card{min-width:0;margin:0;padding:10px 12px 12px;border:1px solid var(--line);border-radius:8px;background:var(--raised,var(--surface));scroll-margin-top:calc(var(--project-bar-height,0px) + var(--toolbar-height,0px) + var(--lx-head-height,0px) + 8px)}
+:is(#lexeme-form,#morpheme-form).lx-arranged :is(.lx-card,.lx-summary,.lx-addbar,[data-lx-optional])[hidden]{display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-card-head{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:var(--ui-control-height-small);margin:0 0 8px}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-card-head h3{flex:1 1 auto;margin:0;font:600 var(--ui-text-size)/var(--ui-text-leading) var(--ui-font,"Segoe UI"),"Microsoft YaHei UI",sans-serif;color:var(--ink)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-card-head button{height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);margin:0;padding:0 9px;font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-subhead{margin:12px 0 8px;padding-top:10px;border-top:1px solid var(--line-soft,var(--line))}
+:is(#lexeme-form,#morpheme-form).lx-arranged p:has(>small:only-child), :is(#lexeme-form,#morpheme-form).lx-arranged .lx-rest>:is(h2,h3,p,.metadata-grid,.dictionary-morphology-block), :is(#lexeme-form,#morpheme-form).lx-arranged #morph-entry-editor>h3, :is(#lexeme-form,#morpheme-form).lx-arranged #word-structure-editor>h3, :is(#lexeme-form,#morpheme-form).lx-arranged #word-structure-editor>p, :is(#lexeme-form,#morpheme-form).lx-arranged #paradigm-editor>h3{display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged #morph-entry-editor{margin:0;padding:0;border:0;background:transparent}
+:is(#lexeme-form,#morpheme-form).lx-arranged #lexeme-error{grid-column:1/-1;margin:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged #lexeme-error:empty{display:none}
+/* Field rows in the identity card. */
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-fields{display:grid;gap:8px}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-field{display:grid;grid-template-columns:5.5rem minmax(0,1fr);gap:8px;align-items:start}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-field-label{padding-top:6px;font-size:var(--ui-text-size);color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-field-value{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-field-value>*{margin:0;max-width:100%}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-field-value>:is(input,.morph-base-relation-fields,fieldset,details,#ws-memberships){flex:1 1 100%}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-field-value .morph-base-relation-fields{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-field-value .morph-base-relation-fields label{margin:0;font-size:var(--ui-text-size);color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-field-value #lexeme-semantic-field{margin:0;padding:0;border:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-field-value #lexeme-semantic-field>legend{position:absolute;width:0.0625rem;height:0.0625rem;overflow:hidden;clip-path:inset(50%)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-field-value>button{height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);padding:0 9px;font-size:var(--ui-text-size)}
+:is(#lexeme-form,#morpheme-form).lx-arranged details.lx-inline-details{margin:0;padding:0;border:0;background:transparent}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-field-value details.lx-inline-details>summary{display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged details.lx-inline-details>summary{font-size:var(--ui-text-size);color:var(--muted);cursor:pointer;list-style:none;margin:0 0 4px}
+:is(#lexeme-form,#morpheme-form).lx-arranged details.lx-inline-details>summary::-webkit-details-marker{display:none}
+/* Written forms: type and content per line; name, font and removal behind “more”. */
+:is(#lexeme-form,#morpheme-form).lx-arranged .orthography-editor{display:grid;grid-template-columns:minmax(96px,34%) minmax(0,1fr) auto;gap:4px 6px;align-items:end;margin:0 0 6px;padding:0;border:0;background:transparent}
+:is(#lexeme-form,#morpheme-form).lx-arranged .orthography-editor>label{display:grid;gap:2px;min-width:0;margin:0;font-size:var(--ui-text-size);color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .orthography-editor>label input, :is(#lexeme-form,#morpheme-form).lx-arranged .orthography-editor>label select{width:100%;height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .orthography-editor>label:has(.orthography-type){grid-area:1/1}
+:is(#lexeme-form,#morpheme-form).lx-arranged .orthography-editor>label:has(.orthography-text){grid-area:1/2}
+:is(#lexeme-form,#morpheme-form).lx-arranged .orthography-editor>.lx-more{grid-area:1/3}
+:is(#lexeme-form,#morpheme-form).lx-arranged .orthography-editor>label:has(.orthography-label){grid-area:2/1}
+:is(#lexeme-form,#morpheme-form).lx-arranged .orthography-editor>label:has(.orthography-font){grid-area:2/2}
+:is(#lexeme-form,#morpheme-form).lx-arranged .orthography-editor>.remove-orthography{grid-area:2/3;height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0;padding:0 8px;font-size:var(--ui-text-size)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .orthography-editor:not(.lx-more-open)>:is(label:has(.orthography-label),label:has(.orthography-font),.remove-orthography){display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-more, :is(#lexeme-form,#morpheme-form).lx-arranged .lx-toggle{display:inline-grid;place-items:center;flex:none;width:1.875rem;height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-more:hover, :is(#lexeme-form,#morpheme-form).lx-arranged .lx-toggle:hover{background:var(--hover);color:var(--ink)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-more[aria-expanded=true]{background:var(--selected);color:var(--ink)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-toggle svg{transition:transform .12s}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-toggle[aria-expanded=true] svg{transform:rotate(180deg)}
+/* Variants: form, relation and a summary per line. */
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-row-text{flex:1 1 80px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:center;font-size:var(--ui-text-size);color:var(--muted)}
+/* Parts of speech: a heading line with part of speech and subclass; senses below as one-line rows. */
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-expand-all[hidden]{display:none}
+/* Grammatical features: chosen tags as chips, the rest by search. */
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-field{position:relative;margin:4px 0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-query{width:100%;max-width:320px;height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0;padding:0 8px;font-size:var(--ui-text-size)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-options{position:absolute;z-index:30;top:calc(100% + 3px);left:0;width:min(380px,100%);max-height:260px;overflow:auto;padding:4px;border:1px solid var(--line);border-radius:8px;background:var(--raised,var(--surface));box-shadow:var(--shell-shadow,0 6px 18px #0002)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-options[hidden]{display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-option{display:grid;grid-template-columns:minmax(52px,auto) minmax(0,1fr);gap:10px;align-items:center;width:100%;min-height:var(--ui-control-height-small);margin:0;padding:3px 8px;border:0;border-radius:5px;background:transparent;color:var(--ink);font-size:var(--ui-text-size);text-align:left}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-option[aria-selected=true],:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-option:hover{background:var(--selected)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-tag{font-variant:all-small-caps;letter-spacing:.03em;font-weight:600}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-desc{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-empty{margin:4px 8px;font-size:var(--ui-help-size);color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-picker .morph-features{display:flex;flex-wrap:wrap;gap:4px;max-height:none;margin:0;padding:0;border:0;overflow:visible;columns:auto}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-picker .morph-features>label:not(:has(input:checked)){display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-picker .morph-features>label{position:relative;display:inline-flex;align-items:center;gap:5px;width:auto;margin:0;padding:2px 6px 2px 9px;border-radius:999px;background:var(--accent);color:var(--ink);font-size:var(--ui-text-size);cursor:pointer}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-picker .morph-features>label>input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-picker .morph-features>label::after{content:"×";color:var(--muted);font-size:0.90625rem;line-height:1}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-feature-picker .morph-features>label:has(input:focus-visible){outline:2px solid var(--focus,var(--green));outline-offset:1px}
+/* Morphology summary rows, the add bar and the paradigm / word-formation panels. */
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-summary{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-height:2.5rem;margin:0 0 6px;padding:5px 8px;border:1px solid var(--line-soft,var(--line));border-radius:6px}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-summary>strong{font-size:var(--ui-text-size)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-summary-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--ui-text-size);color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-spacer{flex:1 1 0}
+:is(#lexeme-form,#morpheme-form).lx-arranged :is(.lx-summary,.lx-panel-bar) button{height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);margin:0;padding:0 10px;font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-addbar{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:2px}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-addbar-label{margin-right:4px;font-size:var(--ui-text-size);color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-add{height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);margin:0;padding:0 11px;border:1px dashed var(--line);border-radius:999px;background:transparent;color:var(--ink);font-size:var(--ui-text-size)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-add[hidden]{display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-add:hover{border-style:solid;background:var(--hover)}
+:is(#lexeme-form,#morpheme-form).lx-arranged>.lx-aside,:is(#lexeme-form,#morpheme-form).lx-arranged .lx-panel{display:none;min-width:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged[data-lx-panel=paradigm] .lx-panel[data-panel=paradigm],:is(#lexeme-form,#morpheme-form).lx-arranged[data-lx-panel=analysis] .lx-panel[data-panel=analysis]{display:block}
+:is(#lexeme-form,#morpheme-form).lx-arranged[data-lx-mode=focus]>.lx-main{display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged:is([data-lx-mode=focus],[data-lx-mode=side])>.lx-aside{display:block}
+#lexeme-form.lx-arranged[data-lx-mode=side], #morpheme-form.lx-arranged[data-lx-mode=side]{grid-template-columns:minmax(0,1fr) minmax(340px,46%)}
+:is(#lexeme-form,#morpheme-form).lx-arranged[data-lx-mode=side]>.lx-aside{position:sticky;top:calc(var(--project-bar-height,0px) + var(--toolbar-height,0px) + var(--lx-head-height,0px) + 8px);max-height:calc(100dvh - var(--project-bar-height,0px) - var(--toolbar-height,0px) - var(--lx-head-height,0px) - var(--status-bar-height,0px) - 16px);overflow:auto}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-panel{margin:0;padding:0 12px 12px;border:1px solid var(--line);border-radius:8px;background:var(--raised,var(--surface))}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-panel-bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8px;min-height:2.625rem;margin:0 -12px 10px;padding:6px 12px;border-bottom:1px solid var(--line);border-radius:8px 8px 0 0;background:var(--raised,var(--surface))}
+:is(#lexeme-form,#morpheme-form).lx-arranged[data-lx-mode=focus] .lx-panel-bar{top:calc(var(--project-bar-height,0px) + var(--toolbar-height,0px) + var(--lx-head-height,0px))}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-crumb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--ui-text-size);color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-crumb strong{color:var(--ink)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-panel>#paradigm-editor,:is(#lexeme-form,#morpheme-form).lx-arranged .lx-panel>#word-structure-editor{margin:0;padding:0;border:0;background:transparent}
+@media(max-width:900px){#lexeme-form.lx-arranged[data-lx-mode=side], #morpheme-form.lx-arranged[data-lx-mode=side]{grid-template-columns:minmax(0,1fr)}:is(#lexeme-form,#morpheme-form).lx-arranged[data-lx-mode=side]>.lx-aside{position:static;max-height:none}}:is(#lexeme-form,#morpheme-form).lx-arranged .lx-tray{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-tray:not(:has(>:not([hidden]))){display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-tray-add{height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);margin:0;padding:0 8px;border:1px dashed var(--line);border-radius:999px;background:transparent;color:var(--muted);font-size:var(--ui-text-size);line-height:1}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-tray-add:hover{border-style:solid;color:var(--ink);background:var(--hover)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-tray-add[hidden]{display:none}
+/* Editor header inside the form: form and commands, then the item's key fields and the section index. */
+.lx-editor>.dialog-top:not(:has(>:not(form))),.lx-editor>.dialog-bottom:empty{display:none}
+.lx-editor .dialog-content>#lexeme-editor-title, .lx-editor .dialog-content>#morpheme-editor-title{position:absolute;width:0.0625rem;height:0.0625rem;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) .lx-editor .dialog-content{padding:0 12px 12px}
+:is(#lexeme-form,#morpheme-form).lx-arranged>.lx-formhead{grid-column:1/-1;grid-row:1;position:sticky;top:0;z-index:12;display:grid;gap:0;margin:0 -12px;padding:8px 12px 0;border-bottom:1px solid var(--line);border-radius:8px 8px 0 0;background:var(--raised,var(--surface))}
+html[data-home=false] :is(#dictionary-inline-editor,#morpheme-inline-editor) .lx-editor.page-editor :is(#lexeme-form,#morpheme-form).lx-arranged>.lx-formhead{top:calc(var(--project-bar-height,0px) + var(--toolbar-height,0px))}
+:is(#lexeme-form,#morpheme-form).lx-arranged>.lx-main{grid-column:1;grid-row:2}
+:is(#lexeme-form,#morpheme-form).lx-arranged[data-lx-mode=side]>.lx-aside{grid-column:2;grid-row:2;align-self:start}
+:is(#lexeme-form,#morpheme-form).lx-arranged[data-lx-mode=focus]>.lx-aside{grid-column:1;grid-row:2}
+:is(#lexeme-form,#morpheme-form).lx-arranged>#lexeme-error, :is(#lexeme-form,#morpheme-form).lx-arranged>#morpheme-error{grid-column:1/-1;grid-row:3}
+.lx-formhead .lx-head{display:flex;align-items:center;gap:8px;min-width:0}
+.lx-formhead .lx-title{flex:1 1 220px;min-width:160px;max-width:460px}
+.lx-formhead .lx-title .multipart-form-editor,.lx-formhead .lx-title>label{display:flex;align-items:center;gap:8px;margin:0}
+.lx-formhead .lx-title .multipart-heading{display:contents}
+.lx-formhead .lx-title .multipart-heading>label:not(.multipart-toggle){order:0;margin:0;font-size:var(--ui-text-size);color:var(--muted);white-space:nowrap}
+.lx-formhead .lx-title #lexeme-headword, .lx-formhead .lx-title #morpheme-form-value{order:1;flex:1 1 auto;width:auto;min-width:0;height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0;padding:0 10px;font-size:1.05rem;font-weight:600}
+.lx-formhead .lx-title .multipart-toggle{order:2;display:inline-flex;align-items:center;gap:4px;margin:0;font-size:var(--ui-text-size);color:var(--muted);white-space:nowrap}
+.lx-formhead .lx-title .multipart-parts{order:3;flex:1 0 100%}
+.lx-formhead .lx-spacer{flex:1 1 0}
+.lx-formhead .lx-head>button{flex:none;height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0;padding:0 12px;font-size:var(--ui-text-size);line-height:var(--ui-text-leading);white-space:nowrap}
+.lx-formhead .lx-head>.lx-cancel{border:1px solid var(--line);border-radius:5px;background:transparent;color:var(--ink)}
+.lx-formhead .lx-state:not(:empty){display:inline-flex;align-items:center;gap:6px;font-size:var(--ui-text-size);color:var(--warning);white-space:nowrap}
+.lx-formhead .lx-state:not(:empty)::before{content:"";width:0.4375rem;height:0.4375rem;border-radius:50%;background:currentColor}
+.lx-formhead .lx-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;min-width:0;padding:6px 0}
+.lx-formhead .lx-meta>label,.lx-formhead .lx-meta .morpheme-type-fields>label{display:flex;align-items:center;gap:6px;margin:0;font-size:var(--ui-text-size);color:var(--muted);white-space:nowrap}
+.lx-formhead .lx-meta input, .lx-formhead .lx-meta select{width:auto;height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);margin:0;padding:0 8px;font-size:var(--ui-text-size)}
+.lx-formhead .lx-meta #lexeme-number{width:72px}
+.lx-formhead .lx-meta #lexeme-language{max-width:150px}
+.lx-formhead .lx-meta .morpheme-type-fields{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin:0;padding:0}
+.lx-formhead .lx-index{display:flex;align-items:center;gap:4px;flex:0 1 auto;min-width:0;margin:0 0 0 auto;padding:0;overflow-x:auto;scrollbar-width:none}
+.lx-formhead .lx-index-item{flex:none;height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);margin:0;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--ink);font-size:var(--ui-text-size);line-height:1}
+.lx-formhead .lx-index-item:hover{background:var(--hover)}
+:is(#lexeme-form,#morpheme-form).lx-arranged[data-lx-mode=focus] .lx-panel-bar{top:calc(var(--project-bar-height,0px) + var(--toolbar-height,0px) + var(--lx-head-height,0px))}
+/* Morpheme editor: gloss with its additions, condition types as pressed pills. */
+#morpheme-form.lx-arranged [data-lx=gloss]{display:grid;grid-template-columns:minmax(160px,260px) minmax(0,1fr);gap:4px 12px;align-items:start}
+#morpheme-form.lx-arranged [data-lx=gloss]>.lx-card-head{grid-column:1/-1}
+#morpheme-form.lx-arranged [data-lx=gloss]>label{display:flex;flex-direction:column;gap:3px;margin:0;font-size:var(--ui-text-size);line-height:1.45;color:var(--muted)}
+#morpheme-form.lx-arranged [data-lx=gloss] .sense-addition-controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 10px;margin:0}
+#morpheme-form.lx-arranged [data-lx=gloss] .sense-addition-controls>label{margin:0;font-size:var(--ui-text-size);color:var(--muted)}
+#morpheme-form.lx-arranged [data-lx=gloss] .sense-addition-controls>label:not(.sense-addition-toggle){display:flex;flex-direction:column;gap:3px;line-height:1.45}
+#morpheme-form.lx-arranged [data-lx=gloss] :is(#morpheme-gloss,.sense-gloss-addition,.sense-addition-picker){box-sizing:border-box;height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0}
+#morpheme-form.lx-arranged :is([data-lx=meaning],[data-lx=writing])>label{display:grid;gap:3px;margin:0 0 8px;font-size:var(--ui-text-size);color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .morph-condition-types{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .morph-condition-types>label{position:relative;display:inline-flex;align-items:center;height:var(--ui-control-height-small);margin:0;padding:0 10px;border:1px solid var(--line);border-radius:999px;font-size:var(--ui-text-size);color:var(--ink);cursor:pointer}
+:is(#lexeme-form,#morpheme-form).lx-arranged .morph-condition-types>label>input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+:is(#lexeme-form,#morpheme-form).lx-arranged .morph-condition-types>label:has(input:checked){border-color:var(--green);background:var(--accent);font-weight:600}
+:is(#lexeme-form,#morpheme-form).lx-arranged .morph-condition-types>label:has(input:focus-visible){outline:2px solid var(--focus,var(--green));outline-offset:1px}
+
+/* Rows keep their own controls; the grid lays each one out as a summary line with details below. */
+:is(#lexeme-form,#morpheme-form):not(.lx-arranged) .lx-toggle, :is(#lexeme-form,#morpheme-form):not(.lx-arranged) .lx-row-text, :is(#lexeme-form,#morpheme-form):not(.lx-arranged) .lx-tray, :is(#lexeme-form,#morpheme-form):not(.lx-arranged) .lx-more, :is(#lexeme-form,#morpheme-form):not(.lx-arranged) .lx-feature-field{display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged [data-lx=notes] details.dictionary-note>summary{font-size:var(--ui-help-size);color:var(--muted);cursor:pointer}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lex-row-heading>strong{position:absolute;width:0.0625rem;height:0.0625rem;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+:is(#lexeme-form,#morpheme-form).lx-arranged .remove-usage, :is(#lexeme-form,#morpheme-form).lx-arranged .remove-sense, :is(#lexeme-form,#morpheme-form).lx-arranged .remove-variant{height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);margin:0;padding:0 8px;font-size:var(--ui-text-size);align-self:center;justify-self:start}
+/* Part of speech: number, part of speech, subclass, optional additions and removal on one line. */
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor{position:relative;display:grid;grid-template-columns:auto minmax(110px,200px) minmax(110px,200px) minmax(0,1fr);column-gap:8px;row-gap:6px;align-items:end;margin:0 0 12px;padding:0;border:0;background:transparent}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor::before{content:"";grid-column:1/-1;grid-row:1;align-self:stretch;margin:-5px -8px;border-radius:6px;background:var(--sidebar)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading{display:contents}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading::before{content:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>label:has(>.usage-pos){grid-column:2;grid-row:1}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>label:has(>.usage-subclass){grid-column:3;grid-row:1}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>label:has(>:is(.usage-pos,.usage-subclass)){display:grid;gap:2px;margin:0;font-size:var(--ui-text-size);color:var(--muted);min-width:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>label>.usage-pos, :is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>label>.usage-subclass{width:100%;height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.lx-tray{grid-column:4;grid-row:1;align-self:center}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.remove-usage{grid-column:5;grid-row:1}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>:not(.lex-row-heading,label:has(>:is(.usage-pos,.usage-subclass))){grid-column:1/-1;margin-left:2rem}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>details{margin-top:2px}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>details>summary,:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>details>summary{font-size:var(--ui-text-size);color:var(--muted);cursor:pointer}
+:is(#lexeme-form,#morpheme-form).lx-arranged :is(.usage-editor,.sense-editor)>details[hidden]{display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.sense-editors{display:grid;gap:4px;margin-top:4px}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.add-sense{justify-self:start;display:inline-flex;align-items:center;width:auto;height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);padding:0 9px;font-size:var(--ui-text-size)}
+/* Sense: number, short gloss, a glimpse of the definition, toggle and removal; details below. */
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor{position:relative;display:grid;grid-template-columns:2.6em minmax(120px,240px) minmax(0,1fr) auto auto;column-gap:8px;row-gap:0;align-items:center;margin:0;padding:6px 6px 6px 10px;border:1px solid var(--line-soft,var(--line));border-radius:6px;background:var(--raised,var(--surface))}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>.lex-row-heading{display:contents}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>.lex-row-heading::before{content:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>label:has(>.sense-short){grid-column:2;grid-row:1;display:grid;gap:3px;margin:0;font-size:0.84375rem;line-height:1.45;min-width:0;color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>label>.sense-short{width:100%;height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0;font-size:0.90625rem}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>.lex-row-heading>.lx-row-text{grid-column:3;grid-row:1}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>.lex-row-heading>.lx-toggle{grid-column:4;grid-row:1}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>.lex-row-heading>.remove-sense{grid-column:5;grid-row:1}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lex-row-heading>.lx-row-actions{display:flex;align-items:center;gap:.25rem;grid-column:5;grid-row:1;align-self:center;justify-self:end}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-sort-handle{display:inline-flex;align-items:center;justify-content:center;flex:none;width:1.75rem;height:var(--ui-control-height-small);min-height:0;margin:0;padding:0;border:0;border-radius:.25rem;background:transparent;color:var(--muted);font-size:1.125rem;line-height:1;cursor:grab;touch-action:none;user-select:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-sort-handle:hover{color:var(--ink);background:var(--hover)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-sort-handle:focus-visible{outline:2px solid var(--focus,var(--green));outline-offset:-2px}
+:is(#lexeme-form,#morpheme-form).lx-arranged [data-lx-drop=before]{box-shadow:0 -2px var(--green)}
+:is(#lexeme-form,#morpheme-form).lx-arranged [data-lx-drop=after]{box-shadow:0 2px var(--green)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-row-dragging{opacity:.55}
+body.lx-editor-sorting,body.lx-editor-sorting *{cursor:grabbing!important;user-select:none!important}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>:not(.lex-row-heading,label:has(>.sense-short)){grid-column:1/-1;margin:8px 6px 0 2px}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor.lx-collapsed>:not(.lex-row-heading,label:has(>.sense-short)){display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor:not(.lx-collapsed){padding-bottom:10px;box-shadow:inset 3px 0 var(--green)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor .sense-addition-controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 10px}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor .sense-addition-controls>label,:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>label:has(>textarea){display:grid;gap:3px;margin:0;font-size:var(--ui-text-size);color:var(--muted)}
+/* Variants: form, relation, a summary and the toggle; everything else opens below. */
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor{display:grid;grid-template-columns:minmax(120px,1.2fr) minmax(110px,1fr) minmax(0,1.4fr) auto;column-gap:8px;row-gap:6px;align-items:end;margin:0 0 6px;padding:6px 8px;border:1px solid var(--line-soft,var(--line));border-radius:6px;background:transparent}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor>.metadata-grid{display:contents}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor .multipart-form-editor:has(.variant-form){grid-column:1;grid-row:1;margin:0;min-width:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor label:has(>.morph-variation){grid-column:2;grid-row:1}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor>.lx-row-text{grid-column:3;grid-row:1;align-self:center}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor>.lx-toggle{grid-column:4;grid-row:1;align-self:center}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor label{display:grid;gap:2px;margin:0;font-size:var(--ui-text-size);color:var(--muted);min-width:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor :is(input:not([type=checkbox]),select){width:100%;height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor .multipart-heading{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:var(--ui-text-size);color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor :is(>label,>.metadata-grid>label):not(:has(>.morph-variation)){grid-column:span 2}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor>:is(details,.morph-condition-types,.variant-tags,label:has(>textarea),.remove-variant){grid-column:1/-1}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.lx-collapsed>:not(.lx-row-text,.lx-toggle,.metadata-grid,.multipart-form-editor:has(.variant-form)),:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.lx-collapsed>.metadata-grid>:not(.multipart-form-editor:has(.variant-form),label:has(>.morph-variation)){display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor:not(.lx-collapsed){box-shadow:inset 3px 0 var(--green)}
+html #lexeme-form.lx-arranged, html #morpheme-form.lx-arranged{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-tray-add{white-space:nowrap}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.lx-tray{min-width:0}
+
+#morpheme-form.lx-arranged .lx-rest>:is(#morpheme-meaning-panel,#morpheme-writing-panel,#morpheme-variants-panel,.morpheme-core-fields){display:none}
+
+:is(#lexeme-form,#morpheme-form).lx-arranged .multipart-toggle{display:inline-flex;align-items:center;gap:4px;margin:0;font-size:var(--ui-text-size);color:var(--muted);white-space:nowrap}
+:is(#lexeme-form,#morpheme-form).lx-arranged .multipart-toggle input{width:var(--ui-check-size);height:var(--ui-check-size);min-height:0;margin:0}
+
+/* Dictionary reading page: one header line, a section index and rarely used commands in a menu. */
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-actions button, html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-actions summary{height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0;padding:0 11px;font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-actions>.reading-more{position:relative;display:flex;align-items:center;margin:0}
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-actions>.reading-more>summary{display:inline-flex;align-items:center;justify-content:center;min-width:2rem;padding:0 8px;border:1px solid var(--line);border-radius:5px;list-style:none;cursor:pointer;font-size:var(--ui-text-size)}
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-actions>.reading-more>summary::-webkit-details-marker{display:none}
+/* Draw menu dots and caret independently of the selected text font's metrics. */
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-actions>.reading-more>summary,
+html[data-home=false] .dictionary-evidence-heading .dictionary-evidence-more>summary{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;font-size:0;line-height:0}
+html[data-home=false] :is(.reading-more,.dictionary-evidence-more)>summary::before{content:"";display:block;flex:none;width:1rem;height:1rem;background:currentColor;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='3' cy='8' r='1.25'/%3E%3Ccircle cx='8' cy='8' r='1.25'/%3E%3Ccircle cx='13' cy='8' r='1.25'/%3E%3C/svg%3E") center/contain no-repeat}
+html[data-home=false] :is(.reading-more,.dictionary-evidence-more)>summary::after{content:"";display:block;flex:none;width:0;height:0;border-inline:.1875rem solid transparent;border-top:.25rem solid currentColor}
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-actions>.reading-more .workbench-menu-items{right:0;left:auto;min-width:150px}
+html[data-home=false] #dictionary-detail>.lexeme-heading .lexeme-actions>.reading-more .workbench-menu-items button{width:100%;justify-content:flex-start;text-align:left}
+#dictionary-detail>.reading-index{position:sticky;top:calc(var(--project-bar-height,0px) + var(--toolbar-height,0px));z-index:8;display:flex;align-items:center;gap:4px;margin:0 0 12px;padding:6px 0;background:var(--paper);border-bottom:1px solid var(--line-soft,var(--line));overflow-x:auto;scrollbar-width:none}
+#dictionary-detail>.reading-index .reading-index-item{flex:none;height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);margin:0;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--ink);font-size:var(--ui-text-size);line-height:1}
+#dictionary-detail>.reading-index .reading-index-item:hover{background:var(--hover)}
+#dictionary-detail>:is(.lexeme-heading,.dictionary-core-columns,.dictionary-morphology-block,#dictionary-example-controls){scroll-margin-top:calc(var(--project-bar-height,0px) + var(--toolbar-height,0px) + 46px)}
+
+/* Dictionary list: the page bar fits the navigator width in one line. */
+#workbench-module-nav #dictionary-page-bar{display:flex;align-items:center;gap:4px;min-height:var(--ui-control-height);margin:0;padding:2px 0}
+#workbench-module-nav #dictionary-page-bar .pagination{display:flex;align-items:baseline;flex-wrap:wrap;gap:3px;min-width:0;margin:0;padding:0;border:0}
+#workbench-module-nav #dictionary-page-bar .pagination button, #workbench-module-nav #dictionary-page-bar .pagination input{height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);margin:0;padding:0 6px;font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+#workbench-module-nav #dictionary-page-bar .pagination input{width:var(--ui-page-number-width);padding-inline:var(--ui-field-padding);text-align:center}
+#workbench-module-nav #dictionary-page-bar .pagination label{display:inline-flex;align-items:baseline;gap:3px;margin:0;font-size:var(--ui-text-size);white-space:nowrap}
+#workbench-module-nav #dictionary-page-bar .pagination>span{font-size:var(--ui-text-size);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+#workbench-module-nav #dictionary-page-bar .pagination button, #workbench-module-nav #dictionary-page-bar .pagination label, #workbench-module-nav #dictionary-page-bar .pagination span{white-space:nowrap;flex:none}
+#workbench-module-nav #dictionary-page-bar .pagination button{padding:0 5px}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor .multipart-toggle{display:inline-flex;align-items:center;gap:4px}
+/* Paradigm tables in the editor panel: compact settings, a matrix of cells, and the chosen cell beside it. */
+:is(#lexeme-form,#morpheme-form):not(.lx-arranged) .paradigm-overview, :is(#lexeme-form,#morpheme-form):not(.lx-arranged) .paradigm-state-choice, #paradigm-editor.paradigm-quick .paradigm-overview, #paradigm-editor.paradigm-quick .paradigm-state-choice{display:none}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px 16px;margin:0 0 12px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--raised,var(--surface))}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor>.metadata-grid{flex:1 1 100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px 10px;margin:0}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor>.metadata-grid>label,.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor>label{display:grid;gap:2px;margin:0;font-size:var(--ui-text-size);color:var(--muted)}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor :is(input:not([type=checkbox]),select){height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor>label:has([data-p=dimensions]){flex:1 1 260px}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor>.paradigm-columns{flex:none;align-self:flex-end;height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0;padding:0 10px;font-size:var(--ui-text-size)}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor>label:has(>textarea){flex:1 1 100%}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor>label>textarea{min-height:var(--ui-control-height);height:var(--ui-control-height);resize:vertical}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor>.paradigm-overview{flex:1 1 360px;min-width:0;overflow-x:auto}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor>.paradigm-rows{flex:1 1 300px;min-width:0;margin:0}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor>.paradigm-toolbar{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:6px;margin:0}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-table-editor>.paradigm-toolbar button{height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);margin:0;padding:0 10px;font-size:var(--ui-text-size)}
+.paradigm-matrix{width:100%;border-collapse:separate;border-spacing:0;font-size:0.875rem}
+.paradigm-matrix th{padding:6px 8px;color:var(--muted);font-weight:600;font-size:0.84375rem;text-align:left;white-space:nowrap}
+.paradigm-matrix thead th{border-bottom:1px solid var(--line)}
+.paradigm-matrix tbody th{border-right:1px solid var(--line)}
+.paradigm-matrix td{padding:4px;border-bottom:1px solid var(--line-soft,var(--line));vertical-align:top}
+.paradigm-cell-list{display:grid;gap:4px}
+.paradigm-overview .paradigm-cell{display:flex;align-items:center;gap:8px;width:100%;min-height:var(--ui-control-height);height:auto;margin:0 0 2px;padding:4px 8px;border:1px solid var(--line-soft,var(--line));border-radius:6px;background:transparent;color:var(--ink);font-size:0.875rem;line-height:1.35;text-align:left;box-shadow:none;cursor:pointer}
+.paradigm-overview .paradigm-cell strong{flex:none;font-size:0.84375rem;color:var(--muted)}
+.paradigm-overview .paradigm-cell-form{min-width:0;overflow-wrap:anywhere}
+.paradigm-overview .paradigm-cell:hover{background:var(--hover)}
+.paradigm-overview .paradigm-cell[aria-pressed=true]{border-color:var(--green);background:var(--selected);box-shadow:inset 3px 0 var(--green)}
+.paradigm-overview .paradigm-cell[data-state=unfilled]{border-style:dashed;color:var(--muted)}
+.paradigm-overview .paradigm-cell[data-state=missing]{color:var(--muted);background:repeating-linear-gradient(135deg,transparent 0 6px,color-mix(in srgb,var(--line) 45%,transparent) 6px 8px)}
+.paradigm-overview .paradigm-cell[data-state=missing][aria-pressed=true]{background:var(--selected)}
+.paradigm-overview .paradigm-cell-none{display:block;padding:6px 8px;color:var(--muted)}
+.paradigm-overview-empty{margin:4px 0;font-size:var(--ui-help-size);color:var(--muted)}
+/* The chosen cell: only the open row is shown, as the panel beside the matrix. */
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-rows>.paradigm-row:not([open]){display:none}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-rows:not(:has(>.paradigm-row[open]))::before{content:attr(data-empty);display:block;padding:14px 12px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:0.875rem;line-height:1.6}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-rows>.paradigm-row[open]{margin:0;padding:10px 12px 12px;border:1px solid var(--line);border-radius:8px;background:var(--paper)}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-rows>.paradigm-row>summary{margin:0 0 8px;font-weight:600;font-size:var(--ui-text-size);cursor:pointer}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-rows>.paradigm-row>label:has(>.paradigm-state){display:none}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-rows>.paradigm-row .paradigm-labels{display:flex;flex-wrap:wrap;gap:6px 10px;margin:0 0 8px}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-rows>.paradigm-row .paradigm-labels>label{display:grid;gap:2px;flex:1 1 110px;margin:0;font-size:var(--ui-text-size);color:var(--muted)}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-state-choice{margin:0 0 10px}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-row .paradigm-realization, .lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-row .paradigm-meaning{margin:0 0 8px;padding:8px;border:1px solid var(--line-soft,var(--line));border-radius:6px}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-row label{font-size:var(--ui-text-size);color:var(--muted)}
+.lx-arranged #paradigm-editor:not(.paradigm-quick) .paradigm-row :is(button){height:var(--ui-control-height-small);min-height:var(--ui-control-height-small);padding:0 9px;font-size:var(--ui-text-size)}
+
+/* Layout follows the editor's usable width, including at enlarged text sizes. */
+#lexeme-editor.lx-editor, #morpheme-editor.lx-editor{container:entry-editor / inline-size}
+html[data-home=false] #lexeme-editor, html[data-home=false] #morpheme-editor{--dictionary-control-height:var(--ui-control-height)}
+.lx-formhead .lx-head{flex-wrap:wrap;gap:.5rem}
+.lx-formhead .lx-title{flex:1 1 14rem;min-width:min(100%,10rem);max-width:none}
+.lx-formhead .lx-title :is(.multipart-form-editor,label){min-width:0}
+.lx-formhead .lx-title .multipart-form-editor{flex-wrap:wrap}
+.lx-formhead .lx-commands{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:.375rem;min-width:0;max-width:100%}
+.lx-formhead .lx-commands button{min-height:var(--ui-control-height);margin:0;font-size:var(--ui-text-size);line-height:var(--ui-text-leading);white-space:nowrap}
+.lx-formhead .lx-index{max-width:100%;min-height:var(--ui-control-height-small)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-field-value{overflow-wrap:anywhere}
+:is(#lexeme-form,#morpheme-form).lx-arranged input, :is(#lexeme-form,#morpheme-form).lx-arranged select, :is(#lexeme-form,#morpheme-form).lx-arranged textarea{max-width:100%}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>label>.sense-short{font-size:.9375rem}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-row-text{line-height:1.45}
+:is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor .multipart-heading{flex-wrap:wrap}
+:is(#lexeme-form,#morpheme-form).lx-arranged .multipart-toggle{white-space:normal}
+@container entry-editor (max-width:48rem){
+ #lexeme-form.lx-arranged[data-lx-mode=side], #morpheme-form.lx-arranged[data-lx-mode=side]{grid-template-columns:minmax(0,1fr)}
+ :is(#lexeme-form,#morpheme-form).lx-arranged[data-lx-mode=side]>.lx-aside{grid-column:1;grid-row:3;position:static;max-height:none}
+ :is(#lexeme-form,#morpheme-form).lx-arranged[data-lx-mode=side]>#lexeme-error, :is(#lexeme-form,#morpheme-form).lx-arranged[data-lx-mode=side]>#morpheme-error{grid-row:4}
+ .lx-formhead .lx-commands{flex:1 1 100%}
+ .lx-formhead .lx-head>.lx-spacer{display:none}
+ .lx-formhead .lx-meta .lx-index{flex:1 1 100%;margin-left:0}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor{grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) auto}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.lx-tray{grid-column:2/4;grid-row:2}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.remove-usage{grid-column:4}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.lx-row-actions{grid-column:4}
+}
+@container entry-editor (max-width:30rem){
+ :is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor{grid-template-columns:auto minmax(0,1fr) minmax(0,1fr)}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor::before{grid-row:1/3}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.lx-row-actions{grid-column:2/-1;grid-row:2}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.lx-tray{grid-column:2/-1;grid-row:3}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .lx-field{grid-template-columns:minmax(0,1fr);gap:.25rem}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .lx-field-label{padding-top:0}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor{grid-template-columns:2.2em minmax(0,1fr) auto auto}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>.lex-row-heading>.lx-row-text{grid-column:2/5;grid-row:2}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>.lex-row-heading>.lx-toggle{grid-column:3}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>.lex-row-heading>.remove-sense{grid-column:4}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>.lex-row-heading>.lx-row-actions{grid-column:4}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor>.lx-toggle{grid-column:3}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor>.lx-row-text{grid-column:1/4;grid-row:2}
+ #morpheme-form.lx-arranged [data-lx=gloss]{grid-template-columns:minmax(0,1fr)}
+}
+
+/* POS operations share one right-hand group; sorting belongs to the number gutter. */
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.lx-row-identity{grid-column:1;grid-row:1;display:flex;flex-direction:column;align-items:center;align-self:center;gap:2px;min-width:1.75rem}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.lx-row-identity>.lx-row-number{display:grid;place-items:center;width:1.375rem;height:1.375rem;border-radius:50%;background:var(--accent);font-size:var(--ui-text-size);font-weight:600;line-height:1;color:var(--ink)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.lx-row-identity>.lx-sort-handle{height:1.5rem}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.lx-row-actions{grid-column:4;grid-row:1;align-self:end;justify-self:end;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px;min-width:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor .lx-row-actions>.lx-tray{justify-content:flex-end}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor>.lex-row-heading>.lx-row-identity{display:contents}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor .lx-row-identity>.lx-row-number{grid-column:1;grid-row:1;align-self:start;font-size:var(--ui-text-size);line-height:1.45;font-variant-numeric:tabular-nums;color:var(--muted)}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-editor .lx-row-identity>.lx-sort-handle{position:absolute;inset-inline-start:calc(-1.75rem - 5px);top:6px}
+:is(#lexeme-form,#morpheme-form):not(.lx-arranged) .lx-row-identity{display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged :is(.usage-editor,.sense-editor)>details[data-lx-optional]>summary{display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-tray-add[aria-expanded=true]{border-style:solid;border-color:var(--line);background:var(--accent);color:var(--ink)}
+/* The toggle is a control row, aligned to the input bottoms rather than their captions. */
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-addition-controls>label.sense-addition-toggle{display:inline-flex;flex:0 1 auto;align-items:center;align-self:flex-end;gap:.35em;min-height:var(--ui-control-height);margin:0;padding:0;line-height:1.4}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-addition-toggle>input[type=checkbox]{display:inline-block;flex:0 0 auto;width:var(--ui-check-size);height:var(--ui-check-size);min-height:0;margin:0;padding:0}
+:is(#lexeme-form,#morpheme-form).lx-arranged .sense-addition-controls .sense-gloss-addition, :is(#lexeme-form,#morpheme-form).lx-arranged .sense-addition-controls .sense-addition-picker{box-sizing:border-box;height:var(--ui-control-height);min-height:var(--ui-control-height);margin:0}
+@container entry-editor (max-width:48rem){
+ :is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor{grid-template-columns:auto minmax(0,1fr) minmax(0,1fr)}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor::before{grid-row:1/3}
+ :is(#lexeme-form,#morpheme-form).lx-arranged .usage-editor>.lex-row-heading>.lx-row-actions{grid-column:2/-1;grid-row:2;max-width:100%}
+}
+
+/* Reading uses the same number hierarchy and accent as the meaning editor. */
+html[data-home=false] #dictionary-detail .lex-usage-view{margin:0 0 1rem}
+html[data-home=false] #dictionary-detail .usage-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:.4rem 1rem;padding:.45rem .6rem;background:var(--sidebar);border-radius:.35rem}
+html[data-home=false] #dictionary-detail .usage-heading>.usage-subclass-view{flex:1 1 12rem;margin:0;padding:0;min-width:0;overflow-wrap:anywhere}
+html[data-home=false] #dictionary-detail .usage-heading h3{display:inline-flex;align-items:baseline;gap:.6rem;margin:0;font-size:var(--ui-heading-size);color:var(--ink)}
+html[data-home=false] #dictionary-detail .usage-number{display:inline-grid;place-items:center;align-self:center;flex:none;width:1.5rem;height:1.5rem;border-radius:50%;background:var(--accent);font:600 var(--ui-text-size)/var(--ui-text-leading) var(--ui-font);color:var(--green)}
+html[data-home=false] #dictionary-detail .lex-sense-view{margin:.6rem 0 .6rem 2rem;padding:.65rem .8rem;border:1px solid var(--line);border-inline-start:3px solid var(--green);border-radius:.35rem;background:var(--raised,var(--surface));box-shadow:none}
+html[data-home=false] #dictionary-detail .sense-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:.45rem .9rem;padding:0}
+html[data-home=false] #dictionary-detail .sense-identity{display:flex;align-items:baseline;flex-wrap:wrap;gap:.4rem .7rem;padding:0}
+html[data-home=false] #dictionary-detail .sense-identity>strong{display:inline-flex;align-items:baseline;gap:.4rem;margin:0;padding:.15rem .45rem;border-radius:.25rem;background:var(--accent);color:var(--green);font-size:var(--ui-text-size)}
+html[data-home=false] #dictionary-detail .sense-number{font-variant-numeric:tabular-nums;font-weight:700}
+html[data-home=false] #dictionary-detail .sense-kind{font-weight:400;font-size:var(--ui-help-size)}
+html[data-home=false] #dictionary-detail .sense-short-gloss{display:inline-flex;align-items:baseline;flex-wrap:wrap;column-gap:.375rem;flex:1 1 12em;min-width:0;color:var(--muted);font-size:var(--ui-help-size)}
+html[data-home=false] #dictionary-detail .sense-short-gloss b{color:var(--ink);font-family:var(--gloss-font,Junicode),serif;font-style:var(--gloss-style,normal);font-size:1.2em;font-weight:700}
+html[data-home=false] #dictionary-detail .lex-sense-view p{margin:.5rem 0 0;padding:0;line-height:1.65}
+html[data-home=false] #dictionary-detail .lex-sense-view>.sense-synonyms{margin:.5rem 0 0;padding-top:.4rem}
+@media(prefers-reduced-motion:reduce){.lx-arranged .lx-toggle svg{transition:none}}
+
+/* Forms share columns rather than repeating a tall labelled card per item. */
+.compact-form-container{container-type:inline-size}
+.compact-form-head{display:grid;grid-template-columns:minmax(8rem,1.2fr) minmax(8rem,1fr) minmax(7rem,1fr) minmax(5rem,.8fr) 2rem;gap:.5rem;align-items:center;padding:.375rem .5rem;color:var(--muted);font:400 var(--ui-text-size)/var(--ui-text-leading) var(--ui-font,"Segoe UI"),sans-serif;border-bottom:1px solid var(--line)}
+.compact-form-head[hidden]{display:none}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.compact-form-row{grid-template-columns:minmax(8rem,1.2fr) minmax(8rem,1fr) minmax(7rem,1fr) minmax(5rem,.8fr) 2rem;gap:.5rem;align-items:start;margin:0;padding:.375rem .5rem;border:0;border-bottom:1px solid var(--line-soft,var(--line));border-radius:0;box-shadow:none;background:transparent}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.compact-form-row:not(.lx-collapsed){background:color-mix(in srgb,var(--green) 4%,var(--surface,var(--paper)));box-shadow:inset 2px 0 var(--green);padding-bottom:.75rem}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row .compact-form-form-cell{display:flex;flex-direction:column;grid-column:1;grid-row:1;min-width:0;margin:0;gap:0}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row .compact-form-kind-cell{display:grid;grid-column:2;grid-row:1;min-width:0;margin:0}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row .compact-form-variation-cell{display:grid;grid-column:3;grid-row:1;min-width:0;margin:0}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row .compact-form-label,
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row .multipart-heading>label:not(.multipart-toggle),
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row>.lx-row-text{display:none}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row .multipart-heading{order:2;margin-top:.375rem;min-width:0}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row .multipart-parts{order:1}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row .multipart-hint{order:3}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row.lx-collapsed .multipart-heading{display:none}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row>.compact-form-summary{display:block;grid-column:4;grid-row:1;min-width:0;align-self:center;color:var(--muted);font-size:var(--ui-text-size);line-height:1.4;overflow-wrap:anywhere}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.compact-form-row.lx-collapsed>.compact-form-summary{display:block}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row>.lx-toggle{grid-column:5;grid-row:1;align-self:start;width:2rem}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row>.metadata-grid{display:contents}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row.lx-collapsed>.metadata-grid>.compact-form-kind-cell{display:grid}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row:not(.lx-collapsed)>:is(details,.variant-tags,.morph-condition-types,.remove-variant,label:not(.compact-form-form-cell)),
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row:not(.lx-collapsed)>.metadata-grid>label:not(.compact-form-kind-cell,.compact-form-variation-cell){grid-column:1/-1;grid-row:auto}
+html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row :is(input:not([type=checkbox]),select){font-size:var(--ui-text-size);max-width:100%;min-width:0}
+
+/* Reading mode uses the same ordering while retaining original evidence links. */
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-forms-reading{display:grid;grid-template-columns:minmax(7rem,1.2fr) minmax(7rem,1fr) minmax(6rem,1fr) minmax(5rem,.8fr) minmax(4.5rem,max-content);column-gap:.5rem}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-forms-reading>*{grid-column:1/-1}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-forms-reading>.compact-form-head{grid-template-columns:subgrid}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .morph-form-view.compact-form-reading-row{display:grid;grid-template-columns:subgrid;gap:.375rem .5rem;align-items:baseline;min-width:0;margin:0;padding:.5rem;border:0;border-bottom:1px solid var(--line-soft,var(--line));border-radius:0;background:transparent}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-row>:is(div){min-width:0;overflow-wrap:anywhere}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-form>strong{display:block;margin:0;font-size:var(--ui-text-size);font-weight:600;line-height:1.45}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-kind, html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-variation, html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-features{font-size:var(--ui-text-size);line-height:1.45;color:var(--muted)}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-actions{display:flex;align-items:baseline;justify-content:flex-end;flex-wrap:wrap;gap:.375rem;position:relative}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-actions>button{min-height:var(--ui-control-height-small,2rem);margin:0;padding:var(--ui-control-padding);font-size:var(--ui-text-size)}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-details{margin:0;font-size:var(--ui-text-size);color:var(--muted)}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-details>summary{cursor:pointer;white-space:nowrap;padding:.25rem}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-detail-body{position:relative;grid-column:1/-1;min-width:0;padding:.5rem .75rem;border-left:2px solid var(--line);color:var(--ink);font-size:var(--ui-text-size);line-height:1.5}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-detail-body[hidden]{display:none}
+html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-detail-body p{margin:.25rem 0}
+
+@container(min-width:38.001rem){
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.compact-form-row:not(.lx-collapsed) .compact-form-pronunciation-cell{grid-column:1/3;grid-row:2}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.compact-form-row:not(.lx-collapsed) .compact-form-features-cell{grid-column:3/-1;grid-row:2}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.compact-form-row:not(.lx-collapsed)>.morph-condition-types{grid-column:1/-1;grid-row:3}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.compact-form-row:not(.lx-collapsed) .compact-form-conditions-cell{grid-column:1/-1;grid-row:4}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.compact-form-row:not(.lx-collapsed) .compact-form-source-cell{grid-column:1/3;grid-row:5}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.compact-form-row:not(.lx-collapsed) .compact-form-notes-cell{grid-column:3/-1;grid-row:5}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.compact-form-row:not(.lx-collapsed)>.remove-variant{justify-self:end}
+}
+
+@container(max-width:38rem){
+ .compact-form-head{display:none}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .variant-editor.compact-form-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 2rem;gap:.375rem .5rem;padding-block:.5rem}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row .compact-form-form-cell{grid-column:1/3;grid-row:1}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row .compact-form-kind-cell{grid-column:1;grid-row:2}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row .compact-form-variation-cell{grid-column:2/4;grid-row:2}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row>.lx-toggle{grid-column:3;grid-row:1}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row>.compact-form-summary{grid-column:1/-1;grid-row:3}
+ html[data-home=false] :is(#lexeme-form,#morpheme-form).lx-arranged .compact-form-row .compact-form-label{display:block}
+ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-forms-reading{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
+ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-form{grid-column:1/3;grid-row:1}
+ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-actions{grid-column:3;grid-row:1}
+ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-kind{grid-column:1;grid-row:2}
+ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-variation{grid-column:2/4;grid-row:2}
+ html[data-home=false] :is(#dictionary-detail,#morpheme-detail) .compact-form-reading-features{grid-column:1/-1;grid-row:3}
+}
+
+/* Morphological identity stays in the header; entry-specific editing lives in
+   the Morphology task. Forms share columns; optional material opens per row. */
+html[data-home=false] #dictionary-detail .ws-memberships-inline{flex:1 1 100%;gap:.375rem}
+html[data-home=false] #dictionary-detail .ws-membership-view{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:.375rem .75rem;font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+html[data-home=false] #dictionary-detail .ws-membership-view>.ws-membership-main{margin:0;padding:0;min-width:0}
+html[data-home=false] #dictionary-detail .ws-membership-main>summary{display:block;list-style:none;cursor:pointer;margin:0;color:var(--ink)}
+html[data-home=false] #dictionary-detail .ws-membership-main>summary::-webkit-details-marker{display:none}
+.ws-disclosure-arrow{display:inline-flex;align-items:center;justify-content:center;width:var(--ui-icon-size);height:var(--ui-icon-size);margin-right:.25rem;color:var(--muted)}
+.ws-membership-main[open]>summary>.ws-disclosure-arrow{transform:rotate(90deg)}
+.ws-parts-inline{display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:.375rem 1.25rem;margin-left:1rem;max-width:100%;vertical-align:baseline}
+.ws-principal-inline{display:inline-flex;align-items:baseline;gap:.375rem;min-width:0;max-width:100%;overflow-wrap:anywhere}
+.ws-principal-label{color:var(--muted)}
+html[data-home=false] #dictionary-detail .ws-membership-view>.ws-membership-extra{margin:0}
+html[data-home=false] #dictionary-detail .ws-membership-extra>summary{font-size:var(--ui-help-size);color:var(--muted);cursor:pointer}
+html[data-home=false] #dictionary-detail .ws-membership-view>.ws-membership-extra[open]{grid-column:1/-1;margin-left:1.25rem}
+.ws-membership-extra>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));gap:.5rem 1rem;padding-block:.5rem}
+.ws-membership-extra :is(p,.ws-writing-view){margin:.25rem 0}
+.ws-membership-main:not([open]) .ws-parts-inline{display:none}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-classification-fields>.lx-field{grid-template-columns:9rem minmax(0,1fr) auto;align-items:baseline;padding-block:.375rem}
+:is(#lexeme-form,#morpheme-form).lx-arranged .lx-classification-fields .lx-field-label{padding-top:0}
+.lx-field-tools{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;justify-content:flex-end}
+.lx-classification-fields .lx-field-value{align-self:baseline}
+.lx-classification-fields .lx-field-value .ui-help{margin:0}
+.lx-classification-fields .tag-rows:empty{display:none}
+.lx-membership-section{margin-bottom:.75rem;padding-bottom:.75rem;border-bottom:1px solid var(--line)}
+#ws-memberships{container:ws-memberships / inline-size;min-width:0}
+#lexeme-form .ws-membership{min-width:0;margin:0;padding-block:.75rem;border-top:1px solid var(--line)}
+#lexeme-form .ws-membership:first-child{border-top:0;padding-top:0}
+#lexeme-form .ws-membership-head{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;gap:.5rem;align-items:end;margin-bottom:.5rem}
+:is(#lexeme-form,#ws-template-slots) :is(.ws-membership-head,.ws-part-main,.ws-part-fields,.ws-template-slot)>label{display:grid;gap:.25rem;min-width:0;margin:0}
+#lexeme-form .ws-membership-head input, #lexeme-form .ws-membership-head select{width:100%;min-width:0;margin:0}
+#lexeme-form .ws-parts-table{display:grid;grid-template-columns:minmax(6rem,.7fr) minmax(7rem,1fr) minmax(6rem,1.2fr) auto;gap:0 .5rem;min-width:0}
+#lexeme-form .ws-parts-table[hidden]{display:none}
+#lexeme-form .ws-parts-head, #lexeme-form .ws-parts, #lexeme-form .ws-part, #lexeme-form .ws-part-main{display:grid;grid-template-columns:subgrid;grid-column:1/-1;gap:0 .5rem;min-width:0;margin:0}
+#lexeme-form .ws-parts-head{padding-block:.25rem;color:var(--muted)}
+#lexeme-form .ws-part{padding-block:.5rem;border-top:1px solid var(--line)}
+#lexeme-form .ws-part-main{align-items:center}
+#lexeme-form .ws-part-main>label{display:block}
+#lexeme-form .ws-part-main>label>input{width:100%;min-width:0;margin:0}
+#lexeme-form .ws-part-caption{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+#lexeme-form .ws-part-summary{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+#lexeme-form :is(.ws-part-main,.ws-membership-head)>.ws-row-tools{display:flex;flex-wrap:wrap;gap:.375rem;align-items:center;margin:0}
+#lexeme-form .ws-part-detail{grid-column:1/-1;margin-top:.5rem;padding:.5rem .75rem;border-left:2px solid var(--line);min-width:0}
+#lexeme-form .ws-part-detail[hidden]{display:none}
+#lexeme-form .ws-part-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:.75rem;margin-top:.5rem}
+#lexeme-form .ws-part-fields:first-child{margin-top:0}
+#lexeme-form .ws-part-fields section, #lexeme-form .ws-part-fields input, #lexeme-form .ws-part-fields select, #lexeme-form .ws-part-fields textarea{min-width:0;max-width:100%;width:100%}
+#lexeme-form .ws-part-fields .ws-writing{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
+#lexeme-form .ws-parts-actions{display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem;margin-top:.25rem}
+#lexeme-form .ws-membership-settings{margin:.5rem 0 0}
+#lexeme-form .ws-membership-settings>summary{color:var(--muted);cursor:pointer}
+#ws-template-slots{display:grid;gap:.5rem;container:ws-template / inline-size}
+#ws-template-slots>.ws-template-slot{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;gap:.5rem;align-items:end;padding:.5rem 0}
+#ws-template-slots .ws-row-tools{margin:0;gap:.375rem}
+@container ws-memberships (max-width:48rem){
+ #lexeme-form .ws-membership-head{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #lexeme-form .ws-membership-head>.ws-row-tools{grid-column:1/-1;justify-content:flex-end}
+ #lexeme-form .ws-parts-table{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ #lexeme-form .ws-parts-head{display:none}
+ #lexeme-form .ws-part-main>label{display:grid}
+ #lexeme-form .ws-part-caption{position:static;width:auto;height:auto;overflow:visible;clip-path:none}
+ #lexeme-form .ws-part-main>.ws-part-summary{grid-column:1;grid-row:2;white-space:normal;margin-top:.375rem}
+ #lexeme-form .ws-part-main>.ws-row-tools{grid-column:2;grid-row:2;justify-content:flex-end;margin-top:.375rem}
+ #lexeme-form .ws-part-fields{grid-template-columns:minmax(0,1fr)}
+}
+@container ws-memberships (max-width:28rem){
+ #lexeme-form .ws-part-main>.ws-part-summary{grid-column:1/-1}
+ #lexeme-form .ws-part-main>.ws-row-tools{grid-column:1/-1;grid-row:3}
+}
+@container ws-template (max-width:36rem){
+ #ws-template-slots>.ws-template-slot{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+ #ws-template-slots .ws-row-tools{grid-column:1/-1;justify-content:flex-end}
+}
+@media(max-width:1100px){
+ :is(#lexeme-form,#morpheme-form).lx-arranged .lx-classification-fields>.lx-field{grid-template-columns:9rem minmax(0,1fr)}
+ .lx-classification-fields .lx-field-tools{grid-column:2;justify-content:flex-start}
+}
+@media(max-width:650px){
+ :is(#lexeme-form,#morpheme-form).lx-arranged .lx-classification-fields>.lx-field{grid-template-columns:minmax(0,1fr)}
+ .lx-classification-fields .lx-field-tools{grid-column:1}
+}

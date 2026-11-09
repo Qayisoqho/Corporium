@@ -15,13 +15,16 @@ function morphPaletteValues(value,theme){
  const theme=()=>Object.hasOwn(morphPaletteThemes,root.dataset.theme)?root.dataset.theme:'docoid';
  const read=()=>{try{return normalizeMorphPalette(JSON.parse(localStorage.getItem(key)||'{}'));}catch{return normalizeMorphPalette({});}};
  let saved=read(),draft=null;
+ window.corporiumMorphPaletteDirty=()=>!!draft&&JSON.stringify(normalizeMorphPalette(draft))!==JSON.stringify(saved);
  function apply(value){root.dataset.morphColors=value.enabled?'on':'off';for(const [role,color] of Object.entries(morphPaletteValues(value,theme())))root.style.setProperty('--morph-display-'+role,color);}
  const area=document.createElement('fieldset');area.id='morph-color-settings';area.innerHTML=(globalThis.CorporiumI18n?.f("bdb4777ac83d06",()=>[Object.keys(morphPaletteRoles).map(role=>'<span class="morph-tone morph-tone-'+role+'">'+esc(morphPaletteRoles[role])+'</span>').join('')])??'<legend>当前皮肤 <small id="morph-color-theme"></small></legend><label class="morph-color-master"><input id="morph-colors-enabled" type="checkbox">启用成分配色</label><p class="morph-color-hint">关闭总开关或某一类型后，相关成分使用当前皮肤的 IPA 颜色。重叠形态只标记已关联的重叠部分，基底保持原配色。例句与右面板同步，语法标签列表保持原色。</p><div id="morph-color-rows"></div><div class="morph-color-preview" aria-label="成分颜色预览">'+Object.keys(morphPaletteRoles).map(role=>'<span class="morph-tone morph-tone-'+role+'">'+esc(morphPaletteRoles[role])+'</span>').join('')+'</div><div class="morph-color-bottom"><small>适用于所有语言；颜色按皮肤记忆，开关保存在本机。</small><button type="button" id="morph-colors-reset">恢复本皮肤默认色</button></div>');
  form.querySelector('button[type=submit]').before(area);
+ function alignLabels(){for(const label of area.querySelectorAll('label'))for(const node of [...label.childNodes])if(node.nodeType===3&&node.textContent.trim()){const text=document.createElement('span');text.className='morph-color-label-text';text.textContent=node.textContent;node.replaceWith(text);}}
+ alignLabels();
  const section=mountGlobalSettingsSection(area,'colors',(globalThis.CorporiumI18n?.f("c197e9d316c571",()=>[])??'成分配色'));$('global-settings-backup').before(section);
  function defaultColor(role){const value=getComputedStyle(root).getPropertyValue(morphPaletteDefaults[role]).trim();return /^#[\da-f]{6}$/i.test(value)?value:'#243d39';}
  function refreshControls(){
-  if(!draft)return;$('morph-colors-enabled').checked=draft.enabled;
+  if(!draft)return;alignLabels();$('morph-colors-enabled').checked=draft.enabled;
   for(const row of area.querySelectorAll('[data-color-role]')){const role=row.dataset.colorRole;row.querySelector('[data-role-enabled]').checked=draft.roles[role];for(const el of row.querySelectorAll('[data-color],[data-color-hex],[data-color-reset]'))el.disabled=!draft.enabled||!draft.roles[role];}
  }
  function render(){
@@ -37,8 +40,9 @@ function morphPaletteValues(value,theme){
  area.addEventListener('click',e=>{if(!draft)return;const reset=e.target.closest('[data-color-reset]');if(reset){delete draft.colors[theme()][reset.closest('[data-color-role]').dataset.colorRole];render();apply(draft);}});
  $('morph-colors-reset').onclick=()=>{if(draft){draft.colors[theme()]={};render();apply(draft);}};
  const open=typographyButton.onclick;typographyButton.onclick=async()=>{draft=normalizeMorphPalette(saved);render();return open();};
- const save=form.onsubmit;form.onsubmit=async e=>{const candidate=normalizeMorphPalette(draft||saved);await save(e);if(!dialog.open){saved=candidate;try{localStorage.setItem(key,JSON.stringify(saved));}catch{}draft=null;apply(saved);}};
+ const save=form.onsubmit;form.onsubmit=async e=>{const candidate=normalizeMorphPalette(draft||saved);const result=await save(e);if(result?.saved){saved=candidate;try{localStorage.setItem(key,JSON.stringify(saved));}catch{}draft=null;apply(saved);}return result;};
  dialog.addEventListener('close',()=>{draft=null;apply(saved);});
+ form.addEventListener('corporium-settings-discard',()=>{draft=null;apply(saved);});
  new MutationObserver(()=>{apply(draft||saved);if(draft)render();}).observe(root,{attributes:true,attributeFilter:['data-theme']});
  window.addEventListener('storage',e=>{if(e.key===key||e.key===null){saved=read();if(!draft)apply(saved);}});
  apply(saved);

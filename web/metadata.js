@@ -16,7 +16,7 @@ function renderFolders(){const open=savedFolderState();$('texts').dataset.folder
   $('texts').querySelectorAll('[data-folder-group]').forEach(el=>el.addEventListener('toggle',rememberFolderState));
   document.querySelectorAll('[data-text]').forEach(b=>b.onclick=safe(()=>selectText(b.dataset.text)));
   document.querySelectorAll('[data-folder-edit]').forEach(b=>b.onclick=()=>openFolder(folders.find(f=>f.id===b.dataset.folderEdit)));
-  document.querySelectorAll('[data-folder-menu]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();const menu=b.nextElementSibling,open=menu.hidden;closeFolderMenus();menu.hidden=!open;b.setAttribute('aria-expanded',String(open));});
+  document.querySelectorAll('[data-folder-menu]').forEach(b=>{b.classList.add('ui-icon-button');b.innerHTML=uiIcon('settings');b.onclick=e=>{e.preventDefault();e.stopPropagation();const menu=b.nextElementSibling,open=menu.hidden;closeFolderMenus();menu.hidden=!open;b.setAttribute('aria-expanded',String(open));};});
   document.querySelectorAll('.folder-tools').forEach(menu=>menu.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();closeFolderMenus();}));
   for(const [attr,dir] of [['folderUp',-1],['folderDown',1]])document.querySelectorAll(`[data-folder-${dir===-1?'up':'down'}]`).forEach(b=>b.onclick=safe(async()=>{await api('order-folder',{id:b.dataset[attr],direction:dir});await loadTexts()}));
 }

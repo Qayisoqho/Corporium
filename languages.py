@@ -7,16 +7,17 @@ import lexicon
 import font_catalog
 import annotations
 import grammar
-from corpus import analyze, clean, parse, export_entry
+from corpus import analyze, clean, parse, export_entry, word_numbers
 
 DEFAULT = 'ordos'
 FONTS = ('IPAPANNEW', 'Junicode', 'serif', 'sans-serif')
 
 
-def initialize(db):
+def initialize(db, *, seed_default=True):
+    """Seed the ordinary default only on a new catalogue, when requested."""
     first_catalogue=not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='languages'").fetchone()
     db.execute("CREATE TABLE IF NOT EXISTS languages(id TEXT PRIMARY KEY,name TEXT NOT NULL,metadata TEXT NOT NULL DEFAULT '{}',revision INTEGER NOT NULL DEFAULT 1)")
-    if first_catalogue:
+    if first_catalogue and seed_default:
         db.execute('INSERT OR IGNORE INTO languages VALUES(?,?,?,1)',(DEFAULT,'Ordos / 鄂尔多斯',json.dumps({'aliases':'鄂尔多斯蒙古语','ipa_font':'IPAPANNEW','annotation_font':'Junicode'},ensure_ascii=False)))
     for table in ('texts','folders','undo_steps'):
         if 'language_id' not in [r['name'] for r in db.execute('PRAGMA table_info('+table+')')]:
@@ -26,7 +27,7 @@ def initialize(db):
     db.execute('CREATE INDEX IF NOT EXISTS entries_text ON entries(text_id,position)')
     db.execute('CREATE INDEX IF NOT EXISTS undo_language ON undo_steps(language_id,id)')
     db.execute('CREATE TABLE IF NOT EXISTS undo_scopes(language_id TEXT PRIMARY KEY,step_limit INTEGER NOT NULL DEFAULT 20,generation INTEGER NOT NULL DEFAULT 0)')
-    if first_catalogue:db.execute("INSERT OR IGNORE INTO undo_scopes SELECT 'ordos',step_limit,generation FROM undo_settings WHERE id=1")
+    if first_catalogue and seed_default:db.execute("INSERT OR IGNORE INTO undo_scopes SELECT 'ordos',step_limit,generation FROM undo_settings WHERE id=1")
 
 
 def require(db, lid):
@@ -35,7 +36,7 @@ def require(db, lid):
     return row
 
 
-def save(db, body):
+def save(db, body, *, class_catalogs=()):
     previous_glossary={}
     name=body.get('name','').strip()
     if not name: raise ValueError('请填写语言名称')
@@ -57,7 +58,7 @@ def save(db, body):
         import paradigms
         data['paradigm_templates']=paradigms.templates(data['paradigm_templates'])
     for field,default in [('ipa_font','IPAPANNEW'),('annotation_font','Junicode'),('gloss_font','Junicode'),('translation_font','sans-serif')]:
-        if not font_catalog.valid_font(data.get(field,default)): raise ValueError('请选择列表中的字体')
+        if not font_catalog.valid_row_font(data.get(field,default)): raise ValueError('请选择列表中的字体')
     for field in ('ipa_variant','morpheme_variant','gloss_variant','translation_variant'):
         if data.get(field,'regular') not in ('regular','italic','bold','bolditalic'): raise ValueError('请选择有效的字体变体')
     for field in ('ipa_scale','morpheme_scale','gloss_scale','translation_scale'):
@@ -83,6 +84,12 @@ def save(db, body):
         lid=str(uuid.uuid4())
         db.execute('INSERT INTO languages VALUES(?,?,?,1)',(lid,name,json.dumps(data,ensure_ascii=False)))
     grammar.sync_legacy(db,lid,previous_glossary,glossary)
+    # A new imported language may carry its own translated form/tag catalogue.
+    # Mark supplied catalogues before factory seeding, rather than injecting a
+    # second catalogue whose names happen to be in another interface language.
+    if not body.get('id'):
+        for kind,marker in (('form','form-types-v1'),('usage_tag','usage-tag-types-v1')):
+            if kind in class_catalogs:lexicon.categories.ensure(db,lid,'_seed',marker)
     lexicon.categories.initialize_forms(db,lid)
     return {'ok':True,'id':lid,**(template_result if body.get('id') else {})}
 
@@ -183,8 +190,8 @@ def annotate(entry, default, catalogue):
         if data.get(field,'regular') not in ('regular','italic','bold','bolditalic'): raise ValueError('请选择有效的字体变体')
     glossary=data.get('glossary',{})
     if data.get('check_glossary'):
-        for n,w in enumerate(entry['words'],1):
-            if w.get('unit_type') in ('phonological_boundary','punctuation'): continue
+        for n,w in zip(word_numbers(entry['words']),entry['words']):
+            if n is None: continue
             unknown=grammar.unknown_for_warning(w['gloss'],lid,lang['metadata'])
             if unknown: entry['warnings'].append(f'第 {n} 词：疑似语法标签尚未登记（请确认） '+', '.join(unknown))
     entry.update(language_id=entry.get('language_id') or '',effective_language_id=lid,language_name=lang['name'],text_language_id=default,

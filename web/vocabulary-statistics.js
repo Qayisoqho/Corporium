@@ -57,7 +57,7 @@ function render(data,{reload,card,source}){
   body.innerHTML='<table class="analysis-table"><thead><tr>'+[t('语言'),...head.map(t)].map(s=>'<th>'+s+'</th>').join('')+'</tr></thead><tbody>'+v.rows.map((r,i)=>{
    const language=languageList.find(l=>l.id===r.language_id),style=languageTypography(JSON.parse(language?.metadata||'{}'));
    const form=`<button type="button" class="text-button" data-vocabulary-item="${i}"><span style="${esc(custom&&selection.group_by!=='entry'?'':style)}">${custom&&selection.group_by!=='entry'?esc(r.system_label?t(r.form):r.form):rich(r.form)}</span></button>`,frequency=`<button type="button" class="text-button" data-vocabulary-item="${i}">${r.count}</button>`,ratio=v.denominator?(r.count/v.denominator*100).toFixed(2)+'%':'0%';
-   const cells=[esc(language?.name||r.language_id),form,...(custom&&selection.group_by==='entry'?[esc(r.gloss||'')]:[]),...(morph&&!custom?[esc(r.gloss||''),t(kinds[r.kind]||'类型未定')]:[]),frequency,ratio,...(morph?[r.words]:[]),r.sentences,r.texts,...(morph?[r.types]:[]),...(custom?[r.entries]:[])];
+   const cells=[esc(language?.name||r.language_id),form,...(custom&&selection.group_by==='entry'?[glossDisplay(r.gloss||'',r.language_id)]:[]),...(morph&&!custom?[glossDisplay(r.gloss||'',r.language_id),t(kinds[r.kind]||'类型未定')]:[]),frequency,ratio,...(morph?[r.words]:[]),r.sentences,r.texts,...(morph?[r.types]:[]),...(custom?[r.entries]:[])];
    return '<tr>'+cells.map(s=>'<td>'+s+'</td>').join('')+'</tr>';
   }).join('')+'</tbody></table>';
   body.querySelectorAll('[data-vocabulary-item]').forEach(b=>b.onclick=()=>change({item:v.rows[+b.dataset.vocabularyItem].key}));
