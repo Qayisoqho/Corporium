@@ -14,6 +14,7 @@ import analysis_workspace
 import backup_policy
 import journal
 import languages
+import record_sources
 
 
 # All predicates are application constants. Capture rowids before deleting any
@@ -40,6 +41,8 @@ PREDICATES = {
     'code_time_links':f'interval_id IN ({INTERVALS}) OR span_id IN (SELECT id FROM code_spans WHERE {OWNER})',
     'code_spans':OWNER, 'code_sentence_index':OWNER,
     'gloss_bindings':f"(owner_kind='corpus' AND owner_id IN ({ENTRIES})) OR (owner_kind='independent' AND owner_id IN ({EXAMPLES}))",
+    'independent_links':f'example_id IN ({EXAMPLES})',
+    'independent_word_overrides':f'example_id IN ({EXAMPLES})',
     'annotation_cells':OWNER,
     'lexical_reviews':f'id IN ({LINKS})', 'component_links':f'id IN ({LINKS})',
     'morphology_analyses':f'id IN ({LINKS})', 'lexical_links':f'id IN ({LINKS})',
@@ -57,7 +60,7 @@ PREDICATES = {
 }
 LIVE_TABLES = tuple(dict.fromkeys(journal.TABLES + ('timeline_codes','timeline_speakers','code_sentence_index')))
 REFERENCE_ARRAYS = {'features','tags','semantic_classes','language_ids','judges','members'}
-JSON_COLUMNS = {'body','metadata','features','people','word_ids','snapshot'}
+JSON_COLUMNS = {'body','metadata','features','people','word_ids','snapshot','payload'}
 
 
 def references(value, ids, lid, key=''):
@@ -83,9 +86,12 @@ def plan(db,lid):
     for table,predicate in PREDICATES.items():
         db.execute(f'INSERT INTO language_delete_rows SELECT :table,rowid FROM {table} WHERE {predicate}',{'lid':lid,'table':table})
         count=0
-        for row in db.execute(f'SELECT rowid AS _rowid,* FROM {table} WHERE rowid IN (SELECT rid FROM language_delete_rows WHERE table_name=?) ORDER BY rowid',(table,)):
-            digest.update(table.encode());digest.update(json.dumps(tuple(row),ensure_ascii=False).encode())
-            if 'id' in row.keys() and isinstance(row['id'],str) and table!='languages':ids.add(row['id'])
+        rows=db.execute(f'SELECT rowid AS _rowid,* FROM {table} WHERE rowid IN (SELECT rid FROM language_delete_rows WHERE table_name=?) ORDER BY rowid',(table,))
+        if table in record_sources.TABLES:rows=record_sources.with_bodies(db,table,rows)
+        for row in rows:
+            data=dict(row)
+            digest.update(table.encode());digest.update(json.dumps(data,ensure_ascii=False,sort_keys=True).encode())
+            if isinstance(data.get('id'),str) and table!='languages':ids.add(data['id'])
             count+=1
         counts[table]=count
     # Keep concurrency proof small for history, but include changes to its scope.
@@ -97,10 +103,12 @@ def blockers(db,ids,lid):
     found=[]
     names={r['id']:r['name'] for r in db.execute('SELECT id,name FROM languages')}
     for table in LIVE_TABLES:
-        for row in db.execute(f'SELECT * FROM {table} WHERE rowid NOT IN (SELECT rid FROM language_delete_rows WHERE table_name=?)',(table,)):
+        rows=db.execute(f'SELECT * FROM {table} WHERE rowid NOT IN (SELECT rid FROM language_delete_rows WHERE table_name=?)',(table,))
+        if table in record_sources.TABLES:rows=record_sources.with_bodies(db,table,rows)
+        for row in rows:
             data=dict(row)
             for col in JSON_COLUMNS & data.keys():
-                data[col]=json.loads(data[col])
+                if isinstance(data[col],str):data[col]=json.loads(data[col])
             if references(data,ids,lid):
                 owner={'timeline_speakers':'合作者','timeline_codes':'语言标记'}.get(table) or names.get(data.get('language_id'),'其他语言的材料')
                 title=data.get('name') or data.get('title') or data.get('headword') or data.get('form')

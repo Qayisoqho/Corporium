@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 import unittest
 from pathlib import Path
@@ -32,7 +33,7 @@ class AnalysisTests(unittest.TestCase):
         self.seed('#pass([one], (([home-n],[家-GEN]),([。],[]),([#],[#]),([go],[去-PST])), [first])\n#pass([two], (([home-n],[家-GEN]),([stay],[留])), [second])')
         # Explicitly confirmed punctuation is excluded from word-distance counting.
         with server.connect() as db:
-            r=db.execute('SELECT id,body FROM entries ORDER BY position LIMIT 1').fetchone();b=json.loads(r['body']);b['words'][1].update(punctuation=True,punctuation_form='。');db.execute('UPDATE entries SET body=? WHERE id=?',(json.dumps(b),r['id']))
+            r=db.execute('SELECT id,body FROM entries_documents ORDER BY position LIMIT 1').fetchone();b=json.loads(r['body']);b['words'][1].update(punctuation=True,punctuation_form='。');source_fixtures.replace(db,'entries',r['id'],json.dumps(b))
         r=self.execute(conditions=[dict(field='morpheme',value='n'),dict(field='tag',value='GEN',relation='same_word'),dict(field='form',value='go',relation='right',min=1,max=1)])
         self.assertEqual((r['summary']['hits'],r['summary']['sentences']),(1,1))
         p=self.page(r);self.assertEqual(p['items'][0]['value'],'n');self.assertEqual(p['items'][0]['word'],0)
@@ -63,7 +64,7 @@ class AnalysisTests(unittest.TestCase):
         for _ in range(3):self.page(last,page=99,dimension='text')
         self.assertEqual(len(self.call('/api/analysis-records?language=ordos')[1]['recent']),30)
 
-    def test_listing_purges_expired_runs_but_preserves_saved_snapshot(self):
+    def test_listing_is_read_only_and_idle_collection_preserves_saved_snapshot(self):
         e=self.seed();old=self.execute()
         code,snap=self.call('/api/analysis-save',dict(kind='snapshot',name='keep',notes='',run_id=old['id']))
         self.assertEqual(code,200,snap)
@@ -73,6 +74,11 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual([r['id'] for r in records['recent']],[fresh['id']])
         self.assertIn(snap['id'],[r['id'] for r in records['saved']])
         with server.connect() as db:
+            self.assertIsNotNone(db.execute('SELECT id FROM analysis_runs WHERE id=?',(old['id'],)).fetchone())
+            writes=db.total_changes
+            analysis.listing(db,'ordos')
+            self.assertEqual(db.total_changes,writes)
+            analysis.maintain(db,budget_ms=100)
             self.assertIsNone(db.execute('SELECT id FROM analysis_runs WHERE id=?',(old['id'],)).fetchone())
         self.assertTrue(self.page(snap,snapshot='true')['snapshot'])
 

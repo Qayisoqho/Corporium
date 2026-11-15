@@ -10,11 +10,18 @@ def readings(value):
     return list(dict.fromkeys(v.strip() for v in value if v.strip()))
 
 def table(db,lid,q):
+    import homophone_index
+    indexed=homophone_index.table(db,lid,q)
+    if indexed is not None:return indexed
+    return scan_table(db,lid,q)
+
+
+def scan_table(db,lid,q):
     if lid=='all':raise ValueError('请先选择一种语言，再生成同音语素表')
     fallback=q.get('fallback')=='true';query=q.get('q','').casefold();writing=q.get('writing','')
     types=[dict(r) for r in db.execute('SELECT * FROM writing_types WHERE language_id=?',(lid,))]
     if writing and writing not in {t['id'] for t in types}:raise ValueError('书写类型不属于当前语言')
-    morphs={r['id']:{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT * FROM morphemes WHERE language_id=?',(lid,))}
+    morphs={r['id']:{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT * FROM morphemes_documents WHERE language_id=?',(lid,))}
     from collections import Counter
     form_counts=Counter(m['form'] for m in morphs.values())
     for m in long_tasks.steps(morphs.values()):
@@ -91,6 +98,14 @@ def source_words(db,lid,identity,page=1):
         import morpheme_registry
         morpheme_registry.get(db,identity,lid)
         where="x.language_id=? AND EXISTS (SELECT 1 FROM morpheme_components c,json_each(x.body,'$.word_structure.analyses') a,json_each(a.value,'$.components') part WHERE c.lexeme_id=x.id AND c.morpheme_id=? AND c.analysis_id=json_extract(a.value,'$.id') AND c.component_id=json_extract(part.value,'$.id'))";args=(lid,identity)
+        import homophone_index, material_search_index
+        if db.execute("SELECT 1 FROM sqlite_master WHERE name='hp_dirty'").fetchone():
+            try:
+                with material_search_index.preparing(db):homophone_index.prepare(db)
+            except material_search_index.Unavailable:pass
+            else:
+                where='x.language_id=? AND x.id IN (SELECT owner FROM hp_occurrences WHERE identity=? AND lid=? AND stage<2)'
+                args=(lid,identity,lid)
     total=db.execute('SELECT count(*) FROM dictionary_targets x WHERE '+where,args).fetchone()[0]
     pages=max(1,(total+39)//40);page=max(1,min(int(page),pages))
     words=[]

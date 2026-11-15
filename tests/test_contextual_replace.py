@@ -1,7 +1,10 @@
 import json
 import unittest
+from unittest.mock import patch
 import test_lexicon
 import server
+import sentence_rows
+import text_replace
 
 class ContextualReplaceTests(unittest.TestCase):
     setUp=test_lexicon.LexiconTests.setUp
@@ -72,5 +75,31 @@ class ContextualReplaceTests(unittest.TestCase):
         self.example();args,p=self.plan(replacement='[');self.assertTrue(p['blocked'])
         self.assertEqual(self.apply(args,p)[0],400)
         self.assertEqual({r['body']['ipa'] for r in self.ok('example-library')['items']},{'old old'})
+
+    def test_translation_uses_only_hits_and_rechecks_the_match_set(self):
+        def save(translation,old=None):
+            body=dict(old['body'] if old else dict(ipa='a',words=[dict(form='a',gloss='A')]),translation=translation)
+            return self.ok('example-save',dict(id=old['id'],revision=old['revision'],body=body) if old else dict(body=body))
+
+        hit=save('Keep this')
+        other=save('different')
+        args=dict(owner_kind='independent',field='translation',find='keep',mode='prefix',case=False,replacement='Change')
+        with server.connect() as db,patch.object(sentence_rows,'read',wraps=sentence_rows.read) as read:
+            plan=text_replace.preview(db,args,'ordos')
+            self.assertEqual(plan['records'],2)
+            self.assertEqual([(c['id'],c['after']) for c in plan['changes']],[(hit['id'],'Change this')])
+            # Scalar translation previews use the typed header and do not load word rows.
+            read.assert_not_called()
+            before=sentence_rows.one(db,'independent',hit['id'])
+        other=save('another unrelated translation',other)
+        self.assertEqual(self.apply(args,plan)[0],200)
+        with server.connect() as db:
+            self.assertEqual(sentence_rows.one(db,'independent',hit['id']),dict(before,translation='Change this',edited=True))
+        self.assertEqual(self.undo()[0],200)
+        with server.connect() as db:self.assertEqual(sentence_rows.one(db,'independent',hit['id']),before)
+        plan=self.ok('text-replace-preview',args)
+        save('keep newly matching',other)
+        self.assertEqual(self.apply(args,plan)[0],400)
+        self.assertEqual(self.ok('independent-example?id='+hit['id'])['body']['translation'],'Keep this')
 
 if __name__=='__main__':unittest.main()

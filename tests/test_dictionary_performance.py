@@ -1,4 +1,5 @@
 """Large-list reads must stay bounded without changing dictionary semantics."""
+import source_fixtures
 import json
 import unittest
 from unittest.mock import patch
@@ -15,13 +16,13 @@ class DictionaryPerformanceTests(unittest.TestCase):
         with server.connect(audit=False) as db:
             for i in range(123):
                 b=lexicon.normalize({'notes':'keep','orthographies':[{'label':'旧书写','text':'字'+str(i),'font':'Junicode'}],'usages':[{'pos':'名词','senses':[{'short_gloss':'义'+str(i),'definition':'详细内容'}]}]})
-                db.execute('INSERT INTO lexemes VALUES(?,?,?,?,1)',('x'+str(i),'ordos',f'form-{i:03}',json.dumps(b)))
-            db.executemany('INSERT INTO morphemes VALUES(?,?,?,?,?,1)',[(f'm{i}','ordos',f'p{i:03}',1,'{"gloss":"note"}') for i in range(123)])
+                source_fixtures.seed(db,'lexemes',('id', 'language_id', 'headword', 'body', 'revision'),('x'+str(i), 'ordos', f'form-{i:03}', json.dumps(b), 1))
+            source_fixtures.seed_many(db,'morphemes',('id', 'language_id', 'form', 'number', 'body', 'revision'),((row[0], row[1], row[2], row[3], row[4], 1) for row in [(f'm{i}','ordos',f'p{i:03}',1,'{"gloss":"note"}') for i in range(123)]))
 
     def test_specific_dictionary_fields_skip_evidence_but_combined_example_conditions_keep_it(self):
         self.seed()
         with server.connect(audit=False) as db:
-            db.execute('INSERT INTO dictionary_examples VALUES(?,?,?,1)',('ex','ordos',json.dumps(dict(ipa='',translation='evidence-only',words=[],targets=[dict(lexeme_id='x0')]))))
+            source_fixtures.seed(db,'dictionary_examples',('id', 'language_id', 'body', 'revision'),('ex', 'ordos', json.dumps(dict(ipa='',translation='evidence-only',words=[],targets=[dict(lexeme_id='x0')])), 1))
             statements=[];db.set_trace_callback(statements.append)
             result=lexicon.list_lexemes(db,'ordos','form-0',search=dict(field='headword'),summary=True)
             self.assertEqual(result['total'],100)
@@ -42,7 +43,7 @@ class DictionaryPerformanceTests(unittest.TestCase):
         self.seed()
         with server.connect(audit=False) as db:
             example=dict(ipa='Straße',translation='e\u0301 evidence-only',notes='',words=[dict(form='word',gloss='GEN',annotation_id='w0')],targets=[dict(lexeme_id='x0'),dict(lexeme_id='x1')])
-            db.execute('INSERT INTO dictionary_examples VALUES(?,?,?,1)',('ex','ordos',json.dumps(example)))
+            source_fixtures.seed(db,'dictionary_examples',('id', 'language_id', 'body', 'revision'),('ex', 'ordos', json.dumps(example), 1))
             db.execute("INSERT INTO annotation_layers(id,language_id,name,font,anchor) VALUES('layer','ordos','extra','Junicode','word')")
             db.execute("INSERT INTO annotation_cells VALUES('cell','independent','ex','w0','layer','layer-only',1)")
             rows=[{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT * FROM dictionary_targets')]
@@ -60,11 +61,11 @@ class DictionaryPerformanceTests(unittest.TestCase):
         self.seed()
         self.call('/api/import',dict(title='dense',content='\n'.join('#pass([word], (([word],[note]),), [translation])' for _ in range(80))))
         with server.connect(audit=False) as db:
-            raw=db.execute("SELECT body FROM lexemes WHERE id='x0'").fetchone()[0]
+            raw=db.execute("SELECT body FROM lexemes_documents WHERE id='x0'").fetchone()[0]
             body=json.loads(raw);u=body['usages'][0];sid=u['senses'][0]['id']
             units=list(db.execute("SELECT id FROM corpus_units WHERE kind='word' AND active=1"))
             db.executemany('INSERT INTO lexical_links VALUES(?,?,?,?,?,?,?,1)',[(f'l{i}',r['id'],'x0',u['id'],sid,'','ordos') for i,r in enumerate(units)])
-            db.execute('INSERT INTO dictionary_examples VALUES(?,?,?,1)',('ex','ordos',json.dumps(dict(ipa='',words=[],targets=[dict(lexeme_id='x0',usage_id=u['id'],sense_id=sid) for _ in range(80)]))))
+            source_fixtures.seed(db,'dictionary_examples',('id', 'language_id', 'body', 'revision'),('ex', 'ordos', json.dumps(dict(ipa='',words=[],targets=[dict(lexeme_id='x0',usage_id=u['id'],sense_id=sid) for _ in range(80)])), 1))
             loads=json.loads;seen=[]
             def counting(value,*args,**kwargs):
                 if value==raw:seen.append(value)
@@ -72,7 +73,7 @@ class DictionaryPerformanceTests(unittest.TestCase):
             with patch.object(json,'loads',side_effect=counting):lexicon.validate_links(db)
             self.assertLess(len(seen),12)
             body['usages'][0]['senses']=[]
-            db.execute("UPDATE lexemes SET body=? WHERE id='x0'",(json.dumps(body),))
+            source_fixtures.replace(db,'lexemes','x0',json.dumps(body))
             with self.assertRaisesRegex(ValueError,'义项'):lexicon.validate_links(db)
 
     def test_default_page_only_expands_its_rows_and_summary_preserves_selection_identity(self):
@@ -95,7 +96,7 @@ class DictionaryPerformanceTests(unittest.TestCase):
         self.seed()
         with server.connect(audit=False) as db:
             body=json.dumps(lexicon.normalize({}))
-            db.execute("INSERT INTO lexemes VALUES('peer','ordos','form-029',?,1)",(body,))
+            source_fixtures.seed(db,'lexemes',('id', 'language_id', 'headword', 'body', 'revision'),('peer', 'ordos', 'form-029', body, 1))
             a=lexicon.list_lexemes(db,'ordos',page=1,summary=True)['items'][-1]
             b=lexicon.list_lexemes(db,'ordos',page=2,summary=True)['items'][0]
             self.assertEqual([a['body']['homonym_number'],b['body']['homonym_number']],[1,2])
@@ -106,7 +107,8 @@ class DictionaryPerformanceTests(unittest.TestCase):
     def test_catalog_discovery_matches_documents_without_constructing_them(self):
         self.seed()
         with server.connect(audit=False) as db:
-            rows=[{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT * FROM lexemes')]
+            from record_sources import with_bodies
+            rows=list(with_bodies(db,'lexemes',db.execute('SELECT id,headword,language_id,revision FROM lexemes')))
             eager=dictionary_search.SearchIndex(db,'ordos',rows)
             with patch.object(dictionary_search.SearchIndex,'document',side_effect=AssertionError('catalog should not flatten documents')):
                 catalog=dictionary_search.catalog(db,'ordos')
@@ -116,7 +118,7 @@ class DictionaryPerformanceTests(unittest.TestCase):
         self.seed()
         with server.connect(audit=False) as db:
             def update(xid,change):
-                b=json.loads(db.execute('SELECT body FROM lexemes WHERE id=?',(xid,)).fetchone()[0]);change(b);db.execute('UPDATE lexemes SET body=? WHERE id=?',(json.dumps(b),xid))
+                b=json.loads(db.execute('SELECT body FROM lexemes_documents WHERE id=?',(xid,)).fetchone()[0]);change(b);source_fixtures.replace(db,'lexemes',xid,json.dumps(b))
             update('x0',lambda b:b.update(relation={'type':'derivation','base_id':'x1'},word_structure={'analyses':[{'components':[{'lexeme_id':'x2'}]}]}))
             update('x3',lambda b:b.update(relation={'type':'stem','base_id':'x0'}))
             update('x4',lambda b:b.update(word_structure={'analyses':[{'components':[{'lexeme_id':'x0'}]}]}))

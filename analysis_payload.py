@@ -14,6 +14,39 @@ from collections import OrderedDict
 import long_tasks
 
 
+COUNTED_HITS = 'corporium_counted_hits_v1'
+
+
+def can_group_counts(hits):
+    return all(isinstance(hit,dict) and set(hit)=={'entry_id','word','form','value','unit_id'}
+               and isinstance(hit['entry_id'],str) and type(hit['word']) is int
+               and isinstance(hit['form'],str) and hit['unit_id']=='' and hit['value']==hit['form']
+               for hit in hits)
+
+
+def counted_groups(hits):
+    """Losslessly group the fixed five fields of count occurrences by record."""
+    from itertools import groupby
+    for identifier, rows in groupby(hits,key=lambda hit:hit['entry_id']):
+        yield (identifier,[(hit['word'],hit['form']) for hit in rows])
+
+
+def count_hits(group):
+    if not isinstance(group,list) or len(group)!=2 or not isinstance(group[0],str) or not isinstance(group[1],list):
+        raise ValueError('分析结果 JSON 结构无效')
+    for word in group[1]:
+        if not isinstance(word,list) or len(word)!=2 or not isinstance(word[0],int) or not isinstance(word[1],str):
+            raise ValueError('分析结果 JSON 结构无效')
+        yield dict(entry_id=group[0],word=word[0],form=word[1],value=word[1],unit_id='')
+
+
+def hit_values(reader,compact=False):
+    for _ in reader.entries('array'):
+        value=reader.value()
+        if compact:yield from count_hits(value)
+        else:yield value
+
+
 STATISTICS_LIMIT=16*1024**2
 _statistics=OrderedDict()
 _statistics_bytes=0
@@ -99,7 +132,14 @@ class Reader:
         while True:
             try:value,end=self.decoder.raw_decode(self.buffer,self.position)
             except json.JSONDecodeError:
-                if self.more():continue
+                # Retry a large value only after geometrically more input.
+                # Retrying each 64 KiB block repeatedly decodes its full prefix.
+                target=max(65536,2*(len(self.buffer)-self.position))
+                extended=False
+                while len(self.buffer)-self.position<target:
+                    if not self.more():break
+                    extended=True
+                if extended:continue
                 raise
             # A numeric token can straddle an input chunk. Do not accept a
             # valid prefix before seeing its delimiter or the end of input.
@@ -157,6 +197,8 @@ def read(payload,*,record_ids=(),forms=None,normalize=None,only=None,record_sink
     """
     reader=Reader(text_chunks(payload));result={};pool=HitPool()
     for key in reader.entries('object'):
+        compact=key==COUNTED_HITS
+        if compact:key='hits'
         wanted=only is None or key in only
         if key=='records' and reader.peek()=='{':
             ids=set(record_ids(result) if callable(record_ids) else record_ids);records=SelectedRecords()
@@ -170,8 +212,7 @@ def read(payload,*,record_ids=(),forms=None,normalize=None,only=None,record_sink
             if wanted:result[key]=records
         elif key=='hits' and reader.peek()=='[':
             hits=[]
-            for position,_ in enumerate(reader.entries('array')):
-                hit=reader.value()
+            for position,hit in enumerate(hit_values(reader,compact)):
                 if hit_sink is not None:hit_sink(position,hit)
                 if wanted:hits.append(pool.apply(hit))
             if wanted:result[key]=hits
@@ -199,7 +240,11 @@ def items(payload,section):
     """Stream one top-level array/object section, retaining just one item."""
     reader=Reader(text_chunks(payload))
     for key in reader.entries('object'):
-        if key in ('records','hits'):
+        if key==COUNTED_HITS:
+            for value in hit_values(reader,True):
+                if section=='hits':yield None,value
+            if section=='hits':return
+        elif key in ('records','hits'):
             kind='object' if key=='records' else 'array'
             for identity in reader.entries(kind):
                 value=reader.value()
@@ -212,7 +257,9 @@ def sections(payload):
     """Yield top-level fields; consume each hit/card iterator before advancing."""
     reader=Reader(text_chunks(payload))
     for key in reader.entries('object'):
-        if key in ('hits','records'):
+        if key==COUNTED_HITS:
+            yield 'hits',((None,value) for value in hit_values(reader,True))
+        elif key in ('hits','records'):
             def values(kind='array' if key=='hits' else 'object'):
                 for identity in reader.entries(kind):yield identity,reader.value()
             yield key,values()

@@ -5,14 +5,13 @@ import uuid
 from metadata import TABLES
 from datetime import datetime, timezone
 import backup_policy
+import sentence_rows
+import record_sources
 
 
 def copy_entry(db,source,target_id,position,evidence=None):
     """Fork sentence evidence without changing the source text or ordering."""
     eid=str(uuid.uuid4())
-    db.execute('INSERT INTO entries(id,text_id,position,body,revision) VALUES(?,?,?,?,1)',(eid,target_id,position,source['body']))
-    import collaborators
-    collaborators.copy_sentence(db,source['id'],eid)
     # Copy active and retired evidence alike, with fresh globally unique identities.
     units=[dict(r) for r in db.execute('SELECT * FROM corpus_units WHERE entry_id=?',(source['id'],))]
     mapping={u['id']:str(uuid.uuid4()) for u in units}
@@ -21,7 +20,10 @@ def copy_entry(db,source,target_id,position,evidence=None):
         if isinstance(value,dict):return {k:mapping.get(v,v) if k in ('unit_id','parent_id','annotation_id') and isinstance(v,str) else remap(v) for k,v in value.items()}
         return value
     import reduplication
-    db.execute('UPDATE entries SET body=? WHERE id=?',(json.dumps(reduplication.fork(remap(json.loads(source['body']))),ensure_ascii=False),eid))
+    body=reduplication.fork(remap(sentence_rows.one(db,'corpus',source['id'])))
+    sentence_rows.write(db,'corpus',eid,body,columns=dict(text_id=target_id,position=position),insert=True)
+    import collaborators
+    collaborators.copy_sentence(db,source['id'],eid)
     for u in long_tasks.steps(units):
         db.execute('INSERT INTO corpus_units(id,entry_id,kind,parent_id,position,form,gloss,active,revision) VALUES(?,?,?,?,?,?,?,?,1)',(mapping[u['id']],eid,u['kind'],mapping.get(u['parent_id']),u['position'],u['form'],u['gloss'],u['active']))
     # Bindings locate their owning word by its new identity. Establish all
@@ -62,20 +64,49 @@ def organize(db, action, body, backup_dir):
             raise ValueError('文本不存在，请刷新页面')
         return row
     def rows(tid):
-        return list(db.execute('SELECT * FROM entries WHERE text_id=? ORDER BY position,id', (tid,)))
+        return list(db.execute('SELECT id,text_id,position,revision FROM entries WHERE text_id=? ORDER BY position,id', (tid,)))
     def order(tid, records):
-        for position, row in long_tasks.steps(enumerate(records, 1)):
-            db.execute('UPDATE entries SET text_id=?,position=? WHERE id=?', (tid, position, row['id']))
+        sql='UPDATE entries SET text_id=?,position=? WHERE id=? AND (text_id IS NOT ? OR position IS NOT ?)'
+        if not record_sources.native(db):
+            for position,row in long_tasks.steps(enumerate(records,1)):
+                db.execute(sql,(tid,position,row['id'],tid,position))
+            return
+        for start in long_tasks.steps(range(0,len(records),200)):
+            positions={row['id']:position for position,row in enumerate(records[start:start+200],start+1)}
+            current=db.execute('SELECT id,text_id,position FROM entries WHERE id IN ('+
+                               ','.join('?' for _ in positions)+')',tuple(positions))
+            changed=[row['id'] for row in current if row['text_id']!=tid or row['position']!=positions[row['id']]]
+            if not changed:continue
+            bodies=sentence_rows.read(db,'corpus',changed)
+            # A position change keeps the exact source. Share its image with
+            # both sides of the journal instead of assembling it twice.
+            with record_sources.writing_batch(db,'entries',{key:(bodies[key],bodies[key]) for key in changed}):
+                db.executemany(sql,((tid,positions[key],key,tid,positions[key]) for key in changed))
     def provenance(row, source):
-        data=json.loads(row['body'])
+        data=sentence_rows.one(db,'corpus',row['id'])
         if 'origin' not in data:
-            data['origin']={'text_id':source['id'], 'title':source['title'], 'source':source['source']}
-            db.execute('UPDATE entries SET body=? WHERE id=?',(json.dumps(data,ensure_ascii=False),row['id']))
+            origin={'text_id':source['id'], 'title':source['title'], 'source':source['source']}
+            sentence_rows.write(db,'corpus',row['id'],dict(data,origin=origin),bump=False,previous=data)
     def backup():
         import streaming_json
+        import journal
+        import independent_links
         from pathlib import Path
         job=long_tasks.CURRENT.get()
-        data={'format':'ordos-corpus-v1','created':datetime.now(timezone.utc).isoformat(), **{t:streaming_json.TableRows(db,t) for t in TABLES}}
+        tables={t:streaming_json.TableRows(db,t,read_from='analysis_run_documents' if t=='analysis_runs' else None)
+                for t in TABLES if t!='undo_steps' and t not in record_sources.TABLES and t not in independent_links.TABLES}
+        for table in independent_links.TABLES:
+            tables[table]=streaming_json.IndependentBackupRows(db,table)
+        for table in record_sources.KINDS:
+            if record_sources.native(db) and table in sentence_rows.TABLES.values():
+                tables[table]=streaming_json.SentenceBackupRows(db,record_sources.KINDS[table])
+                continue
+            columns=','.join(record_sources.META[table])
+            tables[table]=streaming_json.Rows(db,f'SELECT rowid AS rowid,{columns} FROM {table}',
+                transform=record_sources.portable_row,source=table)
+        tables['undo_steps']=streaming_json.Rows(db,'SELECT rowid AS rowid,* FROM undo_steps',
+                                                transform=journal.portable_step)
+        data={'format':'ordos-corpus-v1','created':datetime.now(timezone.utc).isoformat(), **tables}
         saved=backup_policy.write_json(backup_dir,data,stream=True,defer_prune=bool(job))
         if job:
             job['created'].append(Path(backup_dir)/saved)
@@ -86,7 +117,7 @@ def organize(db, action, body, backup_dir):
         if body.get('confirmed') is not True:
             raise ValueError('请再次确认删除')
         if action=='delete-entry':
-            row=db.execute('SELECT * FROM entries WHERE id=?',(body['id'],)).fetchone()
+            row=db.execute('SELECT id,text_id,revision FROM entries WHERE id=?',(body['id'],)).fetchone()
             if row is None: raise ValueError('句子不存在，请刷新页面')
             if row['revision']!=body['revision'] or row['text_id']!=body['text_id']:
                 raise ValueError('句子已发生变化，请刷新后再删除')
@@ -111,7 +142,7 @@ def organize(db, action, body, backup_dir):
         return text_copy.copy(db,body)
 
     if action=='duplicate-entry':
-        source=db.execute('SELECT * FROM entries WHERE id=?',(body.get('id'),)).fetchone()
+        source=db.execute('SELECT id,text_id,revision FROM entries WHERE id=?',(body.get('id'),)).fetchone()
         if not source or source['text_id']!=body.get('text_id') or source['revision']!=body.get('revision'):
             raise ValueError('原句已变化，请刷新后重新复制')
         records=rows(source['text_id'])
@@ -129,7 +160,7 @@ def organize(db, action, body, backup_dir):
         return {'ok':True,'id':eid,'text_id':source['text_id'],'position':at+1}
 
     if action=='reorder-entry':
-        row=db.execute('SELECT * FROM entries WHERE id=?',(body.get('id'),)).fetchone()
+        row=db.execute('SELECT id,text_id,position,revision FROM entries WHERE id=?',(body.get('id'),)).fetchone()
         if not row or row['text_id']!=body.get('text_id') or row['revision']!=body.get('revision') or row['position']!=body.get('position'):raise ValueError('句子或顺序已变化，请刷新后重试')
         records=rows(row['text_id']);old=next(i for i,r in enumerate(records) if r['id']==row['id'])
         remaining=[r for r in records if r['id']!=row['id']];where=body.get('where')
@@ -171,8 +202,9 @@ def organize(db, action, body, backup_dir):
         if source['language_id']!=target['language_id']:raise ValueError('句子复制或移动须在同一语言内进行')
         ids=body['ids']
         if not isinstance(ids,list) or not ids or len(ids)!=len(set(ids)): raise ValueError('请选择有效的句子')
+        selected=set(ids)
         source_rows=rows(source['id']); target_rows=rows(target['id'])
-        picked=[r for r in source_rows if r['id'] in set(ids)]
+        picked=[r for r in source_rows if r['id'] in selected]
         if len(picked)!=len(ids): raise ValueError('所选句子已移动或删除，请刷新后重新选择')
         if body.get('source_order') is not None and body['source_order']!=[r['id'] for r in source_rows]:raise ValueError('来源句序已变化，请重新打开')
         if body.get('target_order') is not None and body['target_order']!=[r['id'] for r in target_rows]:raise ValueError('目标句序已变化，请重新打开')
@@ -189,12 +221,12 @@ def organize(db, action, body, backup_dir):
             copies=[]
             for r in long_tasks.steps(picked):
                 eid=copy_entry(db,r,target['id'],at+len(copies)+1)
-                copied=db.execute('SELECT * FROM entries WHERE id=?',(eid,)).fetchone()
+                copied={'id':eid}
                 provenance(copied,source);copies.append(copied)
             order(target['id'],target_rows[:at]+copies+target_rows[at:])
             return {'ok':True,'id':target['id'],'position':at+1,'count':len(copies),'backup':saved}
         for r in long_tasks.steps(picked): provenance(r,source)
-        order(source['id'],[r for r in source_rows if r['id'] not in set(ids)])
+        order(source['id'],[r for r in source_rows if r['id'] not in selected])
         order(target['id'],target_rows[:at]+picked+target_rows[at:])
         return {'ok':True,'id':target['id'],'position':at+1,'count':len(picked),'backup':saved}
 

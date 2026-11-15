@@ -7,7 +7,7 @@
  const label=text('录音','Record');
  const markup=(kind,id)=>`<button type="button" data-record-kind="${esc(kind)}" data-record-id="${esc(id)}">${label}</button>`;
  window.CorporiumRecorder={button(kind,id){const host=document.createElement('span');host.innerHTML=markup(kind,id);return host.firstElementChild;},open};
- const timelineButton=$('tl-new');if(timelineButton){const button=window.CorporiumRecorder.button('timeline','');button.id='tl-record';button.textContent='●';button.title=label;button.setAttribute('aria-label',label);timelineButton.after(button);}
+ const timelineButton=$('tl-new');if(timelineButton){const button=window.CorporiumRecorder.button('timeline','');button.id='tl-record';button.classList.add('ui-icon-button');button.innerHTML=uiIcon('record');button.title=label;button.setAttribute('aria-label',label);timelineButton.after(button);}
  const css=document.createElement('link');css.rel='stylesheet';css.href='/recorder.css';document.head.append(css);
  makeDialog('recorder-dialog',`<h2>${text('现场录音','Record audio')}</h2>
   <p id="recorder-destination"></p>

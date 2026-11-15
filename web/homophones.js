@@ -6,6 +6,7 @@
  const panel=document.createElement('section');panel.id='homophone-panel';panel.hidden=true;layout.after(panel);
  panel.innerHTML=(globalThis.CorporiumI18n?.f("20d8da72fd74d9",()=>[])??'<form id="homophone-form"><div class="homophone-options"><label>展示书写类型<select id="homophone-writing"><option value="">全部书写类型</option></select></label><label>检索<input id="homophone-query" placeholder="读音、书写、释义或来源词条"></label><label><input type="checkbox" id="homophone-fallback">未填读音时临时使用语素形式</label><label><input type="checkbox" id="homophone-multiple">仅显示含多个语素的读音</label><button class="primary" id="homophone-run">生成同音语素表</button></div><p class="analysis-help">完整读音可按自定义音系归类；声韵调表只显示已确认项。同一语素在同一读音下只列一次；未整理组分分别保留。临时使用形式不会改写读音字段。</p></form><p id="homophone-status" role="status"></p><p id="homophone-error" role="alert"></p><nav id="homophone-pages"></nav><div id="homophone-results"></div><details id="homophone-review"><summary>待整理内容</summary><nav id="homophone-review-pages"></nav><div id="homophone-review-results"></div></details><nav id="homophone-bottom-pages" hidden></nav>');
  const phonologyUI=createHomophonePhonology(panel,()=>run());
+ window.CorporiumHomophonePhonology=phonologyUI;
  let mode='query',page=1,reviewPage=1,sequence=0,owner=null,generated=false,filterSignature=null,pageSize=null,pageSizeView=null;
  window.corporiumHomophonesSelected=()=>mode==='homophones';window.corporiumHomophonesReady=()=>generated;window.corporiumReloadHomophones=run;
  function choose(next){mode=next;if(mode!=='homophones')phonologyUI.close();panel.hidden=mode!=='homophones';layout.hidden=mode==='homophones';for(const b of nav.children)b.setAttribute('aria-pressed',String(b.dataset.analysisType===mode));if(mode!=='homophones'){$('analysis-counts-panel').hidden=mode!=='counts';$('analysis-counts-panel').open=mode==='counts';$('analysis-query-form').hidden=mode==='counts';}else if(owner!==activeLanguage)void catalog();}
@@ -24,14 +25,38 @@
  }
  function readPageSize(view='phonology'){try{const saved=localStorage.getItem(projectStorageKey(view==='phonology'?'corporium-homophone-final-page-size':'corporium-homophone-reading-page-size'));if(['10','20','50','all'].includes(saved))return saved;}catch{}return '10';}
  async function run(){return window.CorporiumViews?window.CorporiumViews.run('homophones',runTable):runTable();}
+ let materialPage=null;
+ function shownGroups(data){
+  return [...(data.pending||[]),...(data.blocks||[]).flatMap(b=>b.rows.flatMap(row=>row.cells.flatMap(c=>c.groups)))];
+ }
  async function runTable(){
   const view=phonologyUI.query().view;if(pageSizeView!==view){pageSize=readPageSize(view);pageSizeView=view;}
   pageSize??=readPageSize(view);
-  let filters={...phonologyUI.query(),page_size:pageSize,writing:$('homophone-writing').value,q:$('homophone-query').value,fallback:$('homophone-fallback').checked,only_multiple:$('homophone-multiple').checked};
+  let filters={...phonologyUI.query(),view_only:'1',page_size:pageSize,writing:$('homophone-writing').value,q:$('homophone-query').value,fallback:$('homophone-fallback').checked,only_multiple:$('homophone-multiple').checked};
   const signature=JSON.stringify([activeLanguage,filters.view,filters.empty,filters.writing,filters.q,filters.fallback,filters.only_multiple,pageSize]);
   if(signature!==filterSignature){page=reviewPage=1;phonologyUI.firstPage();filters={...filters,...phonologyUI.query()};}
   const seq=++sequence,lid=activeLanguage;$('homophone-error').textContent='';$('homophone-status').textContent=(globalThis.CorporiumI18n?.f("aa111940b98c6a",()=>[])??'正在生成…');$('homophone-run').disabled=true;
-  try{const data=await api('homophones?'+new URLSearchParams({...filters,page,review_page:reviewPage}));if(seq!==sequence||lid!==activeLanguage)return;
+  try{
+   const previous=materialPage?.scope===signature?materialPage:null;
+   const params=new URLSearchParams({...filters,page,review_page:reviewPage});
+   if(previous&&view==='phonology'){
+    const keys=JSON.stringify([...previous.items.keys()].slice(0,128));
+    if(keys.length<=4096){params.set('known',keys);params.set('material_version',previous.version);}
+   }
+   let data=await api('homophones?'+params);if(seq!==sequence||lid!==activeLanguage)return;
+   if(shownGroups(data).some(g=>g.reuse_items&&(previous?.version!==data.material_version||!previous.items.has(g.reading)))){
+    params.delete('known');params.delete('material_version');data=await api('homophones?'+params);
+    if(seq!==sequence||lid!==activeLanguage)return;
+   }
+   materialPage=null;
+   if(data.material_version){
+    const values=new Map();
+    for(const g of shownGroups(data)){
+     if(g.reuse_items&&data.material_version===previous?.version&&previous.items.has(g.reading))g.items=previous.items.get(g.reading);
+     values.set(g.reading,g.items);
+    }
+    materialPage={scope:signature,version:data.material_version,items:values};
+   }
    const chosenWriting=$('homophone-writing').value;$('homophone-writing').innerHTML=(globalThis.CorporiumI18n?.f("7d67ceb5493f3e",()=>[data.writing_types.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('')])??'<option value="">全部书写类型</option>'+data.writing_types.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join(''));$('homophone-writing').value=chosenWriting;
    panel.setAttribute('style',languageTypographyCSS(JSON.parse(languageList.find(l=>l.id===lid)?.metadata||'{}')));generated=true;page=data.page;reviewPage=data.review_page;$('homophone-status').textContent=(globalThis.CorporiumI18n?.f("468b080e4cbd85",()=>[data.total,data.review_total])??`${data.total} 个读音组 · ${data.review_total} 项待整理内容`);
    if(!phonologyUI.render(data))$('homophone-results').innerHTML=data.groups.map(g=>(globalThis.CorporiumI18n?.f("0562c85176033b",()=>[esc(g.reading),g.items.length,g.items.map(r=>entry(r,data.writing_types)).join('')])??`<section class="homophone-group"><h3 class="ipa">${esc(g.reading)} <small>${g.items.length} 个语素组分</small></h3><div>${g.items.map(r=>entry(r,data.writing_types)).join('')}</div></section>`)).join('')||(globalThis.CorporiumI18n?.f("dc672a44bc5f10",()=>[])??'<p>没有符合条件的读音。可填写语素或组分的读音，或启用临时使用形式。</p>');
@@ -51,7 +76,7 @@
  }
  $('homophone-form').onsubmit=e=>{e.preventDefault();void run();};
  panel.onclick=safe(async e=>{const m=e.target.closest('[data-homophone-morpheme]'),x=e.target.closest('[data-homophone-lexeme]');if(m)await openMorphemeRecord(m.dataset.homophoneMorpheme);if(x){await openDictionaryLexeme(x.dataset.homophoneLexeme);const block=$('dictionary-detail').querySelector('.dictionary-morphology-block');if(block)block.open=true;}});
- const oldSwitch=switchLanguage;switchLanguage=async function(...args){await oldSwitch(...args);if(owner!==activeLanguage)await catalog();};
+ const oldSwitch=switchLanguage;switchLanguage=async function(...args){await oldSwitch(...args);if(workspace==='analysis'&&mode==='homophones'&&owner!==activeLanguage)await catalog();};
  const oldWorkspace=setWorkspace;setWorkspace=async function(name){await oldWorkspace(name);if(name!=='analysis')phonologyUI.close();if(name==='analysis'){choose(mode);if(mode==='homophones'&&owner===activeLanguage&&!window.CorporiumViews?.current('homophones'))await run();}};
  // Opening a saved corpus analysis reveals its original controls, never an unrelated table.
  $('analysis-records').addEventListener('click',e=>{if(e.target.closest('button'))choose('query');},true);

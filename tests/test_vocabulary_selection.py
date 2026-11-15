@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 import unittest
 from urllib.parse import urlencode
@@ -65,8 +66,8 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(self.profile(self.run_selection(conditions=[a,b],combine='all'))['denominator'],0)
         self.assertEqual(self.profile(self.run_selection(query='na',case=True))['denominator'],0)
         with server.connect() as db:
-            body=json.loads(db.execute('SELECT body FROM morphemes WHERE id=?',(m['id'],)).fetchone()[0]);body['examples']=[dict(translation='example-only')]
-            db.execute('UPDATE morphemes SET body=? WHERE id=?',(json.dumps(body),m['id']));analysis_workspace.invalidate(db)
+            body=json.loads(db.execute('SELECT body FROM morphemes_documents WHERE id=?',(m['id'],)).fetchone()[0]);body['examples']=[dict(translation='example-only')]
+            source_fixtures.replace(db,'morphemes',m['id'],json.dumps(body));analysis_workspace.invalidate(db)
         self.assertEqual(self.profile(self.run_selection(query='example-only'))['denominator'],0)
         catalog=self.api('vocabulary-options?target=morpheme')
         self.assertFalse(any(f['id'].startswith(('examples','media','layer:')) for f in catalog['fields']))

@@ -80,7 +80,7 @@
     else if(workspace==='grammar'){grammarPage=state.grammarPage||1;await loadGrammar();}
    }
    await I.restoreView(state.views);
-   await new Promise(requestAnimationFrame);
+   await nextLayoutFrame();
    for(const pos of state.containers||[]){const el=document.getElementById(pos.id);if(el){el.scrollTop=pos.y;el.scrollLeft=pos.x;}}
    window.scrollTo({left:state.x||0,top:state.y||0,behavior:'instant'});
   }finally{document.documentElement.dataset.uiRestoring='false';}

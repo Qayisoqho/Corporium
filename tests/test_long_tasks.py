@@ -93,7 +93,10 @@ class LongTaskTests(unittest.TestCase):
         deadline=time.monotonic()+20
         while time.monotonic()<deadline:
             state=long_tasks.view(server.DB,jid)
-            if state['state'] not in ('queued','running'):return state
+            if state['state'] not in long_tasks.ACTIVE:
+                future=long_tasks.JOBS[jid]['future']
+                if not future.cancelled():future.result(timeout=5)
+                return state
             time.sleep(.01)
         self.fail('Task timed out')
 
@@ -116,13 +119,46 @@ class LongTaskTests(unittest.TestCase):
             self.assertEqual(state['result']['items'][0]['body']['usages'][0]['senses'][0]['short_gloss'],'meaning')
             self.assertNotIn('example_count',state['result']['items'][0])
 
+    def test_wait_for_completion_is_bounded_and_can_be_cancelled(self):
+        entered=threading.Event()
+        release=threading.Event()
+        original=long_tasks.run
+
+        def queued(job):
+            entered.set()
+            if not release.wait(3):raise AssertionError('test did not release worker')
+            return original(job)
+
+        with patch.object(long_tasks,'run',queued):
+            jid=long_tasks.submit(server.DB,'auto-match',{'language':'ordos'})
+            try:
+                self.assertTrue(entered.wait(2))
+                status=long_tasks.view(server.DB,jid,wait=True)
+                self.assertEqual((status['state'],status['waited']),('queued',True))
+                long_tasks.cancel(server.DB,jid)
+            finally:
+                release.set()
+            long_tasks.JOBS[jid]['future'].result(timeout=5)
+        self.assertEqual(long_tasks.view(server.DB,jid,wait=True)['state'],'cancelled')
+
     def test_snapshot_restore_and_checksum(self):
+        import analysis_workspace,journal,sentence_search_index
         self.seed()
         with server.connect(audit=False) as db:
             result=project_backup.prepare(db,server.DB)
-            # Search projections are rebuildable and intentionally omitted from
-            # portable snapshots; every other table still compares exactly.
-            expected={r[0]:db.execute('SELECT COUNT(*) FROM "'+r[0]+'"').fetchone()[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT GLOB 'sentence_search_*' AND name NOT GLOB 'gloss_search_*' AND name NOT GLOB 'material_search_*' AND name NOT GLOB 'projection_search_*'")}
+            # Portable copies rebuild search projections and validation proofs.
+            # Compare every remaining table, including history and its contents.
+            source_tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            protected=(set(journal.TABLES)|set(analysis_workspace.TABLES)|{'history','undo_steps','undo_scopes','undo_settings'})&source_tables
+            with closing(sqlite3.connect(':memory:')) as portable:
+                db.backup(portable)
+                sentence_search_index.drop(portable)
+                tables={r[0] for r in portable.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                self.assertTrue(protected<=tables)
+                expected_rows={name:portable.execute('SELECT * FROM "'+name+'"').fetchall() for name in tables}
+                for name in protected:
+                    self.assertEqual(expected_rows[name],[tuple(r) for r in db.execute('SELECT * FROM "'+name+'"')],name)
+                expected={name:len(rows) for name,rows in expected_rows.items()}
         path=language_exchange.staged(server.DB,result['token'],'project-backup')
         target=Path(self.temp.name)/'restored.sqlite3'
         from restore_backup import restore
@@ -131,8 +167,7 @@ class LongTaskTests(unittest.TestCase):
             actual={r[0]:db.execute('SELECT COUNT(*) FROM "'+r[0]+'"').fetchone()[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             self.assertEqual(actual,expected)
             self.assertEqual(db.execute('PRAGMA quick_check').fetchone()[0],'ok')
-            with closing(sqlite3.connect(server.DB)) as original:
-                for table in expected:self.assertEqual(db.execute('SELECT * FROM "'+table+'"').fetchall(),original.execute('SELECT * FROM "'+table+'"').fetchall(),table)
+            for table in expected:self.assertEqual(db.execute('SELECT * FROM "'+table+'"').fetchall(),expected_rows[table],table)
         with self.assertRaises(ValueError):restore(path,target)
         corrupt=Path(self.temp.name)/'corrupt.zip'
         with zipfile.ZipFile(path) as src,zipfile.ZipFile(corrupt,'w') as dst:

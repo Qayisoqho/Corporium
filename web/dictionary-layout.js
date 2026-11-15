@@ -38,6 +38,7 @@
  let foldOwner=null,collapsed=new Set();
  function folds(){const key=projectStorageKey('dictionary-class-folds:'+activeLanguage);if(foldOwner!==key){foldOwner=key;try{const value=JSON.parse(localStorage.getItem(key)||'[]');collapsed=new Set(Array.isArray(value)?value.filter(v=>typeof v==='string'):[]);}catch{collapsed=new Set();}}return collapsed;}
  window.dictionaryClassList=items=>dictionaryClassRows(items,folds());
+ window.corporiumExpandDictionaryPath=path=>{const closed=folds(),keys=(path||[]).map(node=>node.key);for(let i=1;i<=keys.length;i++)closed.delete(JSON.stringify(keys.slice(0,i)));try{localStorage.setItem(foldOwner,JSON.stringify([...closed]));}catch{}};
  window.dictionaryClassHeading=n=>'<button type="button" class="dictionary-class-heading" style="--class-depth:'+Math.min(n.depth,8)+'" data-dictionary-class="'+esc(n.path)+'" aria-expanded="'+!n.closed+'" title="'+(n.closed?(globalThis.CorporiumI18n?.f("b1f26d0db3ee79",()=>[])??'展开'):(globalThis.CorporiumI18n?.f("4e22a038f2d1df",()=>[])??'折叠'))+esc(n.label)+'"><span class="dictionary-class-triangle" aria-hidden="true"></span><span>'+esc(n.label)+'</span></button>';
  $('dictionary-list').addEventListener('click',e=>{
   const toggle=e.target.closest('[data-dictionary-class]');if(!toggle)return;
@@ -50,9 +51,9 @@
 
 // Form summaries depend on their own editor inputs and reading containers.
 // Sentence typing and unrelated status updates must not refresh hidden tables.
-function createCompactFormUpdates(doc,render,frame=requestAnimationFrame,Observer=MutationObserver){
+function createCompactFormUpdates(doc,render,frame=queueMicrotask,Observer=MutationObserver){
  let pending=0;
- const queue=()=>{if(!pending)pending=frame(()=>{pending=0;render();});};
+ const queue=()=>{if(!pending){pending=1;frame(()=>{pending=0;render();});}};
  const observer=new Observer(queue);
  for(const id of ['lexeme-variants','morpheme-variants','dictionary-detail','morpheme-detail']){
   const root=doc.getElementById(id);if(root)observer.observe(root,{childList:true,subtree:true});

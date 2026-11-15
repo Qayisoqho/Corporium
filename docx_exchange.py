@@ -214,8 +214,10 @@ def apply(db,dbpath,b,lid):
     if signature!=b.get('signature'):raise ValueError('分句、字段或标注层已变化，请重新预览后导入')
     tid=str(uuid.uuid4());db.execute('INSERT INTO texts(id,title,source,original,digest,errors,language_id) VALUES(?,?,?,?,?,?,?)',(tid,b['title'].strip(),data['filename'],'',str(uuid.uuid4()),'[]',lid))
     for position,s in long_tasks.steps(enumerate(plans,1)):
-        rid=str(uuid.uuid4());body=analyze(s['body']);db.execute('INSERT INTO entries(id,text_id,position,body) VALUES(?,?,?,?)',(rid,tid,position,json.dumps(body,ensure_ascii=False)))
-        lexicon.sync_entry(db,rid);units=annotations.units(db,'corpus',rid,body)
+        import sentence_rows
+        rid=str(uuid.uuid4());body=analyze(s['body'])
+        sentence_rows.write(db,'corpus',rid,body,columns=dict(text_id=tid,position=position),insert=True)
+        lexicon.sync_entry(db,rid,analyzed_body=body,stored_body=body);units=annotations.units(db,'corpus',rid,body)
         for c in s['cells']:
             uid=annotations.SENTENCE if c['word'] is None else units[c['word']]['id']
             db.execute('INSERT INTO annotation_cells VALUES(?,?,?,?,?,?,1)',(str(uuid.uuid4()),'corpus',rid,uid,c['layer_id'],c['value']))
@@ -324,7 +326,7 @@ def export(db,b,lid):
         elif c['unit_id'] in slots:position=slots[c['unit_id']]
         else:continue
         cells_by_entry.setdefault(c['record_id'],{})[position,c['layer_id']]=c['value']
-    for r in gloss_inheritance.iter_rows(db,db.execute('SELECT id,body FROM entries WHERE text_id=? ORDER BY position,id',(tid,)),'corpus',lightweight=True):
+    for r in gloss_inheritance.iter_rows(db,db.execute('SELECT id FROM entries WHERE text_id=? ORDER BY position,id',(tid,)),'corpus',lightweight=True,relational=True):
         body=gloss_inheritance.load(db,'corpus',r['id'],r['body'],metadata=False,lightweight=True)
         if body.get('language_id') and body['language_id']!=lid:raise ValueError('文本含其他语言的句子，请先按语言拆分后导出')
         cells=cells_by_entry.get(r['id'],{})

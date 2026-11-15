@@ -1,6 +1,7 @@
 """Language-local morpheme identities, separate from lexemes and their analyses."""
 import long_tasks
 import json
+import record_sources
 import uuid
 import hashlib
 import component_links
@@ -37,6 +38,25 @@ def save_plan(db,lid,xid,body,assignments=None):
             items.append(dict(analysis_id=a['id'],component_id=c['id'],form=form,component=c,peers=peers,manual=explicit is not None,target=target,form_id=form_id,link_revision=old['revision'] if old else 0))
     token=hashlib.sha256(json.dumps([lid,xid,items],ensure_ascii=False,sort_keys=True).encode()).hexdigest()
     return dict(items=items,token=token)
+
+def project_save_plan(body,plan,choices):
+    """Resolve explicit selected forms before the basic headword is validated."""
+    selected={(c['analysis_id'],c['component_id']):c for c in choices}
+    components={(a['id'],c['id']):c for a in body.get('word_structure',{}).get('analyses',[]) for c in a['components']}
+    for item in plan['items']:
+        key=(item['analysis_id'],item['component_id']);choice=selected.get(key)
+        target=item['target']
+        if target:
+            form_id=item['form_id']
+        elif choice and choice.get('morpheme_id') and 'form_id' in choice:
+            target=next((p for p in item['peers'] if p['id']==choice['morpheme_id']),None)
+            if target is None:raise ValueError('同形语素选择已失效，请重新选择')
+            form_id=choice['form_id']
+        else:
+            continue
+        shared=realization(target,form_id)
+        for field in ('form','readings'):components[key][field]=shared[field]
+
 
 def apply_save_plan(db,x,lid,plan,choices):
     choices={(c['analysis_id'],c['component_id']):c for c in choices}
@@ -85,28 +105,36 @@ def sync_components(db, old, form, body):
 
 def sync_missing_writings(db,lid,xid=None):
     """Materialize inherited spellings; never replace a local realization."""
-    owners={};owner_kinds={};count=0
-    sql='''SELECT x.id,x.body,x.target_kind,c.analysis_id,c.component_id,m.body morpheme_body FROM morpheme_components c
-    JOIN dictionary_targets x ON x.id=c.lexeme_id JOIN morphemes m ON m.id=c.morpheme_id
+    from copy import deepcopy
+    owners={};owner_kinds={};shared={};changed=set();count=0
+    sql='''SELECT x.id,x.target_kind,c.analysis_id,c.component_id,m.id morpheme_id FROM morpheme_components c
+    JOIN (SELECT id,language_id,'lexeme' target_kind FROM lexemes
+          UNION ALL SELECT id,language_id,'morpheme' FROM morphemes) x ON x.id=c.lexeme_id
+    JOIN morphemes m ON m.id=c.morpheme_id
     WHERE x.language_id=? AND m.language_id=x.language_id'''
     args=[lid]
     if xid:sql+=' AND x.id=?';args.append(xid)
     for row in db.execute(sql,args):
-        body=owners.setdefault(row['id'],json.loads(row['body']));owner_kinds[row['id']]=row['target_kind']
-        writings=json.loads(row['morpheme_body']).get('writings',[])
+        mid=row['morpheme_id'];owner=row['id']
+        if mid not in shared:shared[mid]=record_sources.read(db,'morphemes',mid).get('writings',[])
+        writings=shared[mid]
+        if not writings:continue
+        if owner not in owners:
+            owner_kinds[owner]=row['target_kind']
+            table='lexemes' if row['target_kind']=='lexeme' else 'morphemes'
+            owners[owner]=record_sources.read(db,table,owner)
+        body=owners[owner]
         for a in body.get('word_structure',{}).get('analyses',[]):
             if a['id']!=row['analysis_id']:continue
             for c in a['components']:
-                if c['id']==row['component_id'] and not c.get('writings') and writings:
-                    c['writings']=json.loads(json.dumps(writings));count+=1
-    changed=[]
+                if c['id']==row['component_id'] and not c.get('writings'):
+                    c['writings']=deepcopy(writings);count+=1;changed.add(owner)
+    ids=[]
+    from dictionary_targets import write_body
     for key,body in owners.items():
-        encoded=json.dumps(body,ensure_ascii=False)
-        old=db.execute('SELECT body FROM dictionary_targets WHERE id=?',(key,)).fetchone()[0]
-        if json.loads(old)!=body:
-            from dictionary_targets import write_body
-            write_body(db,dict(id=key,target_kind=owner_kinds[key]),body);changed.append(key)
-    return dict(lexemes=len(changed),components=count,ids=changed)
+        if key in changed:
+            write_body(db,dict(id=key,target_kind=owner_kinds[key]),body);ids.append(key)
+    return dict(lexemes=len(ids),components=count,ids=ids)
 
 
 def initialize(db):
@@ -124,40 +152,66 @@ def state(v):
     # Legacy SQL column retained for backup compatibility; it has no semantics.
     return 'confirmed'
 
-def get(db,mid,lid=None):
-    r=db.execute('SELECT * FROM morphemes WHERE id=?',(mid,)).fetchone()
+def get(db,mid,lid=None,*,relational=True):
+    fields='id,language_id,form,number,revision' if relational else '*'
+    source='morphemes' if relational else 'morphemes_documents'
+    r=db.execute('SELECT '+fields+' FROM '+source+' WHERE id=?',(mid,)).fetchone()
     if not r or lid is not None and r['language_id']!=lid:raise ValueError('语素不存在或不属于当前语言')
-    r=dict(r);r['body']=json.loads(r['body'])
+    r=dict(r)
+    if relational:
+        from dictionary_rows import raw_bodies
+        r['body']=raw_bodies(db,'morpheme',[mid])[mid]
+    else:r['body']=json.loads(r['body']);r.pop('rowid',None)
     r['display_number']=r['number'] if db.execute('SELECT count(*) FROM morphemes WHERE language_id=? AND form=?',(r['language_id'],r['form'])).fetchone()[0]>1 else None
     return r
 
 def check_revision(row,value):
     if row['revision']!=value:raise ValueError('记录已变化，请刷新后重试')
 
-def listing(db,lid,q='',page=1,status='',search=None,page_size=30,order=''):
+def listing(db,lid,q='',page=1,status='',search=None,page_size=30,order='',*,ids_only=False,focus=''):
+    if focus and not ids_only:
+        from dictionary_paging import focused_page
+        ids=listing(db,lid,q,1,status,search,page_size,order,ids_only=True)
+        target=focused_page(ids,focus,page_size)
+        result=listing(db,lid,q,target or page,status,search,page_size,order)
+        return dict(result,focus_found=target is not None)
     if not db.in_transaction:db.execute('BEGIN')
     import entry_dates
     if order and order not in entry_dates.ORDERS:raise ValueError('语素排序方式无效')
-    ordering=entry_dates.sql_order(order,'m') if order else 'm.form COLLATE NOCASE,m.number,m.id'
+    date=entry_dates.relational_date('m','morpheme') if record_sources.native(db) else None
+    ordering=entry_dates.sql_order(order,'m',date=date) if order else 'm.form COLLATE NOCASE,m.number,m.id'
     from morpheme_search import MorphemeIndex
     from dictionary_paging import paginate
     paginate([],1,page_size)
     try:spec=json.loads(search) if isinstance(search,str) else search
     except ValueError:raise ValueError('搜索条件格式不正确')
     if spec is not None and not isinstance(spec,dict):raise ValueError('搜索条件格式不正确')
-    if not q.strip() and (not spec or spec=={'field':'all','case':False,'combine':'all','class_id':'','conditions':[]}):
+    import dictionary_read
+    predicate=dictionary_read.predicate(db,lid,spec,q,field='form',kinds=('morpheme',))
+    if predicate is None:
+        import dictionary_own_index
+        if record_sources.native(db) and (spec or {}).get('scope','all')=='all':
+            predicate=dictionary_own_index.predicate(db,lid,spec,q,False,morphemes=True)
+    if predicate is not None:
         where='' if lid=='all' else ' WHERE m.language_id=?';params=() if lid=='all' else (lid,)
-        total=db.execute('SELECT count(*) FROM morphemes m'+where,params).fetchone()[0]
+        source='morphemes m'
+        if predicate[0]:
+            source="(SELECT record_id FROM ("+predicate[0]+") WHERE kind='morpheme') k CROSS JOIN morphemes m ON m.id=k.record_id";params=tuple(predicate[1])+params
+        if ids_only:return [r[0] for r in db.execute('SELECT m.id FROM '+source+where+' ORDER BY '+ordering,params)]
+        total=db.execute('SELECT count(*) FROM '+source+where,params).fetchone()[0]
         size=max(1,total) if str(page_size)=='all' else int(page_size);pages=max(1,(total+size-1)//size);page=max(1,min(int(page),pages))
-        rows=[{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT m.*,(SELECT count(*) FROM morpheme_components c WHERE c.morpheme_id=m.id) component_count,(SELECT count(*) FROM morphemes peer WHERE peer.language_id=m.language_id AND peer.form=m.form) peers FROM morphemes m'+where+' ORDER BY '+ordering+' LIMIT ? OFFSET ?',params+(size,(page-1)*size))]
+        selected=db.execute('SELECT m.id,m.language_id,m.form,m.number,m.revision,(SELECT count(*) FROM morpheme_components c WHERE c.morpheme_id=m.id) component_count,(SELECT count(*) FROM morphemes peer WHERE peer.language_id=m.language_id AND peer.form=m.form) peers FROM '+source+where+' ORDER BY '+ordering+' LIMIT ? OFFSET ?',params+(size,(page-1)*size))
+        rows=list(record_sources.with_bodies(db,'morphemes',selected))
         for r in rows:r['display_number']=r['number'] if r.pop('peers')>1 else None
         return dict(items=rows,total=total,page=page,pages=pages)
-    rows=[{**dict(r),'body':json.loads(r['body'])} for r in db.execute("SELECT m.*, (SELECT count(*) FROM morpheme_components c WHERE c.morpheme_id=m.id) component_count FROM morphemes m WHERE ?='all' OR m.language_id=? ORDER BY m.form COLLATE NOCASE,m.number,m.id",(lid,lid))]
+    selected=db.execute("SELECT m.id,m.language_id,m.form,m.number,m.revision, (SELECT count(*) FROM morpheme_components c WHERE c.morpheme_id=m.id) component_count FROM morphemes m WHERE ?='all' OR m.language_id=? ORDER BY m.form COLLATE NOCASE,m.number,m.id",(lid,lid))
+    rows=list(record_sources.with_bodies(db,'morphemes',selected))
     counts={}
     for r in rows:counts[(r['language_id'],r['form'])]=counts.get((r['language_id'],r['form']),0)+1
     index=MorphemeIndex(db,lid,rows,search_spec=spec or {},query=q).prepare(spec or {})
     hits=[r for r in rows if index.matches(r,q)]
     if order:hits=entry_dates.sort_rows(hits,order)
+    if ids_only:return [r['id'] for r in hits]
     from dictionary_paging import paginate
     result=paginate(hits,page,page_size)
     for r in result['items']:r['display_number']=r['number'] if counts[(r['language_id'],r['form'])]>1 else None
@@ -188,9 +242,13 @@ def components(db,xid,lid):
     return dict(lexeme=x,items=items)
 
 def detail(db,mid,lid):
-    m=get(db,mid,None if lid=='all' else lid);items=[]
-    for r in db.execute('SELECT c.*,x.headword,x.body lexeme_body FROM morpheme_components c LEFT JOIN dictionary_targets x ON x.id=c.lexeme_id WHERE c.morpheme_id=? ORDER BY x.headword,c.id',(mid,)):
-        r=dict(r);r['body'],r['source_missing']=current_component_ref(json.loads(r.pop('lexeme_body') or '{}'),json.loads(r['body']));r['review']=False;items.append(r)
+    from dictionary_rows import targets
+    if not db.in_transaction:db.execute('BEGIN')
+    m=get(db,mid,None if lid=='all' else lid,relational=True);items=[]
+    rows=db.execute('SELECT c.*,x.headword FROM morpheme_components c LEFT JOIN dictionary_targets x ON x.id=c.lexeme_id WHERE c.morpheme_id=? ORDER BY x.headword,c.id',(mid,)).fetchall()
+    definitions=targets(db,[r['lexeme_id'] for r in rows])
+    for r in rows:
+        r=dict(r);r['body'],r['source_missing']=current_component_ref(definitions.get(r['lexeme_id'],{}).get('body',{}),json.loads(r['body']));r['review']=False;items.append(r)
     import dictionary_targets
     return {**m,'components':items,'references':dictionary_targets.references(db,mid),'dictionary_body':dictionary_targets.common(db,mid)}
 
@@ -234,7 +292,7 @@ def mutate(db,action,b,lid,*,defer_writings=False):
         if old:check_revision(old,b.get('revision'))
         import dictionary_link_changes,lexicon
         common=lexicon.get_lexeme(db,old['id']) if old else None
-        fingerprint=dictionary_link_changes.token(db,common,b) if common else None
+        fingerprint=dictionary_link_changes.token(db,common,b) if common and b.get('link_change_token') else None
         form,data=prepare_body(db,lid,b,old)
         import categories
         categories.register_usages(db,lid,data,strict=True)
@@ -245,7 +303,10 @@ def mutate(db,action,b,lid,*,defer_writings=False):
         number=old['number'] if old and old['form']==form else db.execute('SELECT COALESCE(MAX(number),0)+1 FROM morphemes WHERE language_id=? AND form=?',(lid,form)).fetchone()[0]
         mid=old['id'] if old else str(uuid.uuid4())
         if common:dictionary_link_changes.apply(db,common,data,b,fingerprint)
-        db.execute('INSERT INTO morphemes VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET form=excluded.form,number=excluded.number,body=excluded.body,revision=excluded.revision',(mid,lid,form,number,json.dumps(data,ensure_ascii=False),(old['revision'] if old else 0)+1))
+        import dictionary_rows
+        columns=dict(form=form,number=number)
+        if not old:columns.update(language_id=lid,revision=1)
+        dictionary_rows.write(db,'morpheme',mid,data,columns=columns,insert=not old)
         if old:sync_components(db,old,form,data)
         return get(db,mid,lid)
     if action=='morpheme-assign':
@@ -326,7 +387,8 @@ def mutate(db,action,b,lid,*,defer_writings=False):
     raise ValueError('未知语素操作')
 
 def export_bundle(db,languages,lexemes):
-    return {'morphemes':[dict(r) for r in db.execute('SELECT * FROM morphemes') if r['language_id'] in languages], 'morpheme_components':[dict(r) for r in db.execute("SELECT *, 'confirmed' status FROM morpheme_components") if r['lexeme_id'] in lexemes]}
+    rows=record_sources.with_bodies(db,'morphemes',(r for r in db.execute('SELECT id,language_id,form,number,revision FROM morphemes') if r['language_id'] in languages))
+    return {'morphemes':[record_sources.portable_row(r) for r in rows], 'morpheme_components':[dict(r) for r in db.execute("SELECT *, 'confirmed' status FROM morpheme_components") if r['lexeme_id'] in lexemes]}
 
 def import_bundle(db,bundle,language_map,xmap,submap,classmap,type_map,tagmap,include_components=True,semantic_map=None):
     mapping={}
@@ -360,7 +422,8 @@ def import_bundle(db,bundle,language_map,xmap,submap,classmap,type_map,tagmap,in
             new['body']['merged_records']=body['merged_records']
             if body.get('created_at') is None:new['body'].pop('created_at',None)
             else:new['body']['created_at']=entry_dates.parse(body['created_at'])
-            db.execute('UPDATE morphemes SET body=? WHERE id=?',(json.dumps(new['body'],ensure_ascii=False),new['id']))
+            import dictionary_rows
+            dictionary_rows.write(db,'morpheme',new['id'],new['body'],bump=False)
     if include_components:import_components(db,bundle,xmap,mapping,submap,classmap,type_map,tagmap)
     return mapping
 
@@ -377,14 +440,22 @@ def import_components(db,bundle,xmap,mapping,submap,classmap,type_map,tagmap):
         if (r['analysis_id'],r['component_id'])!=(ref['analysis_id'],ref['component_id']):raise ValueError('语素整理记录的组分身份不一致')
         db.execute('INSERT INTO morpheme_components(id,lexeme_id,analysis_id,component_id,morpheme_id,body,revision) VALUES(?,?,?,?,?,?,1)',(str(uuid.uuid4()),xmap[r['lexeme_id']],r['analysis_id'],r['component_id'],mapping[r['morpheme_id']],json.dumps(ref,ensure_ascii=False)))
 
-def validate(db):
+def validate(db,targets=None):
+    if targets is None:
+        import dictionary_rows
+        ids=[r[0] for r in db.execute('SELECT id FROM morphemes')]
+        targets=dictionary_rows.targets(db,ids,prepare=False)
     forms={}
-    for row in long_tasks.steps(db.execute('SELECT id,language_id,body FROM morphemes')):
-        forms[row['id']]={v['id'] for v in clean_variants(db,row['language_id'],json.loads(row['body']))}
+    for row in long_tasks.steps(targets.values()):
+        if row['target_kind']=='morpheme':
+            forms[row['id']]={v['id'] for v in clean_variants(db,row['language_id'],row['body'])}
     if db.execute('SELECT 1 FROM morpheme_components c LEFT JOIN morphemes m ON m.id=c.morpheme_id LEFT JOIN dictionary_targets x ON x.id=c.lexeme_id WHERE m.id IS NULL OR x.id IS NULL OR x.language_id!=m.language_id LIMIT 1').fetchone():raise ValueError('语素整理关联的词条和语素须存在且属于同一语言；删除词条前请先解除组分的语素整理关联')
     for row in long_tasks.steps(db.execute('SELECT morpheme_id,body FROM morpheme_components')):
-        ref=component_links.validate(json.loads(row['body']))
-        if ref.get('form_id') and ref['form_id'] not in forms[row['morpheme_id']]:raise ValueError('关联的语素变体仍在使用，请先调整组分关联再删除变体')
+        validate_component_form(json.loads(row['body']),forms[row['morpheme_id']])
+
+def validate_component_form(value,variants):
+    ref=component_links.validate(value)
+    if ref.get('form_id') and ref['form_id'] not in variants:raise ValueError('关联的语素变体仍在使用，请先调整组分关联再删除变体')
 
 def clean_variants(db,lid,body):
     import morphology,categories,lexicon

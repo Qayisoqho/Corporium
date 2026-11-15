@@ -60,14 +60,45 @@ function drawReplace(){
 }
 $('replace-issues').onclick=e=>{const pager=e.target.closest('[data-replace-issues-page]');if(pager){replaceIssuePage+=Number(pager.dataset.replaceIssuesPage);drawReplace();return;}const button=e.target.closest('[data-replace-locate]');if(!button||!replacePlan)return;const index=replacePlan.changes.findIndex(c=>c.key===button.dataset.replaceLocate);if(index<0)return;replacePage=Math.floor(index/80);drawReplace();const row=[...$('replace-results').children].find(row=>row.dataset.replaceKey===button.dataset.replaceLocate);if(row){row.classList.add('replace-review-target');row.tabIndex=-1;row.scrollIntoView({block:'center',behavior:'instant'});row.focus({preventScroll:true});}};
 function replaceLock(busy){replaceBusy=busy;for(const e of $('text-replace-dialog').querySelectorAll('button,input,textarea,select'))e.disabled=busy;if(!busy){if(replacePlan)drawReplace();else resetReplace();}}
-async function previewReplace(){replaceRequest=replacePayload();$('replace-status').textContent=(globalThis.CorporiumI18n?.f("f8363e4f3a889c",()=>[])??'正在查找并核对分析与关联…');replacePlan=await api('text-replace-preview',replaceRequest);replacePage=0;drawReplace();}
+async function previewReplace(){replaceRequest={...replacePayload(),reuse_preview:true};$('replace-status').textContent=(globalThis.CorporiumI18n?.f("f8363e4f3a889c",()=>[])??'正在查找并核对分析与关联…');replacePlan=await api('text-replace-preview',replaceRequest);replacePage=0;}
 $('replace-preview').onclick=async()=>{if(replaceBusy)return;resetReplace();replaceLock(true);try{await previewReplace();}catch(e){$('replace-status').textContent='';$('replace-error').textContent=e.message;}finally{replaceBusy=false;for(const e of $('text-replace-dialog').querySelectorAll('button,input,textarea,select'))e.disabled=false;if(replacePlan)drawReplace();else $('replace-all').disabled=true;}};
+function confirmReplaceConflicts(conflicts){
+ const details=conflicts.slice(0,12).map(c=>(globalThis.CorporiumI18n?.f("99c588602be7e4",()=>[c.title,c.position,c.word+1,c.reason])??`${c.title} · 第 ${c.position} 句第 ${c.word+1} 格：${c.reason}`)).join('\n');
+ const extra=conflicts.length>12?(globalThis.CorporiumI18n?.f("78334bbb7cf1f5",()=>[conflicts.length-12])??'\n另有 '+(conflicts.length-12)+' 项。'):'';
+ return corporiumConfirm(globalThis.CorporiumI18n?.f("d90fe70bbf8fb2",()=>[details+extra])??details+extra+'\n\n本次替换会改变上述切分或已有组合。旧记录会保留，不会自动改挂到其他语素；保存后可在对应句子的形态分析或词典关联中调整。是否继续？');
+}
 async function applyReplace(keys){
- if(replaceBusy||!replacePlan)return;const request={...replaceRequest,token:replacePlan.token,keys,pending_keys:replacePlan.changes.map(c=>c.key)};let applied=null;replaceLock(true);$('replace-error').textContent='';$('replace-status').textContent=(globalThis.CorporiumI18n?.f("80a1d48006cdbc",()=>[keys.length])??`正在核对并替换 ${keys.length} 处匹配…`);
+ if(replaceBusy||!replacePlan)return;
+ const selected=keys.length===1&&replacePlan.changes.find(c=>c.key===keys[0]);
+ const draft=selected&&{id:selected.id,kind:replaceRequest.owner_kind};
+ const view=draft&&(workspace==='corpus'?captureCorpusTextUpdate(draft,{replacement:true}):
+  window.corporiumCaptureLibraryTextUpdate?.(draft,{replacement:true}));
+ const request={...replaceRequest,token:replacePlan.token,keys,pending_keys:replacePlan.changes.map(c=>c.key),
+  ...(view?{_view_revision:view.base}:{})};
+ let applied=null;replaceLock(true);$('replace-error').textContent='';$('replace-status').textContent=(globalThis.CorporiumI18n?.f("80a1d48006cdbc",()=>[keys.length])??`正在核对并替换 ${keys.length} 处匹配…`);
  try{
+  if(selected&&replacePlan.changes.length===1&&replacePlan.conflicts.length&&!replacePlan.blocked.length){
+   if(!await confirmReplaceConflicts(replacePlan.conflicts)){drawReplace();return;}
+   request.confirm_conflicts=request.confirm_preview=true;
+  }
   let result=await api('text-replace-apply',request);
-  if(result.needs_confirmation){const details=result.conflicts.slice(0,12).map(c=>(globalThis.CorporiumI18n?.f("99c588602be7e4",()=>[c.title,c.position,c.word+1,c.reason])??`${c.title} · 第 ${c.position} 句第 ${c.word+1} 格：${c.reason}`)).join('\n');if(!await corporiumConfirm((globalThis.CorporiumI18n?.f("d90fe70bbf8fb2",()=>[details+(result.conflicts.length>12?(globalThis.CorporiumI18n?.f("78334bbb7cf1f5",()=>[result.conflicts.length-12])??'\n另有 '+(result.conflicts.length-12)+' 项。'):'')])??details+(result.conflicts.length>12?'\n另有 '+(result.conflicts.length-12)+' 项。':'')+'\n\n本次替换会改变上述切分或已有组合。旧记录会保留，不会自动改挂到其他语素；保存后可在对应句子的形态分析或词典关联中调整。是否继续？'))){drawReplace();return;}result=await api('text-replace-apply',{...request,confirm_conflicts:true});}
-  applied=result;await refreshUndo();await refreshExampleViews();if(result.remaining_keys.length){await previewReplace();const remaining=new Set(result.remaining_keys);replacePlan=restrictReplacePlan(replacePlan,replacePlan.changes.filter(c=>remaining.has(c.key)));}else{replacePlan={...replacePlan,changes:[],conflicts:[],blocked:[]};}drawReplace();$('replace-status').textContent=(globalThis.CorporiumI18n?.f("a112c71d682435",()=>[result.replacements,result.sentences,result.conflicts?(globalThis.CorporiumI18n?.f("6e9dc40d4a7a03",()=>[result.conflicts])??'；本次已修改 '+result.conflicts+' 个词格的切分或组合'):'',replacePlan.changes.length,replacePlan.conflicts.length?(globalThis.CorporiumI18n?.f("45eaa6735d7bb2",()=>[replacePlan.conflicts.length])??'，其中 '+replacePlan.conflicts.length+' 个词格会改变切分或已有组合，见下方'):''])??`已替换 ${result.replacements} 处、涉及 ${result.sentences} 句${result.conflicts?'；本次已修改 '+result.conflicts+' 个词格的切分或组合':''}。可一步撤销。剩余 ${replacePlan.changes.length} 处匹配${replacePlan.conflicts.length?'，其中 '+replacePlan.conflicts.length+' 个词格会改变切分或已有组合，见下方':''}。`);
+  if(result.needs_confirmation){
+   if(!await confirmReplaceConflicts(result.conflicts)){drawReplace();return;}
+   result=await api('text-replace-apply',{...request,confirm_conflicts:true,confirm_preview:false});
+  }
+  applied=result;
+  let updated=false;
+  if(view&&result._view_update){
+   try{updated=await view.apply(result._view_update);}catch{window.corporiumInvalidateViews?.();}
+  }
+  if(!updated){
+   await window.corporiumRefreshUndoState({reloadLanguages:false});
+   await refreshExampleViews({texts:false});
+  }
+  if(result.preview_error)throw Error(result.preview_error);
+  if(result.remaining_preview)replacePlan=restrictReplacePlan(result.remaining_preview);
+  else replacePlan={...replacePlan,changes:[],conflicts:[],blocked:[]};
+  $('replace-status').textContent=(globalThis.CorporiumI18n?.f("a112c71d682435",()=>[result.replacements,result.sentences,result.conflicts?(globalThis.CorporiumI18n?.f("6e9dc40d4a7a03",()=>[result.conflicts])??'；本次已修改 '+result.conflicts+' 个词格的切分或组合'):'',replacePlan.changes.length,replacePlan.conflicts.length?(globalThis.CorporiumI18n?.f("45eaa6735d7bb2",()=>[replacePlan.conflicts.length])??'，其中 '+replacePlan.conflicts.length+' 个词格会改变切分或已有组合，见下方'):''])??`已替换 ${result.replacements} 处、涉及 ${result.sentences} 句${result.conflicts?'；本次已修改 '+result.conflicts+' 个词格的切分或组合':''}。可一步撤销。剩余 ${replacePlan.changes.length} 处匹配${replacePlan.conflicts.length?'，其中 '+replacePlan.conflicts.length+' 个词格会改变切分或已有组合，见下方':''}。`);
  }catch(e){replacePlan=null;$('replace-results').replaceChildren();$('replace-issues').replaceChildren();$('replace-status').textContent='';$('replace-error').textContent=(globalThis.CorporiumI18n?.f("3d22cceba93b49",()=>[(applied?(globalThis.CorporiumI18n?.f("9553a9ef8fa6f8",()=>[applied.replacements])??`已成功替换 ${applied.replacements} 处，但刷新失败：`):'')+e.message])??(applied?`已成功替换 ${applied.replacements} 处，但刷新失败：`:'')+e.message+'；请重新预览。');}
  finally{replaceBusy=false;for(const e of $('text-replace-dialog').querySelectorAll('button,input,textarea,select'))e.disabled=false;const message=$('replace-status').textContent;if(replacePlan)drawReplace();else $('replace-prev').disabled=$('replace-next').disabled=true;$('replace-status').textContent=message;$('replace-all').disabled=!replacePlan?.changes.length||!!replacePlan?.blocked.length;}
 }

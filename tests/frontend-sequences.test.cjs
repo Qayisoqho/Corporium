@@ -14,7 +14,7 @@ function inlineHarness(){
  vm.runInContext(source.slice(source.indexOf('function repaintInline('),source.indexOf('async function refreshExampleViews(')),c);
  const start=source.indexOf("document.addEventListener('click',async e=>{");
  vm.runInContext(source.slice(start,source.indexOf("window.addEventListener('beforeunload'",start)),c);
- function card(key='independent:x'){const r={dataset:{exampleKey:key,exampleKind:'independent',exampleId:key.split(':')[1]},isConnected:true,innerHTML:'old',getClientRects:()=>[{}],querySelector:s=>s==='[data-inline-save]'&&r.innerHTML.includes('data-inline-save')?{}:null,append(){throw Error('outer error');}};cards.push(r);return r;}
+ function card(key='independent:x'){const r={dataset:{exampleKey:key,exampleKind:'independent',exampleId:key.split(':')[1]},isConnected:true,innerHTML:'old',closest:()=>null,contains:()=>false,getClientRects:()=>[{}],querySelector:s=>s==='[data-inline-save]'&&r.innerHTML.includes('data-inline-save')?{}:null,append(){throw Error('outer error');}};cards.push(r);return r;}
  function click(r,action){const b={dataset:{},closest:()=>r,hasAttribute:name=>name==='data-inline-'+action};return listeners.click({preventDefault(){},target:{closest:()=>b}});}
  function draft(key='independent:x'){const d={kind:'independent',id:key.split(':')[1],owner_language:'one',body:{translation:'local',words:[]},words:[],layers:[],cells:[],dirty:true};drafts.set(key,d);return d;}
  return {c,calls,cards,card,click,draft,drafts,nodes};
@@ -37,6 +37,15 @@ test('late annotation response after language switch cannot open a detached edit
 });
 test('inline save refreshes history once and delegates only the visible workspace',async()=>{
  const h=inlineHarness(),r=h.card();h.draft();await h.click(r,'save');assert.deepEqual(h.calls,['write','history','views']);assert.equal(h.drafts.size,0);
+});
+test('saving a structural sentence edit from a dictionary entry reloads only its evidence section',async()=>{
+ const h=inlineHarness(),r=h.card(),draft=h.draft();draft.revision=1;
+ const section={isConnected:true,refreshCurrentExamples:async source=>h.calls.push([source.kind,source.id,source.redraw])};r.closest=()=>section;
+ Object.assign(h.c,{displayedLexeme:{id:'entry'},dictionaryRequest:3,captureLexemeView:()=>({base:'base',current:()=>true,sameDetail:()=>true,requery:false})});
+ h.c.window.corporiumRefreshSavedHistory=async update=>{h.calls.push('history');h.c.window.corporiumWorkspaceRevision=update.current;return true;};
+ h.c.window.corporiumMarkSavedView=name=>h.calls.push(name);
+ h.c.originalApi=async(_,request)=>{assert.equal(request._view_revision,'base');h.calls.push('write');return {_view_update:{kind:'independent',id:'x',before_revision:1,base:'base',current:'next',record:{}}};};
+ await h.click(r,'save');assert.deepEqual(h.calls,['write','history',['independent','x',true],'dictionary']);
 });
 test('a successful write followed by a failed refresh reports success accurately without restoring a saveable draft',async()=>{
  const h=inlineHarness(),r=h.card();h.draft();h.c.refreshExampleViews=async()=>{throw Error('offline');};await h.click(r,'save');

@@ -157,11 +157,11 @@ class ReduplicationTests(unittest.TestCase):
             p=dict(kind='corpus',id=e['id'],revision=d['revision'],word=0,key='0:host',lexeme_id=x['id'],lexeme_revision=x['revision'],usage_id=x['body']['usages'][0]['id'],sense_id=x['body']['usages'][0]['senses'][0]['id'])
             self.assertEqual(self.call('/api/segmentation-link',p)[0],200)
             with server.connect(audit=False) as db:
-                old_body=db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0]
+                old_body=db.execute('SELECT body FROM entries_documents WHERE id=?',(e['id'],)).fetchone()[0]
                 link=dict(db.execute('SELECT * FROM lexical_links').fetchone());db.execute('PRAGMA user_version=3');db.commit()
         server.init()
         with server.connect(audit=False) as db:
-            self.assertEqual(db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0],old_body)
+            self.assertEqual(db.execute('SELECT body FROM entries_documents WHERE id=?',(e['id'],)).fetchone()[0],old_body)
             self.assertEqual(dict(db.execute('SELECT * FROM lexical_links WHERE id=?',(link['id'],)).fetchone()),link)
             self.assertEqual(db.execute('SELECT active FROM corpus_units WHERE id=?',(link['unit_id'],)).fetchone()[0],0)
         now=self.get(e)['body']['words'][0];self.assertEqual(now['gloss'],'RED~go');self.assertEqual([m['key'] for m in now['morphemes']],['r:0:host','r:1:host'])

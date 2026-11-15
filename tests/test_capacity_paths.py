@@ -1,4 +1,5 @@
 """Keep bounded searches equivalent to their full-source reference paths."""
+import source_fixtures
 import copy
 import json
 import unittest
@@ -19,10 +20,10 @@ class ScalarSearchTests(unittest.TestCase):
     def test_scalar_scan_keeps_full_results_without_decoding_off_page_words(self):
         self.seed('\n'.join('#pass([IPA #sup[2]'+str(i)+'], (([wide'+str(i)+'],[W]),), [Straße é '+str(i)+'])' for i in range(35)))
         with server.connect(audit=False) as db:
-            rows=list(db.execute('SELECT * FROM entries ORDER BY position'))
+            rows=list(db.execute('SELECT * FROM entries_documents ORDER BY position'))
             for row in rows:
                 body=json.loads(row['body']);body.update(notes='line\né',language_notes='language detail')
-                db.execute('UPDATE entries SET body=? WHERE id=?',(json.dumps(body,ensure_ascii=False),row['id']))
+                source_fixtures.replace(db,'entries',row['id'],json.dumps(body,ensure_ascii=False))
             db.execute("INSERT INTO text_info(text_id,metadata) VALUES(?,?) ON CONFLICT(text_id) DO UPDATE SET metadata=excluded.metadata",(rows[0]['text_id'],json.dumps(dict(notes='shared text note'))))
         self.call('/api/example-save',dict(body=dict(ipa='IPA20',translation='Straße é independent',notes='line\né',words=[dict(form='independent',gloss='I')])) )
         with server.connect(audit=False) as db:
@@ -30,10 +31,10 @@ class ScalarSearchTests(unittest.TestCase):
             # queries must decode only the requested page, as before.
             import sentence_search_index
             sentence_search_index.refresh(db,'translation')
-            expected=[dict(kind='corpus',id=r['id'],body=json.loads(r['body'])) for r in db.execute('SELECT * FROM entries ORDER BY position')]
-            expected += [dict(kind='independent',id=r['id'],body=json.loads(r['body'])) for r in db.execute('SELECT * FROM dictionary_examples ORDER BY rowid')]
+            expected=[dict(kind='corpus',id=r['id'],body=json.loads(r['body'])) for r in db.execute('SELECT * FROM entries_documents ORDER BY position')]
+            expected += [dict(kind='independent',id=r['id'],body=json.loads(r['body'])) for r in db.execute('SELECT * FROM dictionary_examples_documents ORDER BY rowid')]
             for row in expected:row['body']['text_notes']='shared text note' if row['kind']=='corpus' else ''
-            offpage={r[0] for r in db.execute('SELECT body FROM entries ORDER BY position LIMIT -1 OFFSET 20')}
+            offpage={r[0] for r in db.execute('SELECT body FROM entries_documents ORDER BY position LIMIT -1 OFFSET 20')}
         loads=json.loads
         def bounded(value,*a,**kw):
             if isinstance(value,str) and value in offpage:raise AssertionError('off-page word arrays were decoded')

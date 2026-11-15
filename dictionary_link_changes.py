@@ -24,15 +24,18 @@ def reason(data,ref):
     return None
 
 
+def identities(body):
+    """Stable selections, including the usage and form that own a paradigm meaning."""
+    items={('usage',u['id']) for u in body.get('usages',[])}
+    items.update(('sense',u['id'],s['id']) for u in body.get('usages',[]) for s in u.get('senses',[]))
+    items.update(('form',f['id']) for f in body.get('variants',[]))
+    items.update(('paradigm',t['usage_id'],m['id'],f['form_id']) for t in body.get('paradigms',[]) for r in t['rows'] for f in r['realizations'] for m in f['meanings'])
+    return items
+
+
 def collect(db,old,data):
     import lexicon
     data=canonical(data);links=[];examples=[];groups={}
-    def identities(body):
-        items={('usage',u['id']) for u in body.get('usages',[])}
-        items.update(('sense',u['id'],s['id']) for u in body.get('usages',[]) for s in u.get('senses',[]))
-        items.update(('form',f['id']) for f in body.get('variants',[]))
-        items.update(('paradigm',t['usage_id'],m['id'],f['form_id']) for t in body.get('paradigms',[]) for r in t['rows'] for f in r['realizations'] for m in f['meanings'])
-        return items
     # Ordinary spelling/gloss changes and additions do not remove an identity;
     # keep the existing save path independent of the number of its examples.
     if identities(old['body'])<=identities(data):return dict(links=[],examples=[],items=[],corpus=0,independent=0,sentences=0)
@@ -50,14 +53,14 @@ def collect(db,old,data):
     for row in long_tasks.steps(list(db.execute(sql,(old['id'],)))):
         ref=dict(row);why=reason(data,ref)
         if why:links.append(ref);add(ref,'corpus',row['id'],why)
-    for row in long_tasks.steps(list(db.execute("SELECT * FROM dictionary_examples WHERE EXISTS(SELECT 1 FROM json_each(body,'$.targets') WHERE json_extract(value,'$.lexeme_id')=?) ORDER BY id",(old['id'],)))):
-        body=json.loads(row['body']);removed=[]
-        for i,ref in enumerate(body.get('targets',[])):
-            if ref['lexeme_id']!=old['id']:continue
-            why=reason(data,ref)
-            if why:removed.append(i);add(ref,'independent',row['id'],why)
-        if removed:examples.append(dict(row=dict(row),indexes=removed))
-    return dict(links=links,examples=examples,items=list(groups.values()),corpus=len(links),independent=sum(len(e['indexes']) for e in examples),sentences=len({e['row']['id'] for e in examples})+len({l['entry_id'] for l in links if l['entry_id']}))
+    by_owner={}
+    for row in long_tasks.steps(db.execute('SELECT example_id,position,usage_id,sense_id,form_id FROM independent_links WHERE lexeme_id=?',(old['id'],))):
+        ref=dict(row);why=reason(data,ref)
+        if why:
+            by_owner.setdefault(row['example_id'],[]).append(row['position'])
+            add(ref,'independent',row['example_id'],why)
+    examples=list(by_owner.items())
+    return dict(links=links,examples=examples,items=list(groups.values()),corpus=len(links),independent=sum(len(positions) for _,positions in examples),sentences=len(examples)+len({l['entry_id'] for l in links if l['entry_id']}))
 
 
 def token(db,old,request):
@@ -88,24 +91,23 @@ def preview(db,lid,request):
 
 def detach(db,plan):
     import gloss_inheritance
+    import independent_links
     owners={}
     for link in plan['links']:
-        row=db.execute('SELECT e.id,e.body FROM corpus_units u JOIN entries e ON e.id=u.entry_id WHERE u.id=?',(link['unit_id'],)).fetchone()
+        row=db.execute('SELECT e.id,e.body FROM corpus_units u JOIN entries_documents e ON e.id=u.entry_id WHERE u.id=?',(link['unit_id'],)).fetchone()
         if row:owners[('corpus',row['id'])]=row['body']
     for table in ('component_links','lexical_reviews','morphology_analyses','lexical_links'):
         db.executemany('DELETE FROM '+table+' WHERE id=?',[(r['id'],) for r in plan['links']])
-    for item in long_tasks.steps(plan['examples']):
-        row=item['row'];body=json.loads(row['body']);drop=set(item['indexes'])
-        body['targets']=[ref for i,ref in enumerate(body.get('targets',[])) if i not in drop]
-        owners[('independent',row['id'])]=row['body']
-        db.execute('UPDATE dictionary_examples SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body,ensure_ascii=False),row['id']))
+    for rid,positions in long_tasks.steps(plan['examples']):
+        independent_links.remove(db,rid,positions)
     for (kind,rid),before in owners.items():gloss_inheritance.reconcile_owner(db,kind,rid,before)
 
 
 def apply(db,old,data,request,fingerprint=None):
-    plan=collect(db,old,data);current=fingerprint or token(db,old,request)
-    if request.get('link_change_token') and request['link_change_token']!=current:raise ValueError('词条或例句关联已变化，请重新预览后确认')
-    if plan['items'] and (request.get('confirm_link_changes') is not True or request.get('link_change_token')!=current):
+    plan=collect(db,old,data)
+    confirmed=request.get('link_change_token')
+    if confirmed and confirmed!=(fingerprint or token(db,old,request)):raise ValueError('词条或例句关联已变化，请重新预览后确认')
+    if plan['items'] and (request.get('confirm_link_changes') is not True or not confirmed):
         raise ValueError('要移除的义项、用法或形式仍被例句直接引用，请先预览并确认解除关联后保存；稳定身份不会按编号自动转移。')
-    detach(db,plan)
+    if plan['items']:detach(db,plan)
     return plan

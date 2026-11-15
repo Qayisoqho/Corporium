@@ -40,7 +40,7 @@ class PhonologyRematchTests(unittest.TestCase):
 
     def test_old_classifications_rematch_uniquely_and_can_be_confirmed_in_one_batch(self):
         self.actual('ma55','a55');self.settings();self.confirm('ma55');self.confirm('a55','zero')
-        with server.connect(audit=False) as db:before=[tuple(r) for r in db.execute('SELECT id,body,revision FROM morphemes ORDER BY id')]
+        with server.connect(audit=False) as db:before=[tuple(r) for r in db.execute('SELECT id,body,revision FROM morphemes_documents ORDER BY id')]
         config=self.replace_final()
         for reading in ('ma55','a55'):
             result=phonology.classify(reading,config)
@@ -51,7 +51,7 @@ class PhonologyRematchTests(unittest.TestCase):
         confirmed=self.save('confirm_unique',all=True)
         self.assertTrue(all(phonology.classify(r,confirmed)['state']=='confirmed' for r in ('ma55','a55')))
         self.assertEqual(self.call('/api/homophones?language=ordos&view=phonology')[1]['pending_total'],0)
-        with server.connect(audit=False) as db:self.assertEqual([tuple(r) for r in db.execute('SELECT id,body,revision FROM morphemes ORDER BY id')],before)
+        with server.connect(audit=False) as db:self.assertEqual([tuple(r) for r in db.execute('SELECT id,body,revision FROM morphemes_documents ORDER BY id')],before)
 
     def test_ambiguous_and_unmatched_old_assignments_still_require_manual_choice(self):
         self.actual('ma55');self.settings();self.confirm('ma55')

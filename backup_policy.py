@@ -71,11 +71,13 @@ def write_json(folder,data,*,stream=False,defer_prune=False):
         else:path.write_text(json.dumps(data,ensure_ascii=False),encoding='utf8')
     return write(folder,name,writer,defer_prune=defer_prune)
 
-def sqlite_snapshot(folder,source,prefix):
+def sqlite_snapshot(folder,source,prefix,*,progress=None):
     if prefix not in ('languages','lexicon','desktop'):raise ValueError('未知自动备份类型')
     suffix=datetime.now().strftime('%Y%m%d-%H%M%S-%f') if prefix=='desktop' else uuid.uuid4().hex[:8]
     def copy(path):
-        with closing(sqlite3.connect(path)) as destination:source.backup(destination)
+        with closing(sqlite3.connect(path)) as destination:
+            if progress is None:source.backup(destination)
+            else:source.backup(destination,pages=4096,progress=lambda status,remaining,total:progress(total-remaining,total))
     return write(folder,'before-'+prefix+'-'+suffix+'.sqlite3',copy)
 
 def write(folder,name,writer,*,defer_prune=False):

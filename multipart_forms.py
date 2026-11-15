@@ -244,7 +244,8 @@ def apply(db,item,lid):
         action='save',members=g['members'],type=g['type'],gloss=g['gloss'],notes=g['notes']),lid)
     # save() allocates the real UUID. Read it back rather than persisting preview IDs.
     table='entries' if p['kind']=='corpus' else 'dictionary_examples'
-    body=json.loads(db.execute('SELECT body FROM '+table+' WHERE id=?',(p['id'],)).fetchone()[0])
+    import record_sources
+    body=record_sources.read(db,table,p['id'])
     group=body['words'][p['word']]['morph_groups'][-1]
     if p['kind']=='corpus':lexicon.sync_entry(db,p['id'],preserve_complex=True)
     fresh=segmentation.get(db,p['kind'],p['id'])

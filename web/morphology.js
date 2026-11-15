@@ -36,12 +36,66 @@ function boundedLexemeChoices(rows,value='',query='',limit=50,page=1){
  if(selected&&!items.includes(selected))items.unshift(selected);
  return {items,total:matches.length,limit,page,pages};
 }
-function fillLexemeChoices(select,rows,value,query,placeholder,status,page=1){
- const result=boundedLexemeChoices(rows,value,query,50,page),previous=select.selectedOptions[0];
+function fillLexemeChoices(select,rows,value,query,placeholder,status,page=1,remote=null){
+ const result=remote||boundedLexemeChoices(rows,value,query,50,page),previous=select.selectedOptions[0];
  select.innerHTML='<option value="">'+esc(placeholder)+'</option>'+result.items.map(r=>'<option value="'+esc(r.id)+'">'+esc(r.label)+'</option>').join('');
  if(value&&!result.items.some(r=>r.id===value))select.add(new Option(previous?.value===value?previous.textContent:(globalThis.CorporiumI18n?.f("e49c8e74d63afc",()=>[])??'原引用不属于当前语言，请调整'),value));
  select.value=value;
- if(status){status.hidden=rows.length<=result.limit;status.title=(globalThis.CorporiumI18n?.f("0b6ab0ee4a0434",()=>[])??'每批显示50项；可输入词形筛选，当前已选项始终保留。');status.innerHTML=(globalThis.CorporiumI18n?.f("1f458437c21f91",()=>[result.total,result.pages>1?' · '+result.page+' / '+result.pages:'',value?(globalThis.CorporiumI18n?.f("d1d5da491f2992",()=>[])??' · 已选保留'):'',result.pages>1?(globalThis.CorporiumI18n?.f("1aa736b05892b0",()=>[result.page-1,result.page===1?'disabled':'',result.page+1,result.page===result.pages?'disabled':''])??'<button type="button" data-choice-page="'+(result.page-1)+'" aria-label="上一批关联候选" '+(result.page===1?'disabled':'')+'>‹</button><button type="button" data-choice-page="'+(result.page+1)+'" aria-label="下一批关联候选" '+(result.page===result.pages?'disabled':'')+'>›</button>'):''])??'<span>匹配 '+result.total+' 项'+(result.pages>1?' · '+result.page+' / '+result.pages:'')+(value?' · 已选保留':'')+'</span>'+(result.pages>1?'<button type="button" data-choice-page="'+(result.page-1)+'" aria-label="上一批关联候选" '+(result.page===1?'disabled':'')+'>‹</button><button type="button" data-choice-page="'+(result.page+1)+'" aria-label="下一批关联候选" '+(result.page===result.pages?'disabled':'')+'>›</button>':''));if(result.pages>1)for(const b of status.querySelectorAll('[data-choice-page]'))b.onclick=()=>fillLexemeChoices(select,rows,select.value,query,placeholder,status,Number(b.dataset.choicePage));}
+ if(status){status.hidden=remote?result.total<=result.limit&&!query:rows.length<=result.limit;status.title=(globalThis.CorporiumI18n?.f("0b6ab0ee4a0434",()=>[])??'每批显示50项；可输入词形筛选，当前已选项始终保留。');status.innerHTML=(globalThis.CorporiumI18n?.f("1f458437c21f91",()=>[result.total,result.pages>1?' · '+result.page+' / '+result.pages:'',value?(globalThis.CorporiumI18n?.f("d1d5da491f2992",()=>[])??' · 已选保留'):'',result.pages>1?(globalThis.CorporiumI18n?.f("1aa736b05892b0",()=>[result.page-1,result.page===1?'disabled':'',result.page+1,result.page===result.pages?'disabled':''])??'<button type="button" data-choice-page="'+(result.page-1)+'" aria-label="上一批关联候选" '+(result.page===1?'disabled':'')+'>‹</button><button type="button" data-choice-page="'+(result.page+1)+'" aria-label="下一批关联候选" '+(result.page===result.pages?'disabled':'')+'>›</button>'):''])??'<span>匹配 '+result.total+' 项'+(result.pages>1?' · '+result.page+' / '+result.pages:'')+(value?' · 已选保留':'')+'</span>'+(result.pages>1?'<button type="button" data-choice-page="'+(result.page-1)+'" aria-label="上一批关联候选" '+(result.page===1?'disabled':'')+'>‹</button><button type="button" data-choice-page="'+(result.page+1)+'" aria-label="下一批关联候选" '+(result.page===result.pages?'disabled':'')+'>›</button>':''));if(result.pages>1)for(const b of status.querySelectorAll('[data-choice-page]'))b.onclick=()=>remote?remote.load(Number(b.dataset.choicePage)):fillLexemeChoices(select,rows,select.value,query,placeholder,status,Number(b.dataset.choicePage));}
+}
+const morphChoiceBindings=new WeakMap(),morphChoicePages=new WeakMap();
+let morphCatalogTicket=0,morphCatalogPending=null,morphReferenceLabels=new Map();
+function rememberMorphChoice(select){
+ if(!select.value||morphEditorData.language_id!==$('lexeme-language').value)return;
+ morphReferenceLabels.set(select.value,{id:select.value,label:select.selectedOptions[0]?.textContent||select.value,language_id:morphEditorData.language_id});
+}
+function selectedMorphChoice(catalog,id){
+ const row=lexemeChoiceRows(catalog.entries).find(x=>x.id===id),remembered=morphReferenceLabels.get(id);
+ return row||(remembered?.language_id===catalog.language_id?remembered:null);
+}
+function morphChoicePage(catalog,query,page,exclude){
+ let pages=morphChoicePages.get(catalog);if(!pages)morphChoicePages.set(catalog,pages=new Map());
+ const key=JSON.stringify([query,page,exclude]);
+ if(!pages.has(key)){
+  if(pages.size>=24)pages.delete(pages.keys().next().value);
+  const pending=api('morphology-choices?'+new URLSearchParams({language:catalog.language_id,q:query,page,exclude}));
+  pages.set(key,pending);pending.catch(()=>{if(pages.get(key)===pending)pages.delete(key);});
+ }
+ return pages.get(key);
+}
+function remoteLexemeChoices(select,query,status,value,placeholder,{hideSmall=false}={}){
+ const catalog=morphEditorData,binding={sequence:0,timer:null};morphChoiceBindings.set(select,binding);
+ const exclude=editingLexeme?.id||'',valid=()=>morphChoiceBindings.get(select)===binding&&morphEditorData===catalog&&select.isConnected&&$('lexeme-editor').open&&$('lexeme-language').value===catalog.language_id;
+ const chosen=selectedMorphChoice(catalog,value),selected=chosen&&chosen.id!==exclude?[chosen]:[];
+ fillLexemeChoices(select,selected,value,'',placeholder,null);query.hidden=false;
+ async function load(page=1){
+  const sequence=++binding.sequence,text=query.value;
+  try{
+   const result=await morphChoicePage(catalog,text,page,exclude);
+   if(!valid()||sequence!==binding.sequence||query.value!==text)return;
+   const current=select.value,items=result.items.map(x=>({id:x.id,label:lexemePlainLabel(x)}));
+   const chosen=selectedMorphChoice(catalog,current);
+   if(chosen&&!items.some(x=>x.id===current))items.unshift(chosen);
+   fillLexemeChoices(select,[],current,text,placeholder,status,result.page,{...result,items,limit:50,load});
+   if(hideSmall)query.hidden=!text&&result.total<=50;
+  }catch(error){if(valid()&&sequence===binding.sequence){status.hidden=false;status.textContent=error.message;}}
+ }
+ query.oninput=()=>{clearTimeout(binding.timer);++binding.sequence;binding.timer=setTimeout(()=>{if(valid())void load();},140);};
+ void load();
+}
+async function morphChoiceTarget(catalog,id){
+ const existing=catalog.entries.find(x=>x.id===id);if(existing)return existing;
+ const x=await api('lexeme?'+new URLSearchParams({id,language:catalog.language_id}));
+ if(x.language_id!==catalog.language_id)throw Error(globalThis.CorporiumI18n?.ui('词条属于其他语言，请调整引用。','The entry belongs to another language. Update the reference.')??'词条属于其他语言，请调整引用。');
+ const row={...x,body:JSON.stringify(x.body)};catalog.referenceRecords?.set(id,row);catalog.entries=[...catalog.entries.filter(r=>r.id!==id),row];return row;
+}
+async function waitForMorphChoices(){
+ while(morphCatalogPending)await morphCatalogPending;
+ const catalog=morphEditorData;
+ if(catalog.remote_choices&&catalog.language_id!==$('lexeme-language').value)throw Error(globalThis.CorporiumI18n?.ui('请先完成当前语言的词典选项读取。','Wait for the current language’s dictionary options to load.')??'请先完成当前语言的词典选项读取。');
+ while(catalog.pending?.size){const active=[...catalog.pending].filter(([,current])=>current()).map(([pending])=>pending);if(!active.length)break;await Promise.all(active);}
+ const failed=$('lexeme-form').querySelector('[data-morph-choice-error]');
+ if(failed)throw Error(failed.dataset.morphChoiceError);
 }
 function fillMorphEntry(b={}){
  if(!$('morph-base').closest('.morph-base-relation-fields')){
@@ -55,10 +109,11 @@ function fillMorphEntry(b={}){
  const base=b.relation?.base_id||'',entries=lexemeChoiceRows(morphEditorData.entries).filter(x=>x.id!==editingLexeme?.id),query=$('morph-base-query');
  query.value='';query.hidden=entries.length<=50;
  const render=()=>fillLexemeChoices($('morph-base'),entries,$('morph-base').value,query.value,(globalThis.CorporiumI18n?.f("d1a4fbff17e729",()=>[])??'暂不指定'),$('morph-base-count'));
- query.oninput=render;fillLexemeChoices($('morph-base'),entries,base,'',(globalThis.CorporiumI18n?.f("3f574e8f5521ee",()=>[])??'暂不指定'),$('morph-base-count'));
+ if(morphEditorData.remote_choices)remoteLexemeChoices($('morph-base'),query,$('morph-base-count'),base,(globalThis.CorporiumI18n?.f("3f574e8f5521ee",()=>[])??'暂不指定'),{hideSmall:true});
+ else{query.oninput=render;fillLexemeChoices($('morph-base'),entries,base,'',(globalThis.CorporiumI18n?.f("3f574e8f5521ee",()=>[])??'暂不指定'),$('morph-base-count'));}
  $('morph-base').value=base;$('morph-relation').value=b.relation?.type||'stem';$('morph-relation').disabled=!base;
 }
-$('morph-base').onchange=()=>{$('morph-relation').disabled=!$('morph-base').value;};
+$('morph-base').onchange=()=>{rememberMorphChoice($('morph-base'));$('morph-relation').disabled=!$('morph-base').value;};
 function readMorphEntry(){return {entry_type:$('morph-entry-type').dataset.legacy||$('morph-entry-type').value,features:readFeatures($('morph-entry-features')),relation:$('morph-base').value?{base_id:$('morph-base').value,type:$('morph-relation').value}:null};}
 function variantIPAFont(orthographies=[],lid=activeLanguage){
  const ipa=orthographies.find(o=>/ipa|音标/i.test(o.label||''));
@@ -72,9 +127,22 @@ function refreshVariantIPA(){
 }
 for(const event of ['input','change','click'])$('lexeme-form').addEventListener(event,()=>queueMicrotask(refreshVariantIPA));
 const morphOpenLexeme=openLexemeEditor;
-openLexemeEditor=async function(x=null,form='',lid=activeLanguage){try{const owner=x?.language_id||(lid==='all'?'ordos':lid);morphEditorData=await api('morphology-options?language='+encodeURIComponent(owner));await morphOpenLexeme(x,form,lid);fillMorphEntry(x?.body||{});refreshVariantIPA();}catch(e){$('notice').textContent=e.message;}};
+openLexemeEditor=async function(x=null,form='',lid=activeLanguage){
+ const ticket=++morphCatalogTicket;morphCatalogPending=null;morphReferenceLabels=new Map();
+ try{
+  const owner=x?.language_id||(lid==='all'?'ordos':lid);
+  const data=await api('morphology-options?'+new URLSearchParams({language:owner,editor:'1',...(x?.id?{entry_id:x.id}:{})}));
+  if(ticket!==morphCatalogTicket)return;
+  data.referenceRecords=new Map(data.entries.map(r=>[r.id,r]));
+  morphEditorData=data;writingTypes=data.writing_types;lexemeClasses=data.classes;
+  await morphOpenLexeme(x,form,lid);
+  if(ticket!==morphCatalogTicket)return;
+  fillMorphEntry(x?.body||{});refreshVariantIPA();
+ }catch(e){if(ticket===morphCatalogTicket)$('notice').textContent=e.message;}
+};
 $('lexeme-language').addEventListener('change',async()=>{
- const lid=$('lexeme-language').value;try{const data=await api('morphology-options?language='+encodeURIComponent(lid));if($('lexeme-language').value!==lid)return;const b=readMorphEntry();morphEditorData=data;fillMorphEntry(b);for(const el of document.querySelectorAll('#lexeme-form .morph-feature-editor'))el.innerHTML=featurePicker(readFeatures(el));}catch(e){$('lexeme-error').textContent=e.message;}
+ const lid=$('lexeme-language').value,ticket=++morphCatalogTicket,references=morphEditorData.referenceRecords||new Map(morphEditorData.entries.map(r=>[r.id,r]));
+ let pending;try{pending=Promise.all([api('morphology-options?'+new URLSearchParams({language:lid,editor:'1',...(editingLexeme?.language_id===lid?{entry_id:editingLexeme.id}:{})})),fetchWritingTypes(lid),api('classes?language='+encodeURIComponent(lid))]);morphCatalogPending=pending;const [data,types,classes]=await pending;if(ticket!==morphCatalogTicket||$('lexeme-language').value!==lid||!$('lexeme-editor').open)return;const b=readMorphEntry(),structure=typeof wsRead==='function'?wsRead():null;data.referenceRecords=references;data.entries=[...new Map([...references.values(),...data.entries].filter(r=>r.language_id===lid).map(r=>[r.id,r])).values()];morphEditorData=data;writingTypes=types;lexemeClasses=classes;fillMorphEntry(b);for(const el of document.querySelectorAll('#lexeme-form .morph-feature-editor'))el.innerHTML=featurePicker(readFeatures(el));if(structure)wsFill(structure);refreshVariantIPA();}catch(e){if(ticket===morphCatalogTicket)$('lexeme-error').textContent=e.message;}finally{if(morphCatalogPending===pending)morphCatalogPending=null;}
 });
 const morphAddUsage=addUsage;
 addUsage=function(u={}){morphAddUsage(u);$('lexeme-usages').lastElementChild.querySelector('.usage-tags').closest('details').insertAdjacentHTML('afterend',(globalThis.CorporiumI18n?.f("f0b34daec1277b",()=>[featurePicker(u.features||[])])??'<details><summary>此词类用法固有语法特征</summary><div class="usage-features morph-feature-editor">'+featurePicker(u.features||[])+'</div></details>'));};
@@ -97,9 +165,17 @@ function morphologyView(x,data){
  return rendered.replace(/<article class="morph-form-view"/g,match=>{const value=b.variants[formIndex++];if(!value)return match;const variation=briefMode&&(!value.variation||value.variation==='unknown')?'':value.variation||'unknown';return match+' data-compact-kind="'+esc(value.kind||'other')+'" data-compact-variation="'+esc(variation)+'"';});
 }
 function morphEvidence(e,b,tags){const evidence=componentEvidence(e.component_ref,b);const form=b.variants.find(v=>v.id===e.form_id);return `${evidence}<span class="morph-evidence" ${!form&&!e.segmentation_ref&&!e.features?.length?'hidden':''}>${e.segmentation_ref?(globalThis.CorporiumI18n?.f("df667fa9bc6b40",()=>[rich(e.segmentation_ref.unit_form),richGloss(e.segmentation_ref.unit_gloss),e.segmentation_review?(globalThis.CorporiumI18n?.f("f26bbb7300828a",()=>[])??'（待核对）'):''])??'语素：'+rich(e.segmentation_ref.unit_form)+' → '+richGloss(e.segmentation_ref.unit_gloss)+(e.segmentation_review?'（待核对）':'')+' · '):''}${form?(globalThis.CorporiumI18n?.f("e51bf0464e917d",()=>[rich(form.form)])??'具体形式：'+rich(form.form)):''}${form?.features?.length?(globalThis.CorporiumI18n?.f("2ecf789f5a3d20",()=>[featuresView(form.features,tags)])??' · 形式特征：'+featuresView(form.features,tags)):''}${e.features?.length?(globalThis.CorporiumI18n?.f("e832fc36d45a08",()=>[featuresView(e.features,tags)])??' · 本用例特征：'+featuresView(e.features,tags)):''}</span>`;}
+function updateMorphEvidence(container,e,x,tags){
+ if(!container?.firstElementChild)return;
+ while(container.firstElementChild.nextSibling)container.firstElementChild.nextSibling.remove();
+ container.insertAdjacentHTML('beforeend',morphEvidence(e,x.body,tags));
+}
+function wireMorphViewLinks(root,x){
+ root.querySelectorAll('[data-morph-entry]').forEach(b=>b.onclick=dictSafe(()=>showLexeme(b.dataset.morphEntry)));
+ root.querySelectorAll('[data-morph-form]').forEach(b=>b.onclick=dictSafe(async()=>{exampleForm=b.dataset.morphForm;await showLexeme(x.id);$('dictionary-example-controls').scrollIntoView({block:'start'});}));
+}
 function wireMorphView(x){
- $('dictionary-detail').querySelectorAll('[data-morph-entry]').forEach(b=>b.onclick=dictSafe(()=>showLexeme(b.dataset.morphEntry)));
- $('dictionary-detail').querySelectorAll('[data-morph-form]').forEach(b=>b.onclick=dictSafe(async()=>{exampleForm=b.dataset.morphForm;await showLexeme(x.id);$('dictionary-example-controls').scrollIntoView({block:'start'});}));
+ wireMorphViewLinks($('dictionary-detail'),x);
  $('dictionary-example-controls').insertAdjacentHTML('beforeend',(globalThis.CorporiumI18n?.f("b46bb90aa56db7",()=>[x.body.variants.map(v=>`<option value="${esc(v.id)}">${esc(morphFormLabel(v))}</option>`).join('')])??'<label>形式范围（适用于两种来源） <select id="example-form"><option value="all">全部形式及未指定关联</option><option value="unassigned">尚未指定形式</option>'+x.body.variants.map(v=>`<option value="${esc(v.id)}">${esc(morphFormLabel(v))}</option>`).join('')+'</select></label>'));
  $('example-form').value=exampleForm;$('example-form').onchange=dictSafe(async()=>{exampleForm=$('example-form').value;await showLexeme(x.id);});
  globalThis.CorporiumDictionaryEvidence?.refresh();

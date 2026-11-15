@@ -18,9 +18,9 @@ test('manual review keeps a previous explicit choice available for ambiguous rem
 });
 
 test('batch confirmation uses the current token and includes checked rematched readings',async()=>{
- const calls=[],s={config:{token:'new-inventory-token'},panel:{querySelectorAll:()=>[{dataset:{hpUnique:'ma55'}}]},corporiumConfirm:async text=>{assert.match(text,/重新匹配/);return true;},api:async(path,body)=>calls.push({path,body}),loadLanguages:async()=>{},rerun:async()=>{}};
- vm.createContext(s);vm.runInContext(source.match(/ async function bulk[^\n]+/)[0],s);await s.bulk(false);await s.bulk(true);
+ const calls=[],s={activeLanguage:'ordos',languageList:[],config:{token:'new-inventory-token'},panel:{querySelectorAll:()=>[{dataset:{hpUnique:'ma55'}}]},corporiumConfirm:async text=>{assert.match(text,/重新匹配/);return true;},api:async(path,body)=>{calls.push({path,body});return {token:'committed-token'};},loadLanguages:async()=>{},rerun:async()=>{}};
+ vm.createContext(s);vm.runInContext(source.slice(source.indexOf(' async function saveConfiguration('),source.indexOf(' async function bulk('))+source.match(/ async function bulk[^\n]+/)[0],s);await s.bulk(false);await s.bulk(true);
  assert.equal(calls.length,2);
- for(const {body} of calls){assert.equal(body.action,'confirm_unique');assert.equal(body.token,'new-inventory-token');assert.deepEqual(Array.from(body.readings),['ma55']);}
+ for(const {body} of calls){assert.equal(body.action,'confirm_unique');assert.equal(body.token,body.all?'committed-token':'new-inventory-token');assert.deepEqual(Array.from(body.readings),['ma55']);}
  assert.equal(calls[0].body.all,false);assert.equal(calls[1].body.all,true);
 });

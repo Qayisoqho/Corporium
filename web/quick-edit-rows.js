@@ -1,8 +1,10 @@
 // Compact views write through to the original draft controls; stable identities stay intact.
-function createQuickEditRows(active,requiredTypes){
+function createQuickEditRows(active,requiredTypes,options={}){
  const components=new Map(),tables=new Map(),usages=new Map(),senseAdditions=new Map(),orthographies=new Map(),extraTypes=new Set();let refreshing=false,drag=null;
  const selectionPans=new Map(),selectionResize=new ResizeObserver(entries=>{for(const {target} of entries)selectionPans.get(target)?.();});
- const changed=()=>{lexemeDirty=true;};
+ const changed=()=>{lexemeDirty=true;options.changed?.();};
+ const analysisRows=()=>options.analyses?.()||[...$('ws-analyses').children];
+ const omitGloss=()=>!!options.omitGloss?.();
  function command(text,title,action){const b=document.createElement('button');b.type='button';b.textContent=text;b.title=title;b.setAttribute('aria-label',title);b.onclick=action;return b;}
  function field(label,cls=''){const input=document.createElement('input');input.className='quick-row-input '+cls;input.setAttribute('aria-label',label);input.title=label;return input;}
  function setValue(input,value){if(input.value!==value)input.value=value;}
@@ -53,15 +55,26 @@ function createQuickEditRows(active,requiredTypes){
  }
  function removeComponentView(row,view){for(const item of view.selectViews){item.select.removeEventListener('change',item.update);selectionResize.unobserve(item.mask);selectionPans.delete(item.mask);}for(const {control,marker} of view.moved)if(marker.parentNode)marker.replaceWith(control);const result=row.querySelector('.ws-registry-results');if(result)row.querySelector('.ws-registry-picker').append(result);view.search.innerHTML=view.searchHTML;view.search.removeAttribute('title');row.classList.remove('quick-component-row','quick-sort-row');view.line.remove();components.delete(row);}
  function componentColumn(view,input){
+  if(options.gridNavigation?.()&&view.query===input)return {name:'query'};
   for(const name of ['form','readings','gloss'])if(view[name]===input)return {name};
   for(const [type,inputField] of view.writingInputs)if(inputField===input)return {name:'writing',type};
   return null;
  }
  function verticalInput(event){
-  if(!active()||event.defaultPrevented||event.isComposing||event.keyCode===229||event.ctrlKey||event.altKey||event.metaKey||event.shiftKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
+  if(!active()||event.defaultPrevented||event.isComposing||event.keyCode===229||event.ctrlKey||event.altKey||event.metaKey||event.shiftKey)return;
+  const horizontal=['ArrowLeft','ArrowRight'].includes(event.key);
+  if(horizontal&&!options.gridNavigation?.()||!horizontal&&!['ArrowUp','ArrowDown'].includes(event.key))return;
   const input=event.target,row=input.closest?.('.quick-component-row'),view=components.get(row);
   if(!view||input.disabled||input.readOnly)return;
   const column=componentColumn(view,input);if(!column)return;
+  if(horizontal){
+   const left=event.key==='ArrowLeft';
+   if(input.selectionStart!==input.selectionEnd||input.selectionStart!==(left?0:input.value.length))return;
+   const fields=[...view.line.querySelectorAll('input')].filter(n=>!n.disabled&&!n.readOnly&&n.getClientRects().length);
+   const target=fields[fields.indexOf(input)+(left?-1:1)];
+   if(target){event.preventDefault();target.focus();target.select();}
+   return;
+  }
   const rows=[...row.parentElement.children],step=event.key==='ArrowUp'?-1:1;
   event.preventDefault();
   for(let i=rows.indexOf(row)+step;i>=0&&i<rows.length;i+=step){
@@ -84,7 +97,7 @@ function createQuickEditRows(active,requiredTypes){
   gloss.oninput=()=>write(row.querySelector('[data-ws="gloss"]'),gloss.value);
   const handle=grip(row,row,()=>wsParents(row.parentElement),(globalThis.CorporiumI18n?.f("aa80877059d581",()=>[])??'语素')),remove=command('×',(globalThis.CorporiumI18n?.f("b170a8b73e16df",()=>[])??'移除此语素组分'),()=>{row.querySelector(':scope > .ws-row-tools [data-ws-remove]').click();refresh();});remove.className='quick-row-remove';
   line.append(handle,searchCell,form,readings,writings,gloss,remove);line.addEventListener('keydown',verticalInput);row.append(line);row.classList.add('quick-component-row','quick-sort-row');
-  v={line,search,searchHTML,target,moved,selectViews,form,readings,gloss,writings,writingInputs:new Map()};components.set(row,v);return v;
+  v={line,query,search,searchHTML,target,moved,selectViews,form,readings,gloss,writings,writingInputs:new Map()};components.set(row,v);return v;
  }
  function componentTable(analysis,types){
   let t=tables.get(analysis);if(!t){
@@ -95,9 +108,12 @@ function createQuickEditRows(active,requiredTypes){
    t={list,marker,wrap,sheet,head,add,toolbar,moved};tables.set(analysis,t);
   }
   t.add.innerHTML=(globalThis.CorporiumI18n?.f("a7bacb1f66dc23",()=>[writingTypes.filter(w=>!types.includes(w.id)).map(w=>`<option value="${esc(w.id)}">${esc(w.name)}</option>`).join('')])??'<option value="">＋书写栏</option>'+writingTypes.filter(w=>!types.includes(w.id)).map(w=>`<option value="${esc(w.id)}">${esc(w.name)}</option>`).join(''));t.add.hidden=types.length>=writingTypes.length;t.add.value='';
-  t.sheet.style.setProperty('--quick-component-columns','var(--ui-field-height) minmax(var(--quick-link-min),1.5fr) minmax(100px,1fr) minmax(105px,1fr) '+types.map(()=>'minmax(100px,1fr)').join(' ')+' minmax(110px,1fr) var(--ui-field-height)');
-  t.sheet.style.setProperty('--quick-component-width','calc(var(--quick-link-min) + 2 * var(--ui-field-height) + '+(100+105+types.length*100+110+8*(5+types.length))+'px)');
-  t.head.replaceChildren(...['',(globalThis.CorporiumI18n?.f("25c13bc1f1da72",()=>[])??'关联语素'),(globalThis.CorporiumI18n?.f("16c69a2ad54a8b",()=>[])??'形式'),(globalThis.CorporiumI18n?.f("8c8af3ef75d37f",()=>[])??'读音'),...types.map(id=>writingTypes.find(w=>w.id===id)?.name||(globalThis.CorporiumI18n?.f("48695c04cd9e62",()=>[])??'书写形式')),(globalThis.CorporiumI18n?.f("2c3b9199dac0b4",()=>[])??'释义'),''].map(label=>{const s=document.createElement('span');s.textContent=s.title=label;return s;}));return t;
+  const glossColumns=omitGloss()?[]:[(globalThis.CorporiumI18n?.f("2c3b9199dac0b4",()=>[])??'释义')];
+  t.sheet.style.setProperty('--quick-component-columns','var(--ui-field-height) minmax(var(--quick-link-min),1.5fr) minmax(6.25rem,1fr) minmax(6.5625rem,1fr) '+types.map(()=>'minmax(6.25rem,1fr)').join(' ')+(glossColumns.length?' minmax(6.875rem,1fr)':'')+' var(--ui-field-height)');
+  t.sheet.style.setProperty('--quick-component-width','calc(var(--quick-link-min) + 2 * var(--ui-field-height) + '+(12.8125+types.length*6.25+(glossColumns.length?6.875:0))+'rem + '+(4+types.length+glossColumns.length)+' * var(--ui-gap))');
+  const headings=['',(globalThis.CorporiumI18n?.f("25c13bc1f1da72",()=>[])??'关联语素'),(globalThis.CorporiumI18n?.f("16c69a2ad54a8b",()=>[])??'形式'),(globalThis.CorporiumI18n?.f("8c8af3ef75d37f",()=>[])??'读音'),...types.map(id=>writingTypes.find(w=>w.id===id)?.name||(globalThis.CorporiumI18n?.f("48695c04cd9e62",()=>[])??'书写形式')),...glossColumns,''];
+  const headingKey=JSON.stringify(headings);
+  if(t.head.dataset.headings!==headingKey){t.head.replaceChildren(...headings.map(label=>{const s=document.createElement('span');s.textContent=s.title=label;return s;}));t.head.dataset.headings=headingKey;}return t;
  }
  function removeComponentTable(t){
   if(t.marker.parentNode)t.marker.replaceWith(t.list);
@@ -105,20 +121,23 @@ function createQuickEditRows(active,requiredTypes){
   t.toolbar.remove();t.wrap.remove();t.add.remove();
  }
  function refreshComponents(){
-  for(const [row,v] of components)if(!row.isConnected)removeComponentView(row,v);
-  for(const [analysis,t] of tables)if(!analysis.isConnected){removeComponentTable(t);tables.delete(analysis);}
-  const rows=[...$('ws-analyses').querySelectorAll('.ws-component')],types=[...new Set([...requiredTypes(),...extraTypes,...rows.flatMap(r=>[...wsReadWritings(r.querySelector('.ws-writings')),...(r.registryRecord?.body.writings||[])].map(w=>w.type_id))])];
-  for(const analysis of $('ws-analyses').children)componentTable(analysis,types);
+  const analyses=analysisRows(),rows=analyses.flatMap(a=>[...a.querySelectorAll('.ws-component')]),liveRows=new Set(rows),liveAnalyses=new Set(analyses);
+  for(const [row,v] of components)if(!liveRows.has(row))removeComponentView(row,v);
+  for(const [analysis,t] of tables)if(!liveAnalyses.has(analysis)){removeComponentTable(t);tables.delete(analysis);}
+  const types=[...new Set([...requiredTypes(),...extraTypes,...rows.flatMap(r=>[...wsReadWritings(r.querySelector('.ws-writings')),...(r.registryRecord?.body.writings||[])].map(w=>w.type_id))])];
+  for(const analysis of analyses)componentTable(analysis,types);
   for(const row of rows){
    const v=componentView(row),linked=!!row.registryRecord;setValue(v.form,wsVal(row,'form'));setValue(v.readings,wsVal(row,'readings').split('\n').join('；'));setValue(v.gloss,wsVal(row,'gloss')||(linked?wsRegistryGlosses(row.registryRecord).join(' / '):''));
+   if(v.gloss.hidden!==omitGloss())v.gloss.hidden=omitGloss();
    for(const input of [v.form,v.readings,v.gloss]){input.readOnly=linked;input.title=input.value||input.getAttribute('aria-label');}
    v.target.title=v.target.selectedOptions[0]?.textContent||(globalThis.CorporiumI18n?.f("883a46dc12ebe5",()=>[])??'选择语素关联方式');
    for(const select of v.selectViews)select.update();
    const actual=wsReadWritings(row.querySelector('.ws-writings')),values=actual.length?actual:row.registryRecord?.body.writings||[];
    for(const [id,input] of v.writingInputs)if(!types.includes(id)){input.remove();v.writingInputs.delete(id);}
-   for(const id of types){let input=v.writingInputs.get(id);if(!input){input=field(writingTypes.find(w=>w.id===id)?.name||(globalThis.CorporiumI18n?.f("e9ef072aa3f807",()=>[])??'语素书写形式'));input.oninput=()=>{const el=row.querySelector('.ws-writings'),current=wsReadWritings(el).filter(w=>w.type_id!==id);if(input.value.trim())current.push({type_id:id,text:input.value});wsWritings(el,current);changed();};v.writingInputs.set(id,input);}v.writings.append(input);input.style.fontFamily=cssFont(writingTypes.find(w=>w.id===id)?.font||'Junicode');setValue(input,values.find(w=>w.type_id===id)?.text||'');input.readOnly=linked;input.title=input.value||input.getAttribute('aria-label');}
+   for(const [index,id] of types.entries()){let input=v.writingInputs.get(id);if(!input){input=field(writingTypes.find(w=>w.id===id)?.name||(globalThis.CorporiumI18n?.f("e9ef072aa3f807",()=>[])??'语素书写形式'));input.oninput=()=>{const el=row.querySelector('.ws-writings'),current=wsReadWritings(el).filter(w=>w.type_id!==id);if(input.value.trim())current.push({type_id:id,text:input.value});wsWritings(el,current);changed();};v.writingInputs.set(id,input);}if(v.writings.children[index]!==input)v.writings.insertBefore(input,v.writings.children[index]||null);input.style.fontFamily=cssFont(writingTypes.find(w=>w.id===id)?.font||'Junicode');setValue(input,values.find(w=>w.type_id===id)?.text||'');input.readOnly=linked;input.title=input.value||input.getAttribute('aria-label');}
    v.writings.style.setProperty('--quick-writing-columns',String(types.length));
-   const results=row.querySelector('.ws-registry-results');if(results)v.line.append(results);
+   // A refresh on query blur must not detach the candidate receiving mousedown.
+   const results=row.querySelector('.ws-registry-results');if(results&&results.parentElement!==v.line)v.line.append(results);
   }
  }
  function refreshUsages(){
@@ -144,7 +163,7 @@ function createQuickEditRows(active,requiredTypes){
    }
   }
  }
- function refresh(){if(!active()||refreshing)return;refreshing=true;try{refreshOrthographies();refreshComponents();refreshUsages();}finally{refreshing=false;}}
+ function refresh(){if(!active()||refreshing)return;refreshing=true;try{if(!options.componentsOnly?.())refreshOrthographies();refreshComponents();if(!options.componentsOnly?.())refreshUsages();}finally{refreshing=false;}}
  function clear(){cancelDrag();for(const [row,view] of orthographies)restoreOrthography(row,view);for(const [sense,marker] of senseAdditions){const controls=[...usages.values()].flatMap(list=>[...list.querySelectorAll('[data-addition-for]')]).find(d=>d.dataset.additionFor===sense.dataset.id)?.querySelector('.sense-addition-controls');if(controls)marker.replaceWith(controls);}senseAdditions.clear();for(const [row,v] of components)removeComponentView(row,v);for(const t of tables.values())removeComponentTable(t);tables.clear();extraTypes.clear();for(const [usage,list] of usages){usage.classList.remove('quick-usage-row');list.remove();}usages.clear();}
  const set=wsSetRegistryRecord,release=wsReleaseRegistry,search=wsSearchRegistry,fill=wsFill;
  wsSetRegistryRecord=function(...args){set(...args);refresh();};wsReleaseRegistry=function(...args){release(...args);refresh();};

@@ -7,7 +7,7 @@ const historyToggle=document.createElement('button');historyToggle.id='history-t
 const historyPanel=document.createElement('div');historyPanel.id='workspace-history';historyPanel.hidden=true;
 makeDialog('management-dialog',(globalThis.CorporiumI18n?.f("45ab57b86b5c1e",()=>[])??'<h2>管理</h2><div id="management-entries"></div><div id="management-backup"></div>'));
 const managementButton=document.createElement('button');managementButton.id='management-open';managementButton.textContent=(globalThis.CorporiumI18n?.f("bd6421171cf233",()=>[])??'管理');managementButton.onclick=()=>$('management-dialog').showModal();workspaceTabs.append(managementButton);
-for(const id of ['writing-manager-open','layers-open','classes-open']){const b=$(id);$('management-entries').append(b);b.addEventListener('click',()=>$('management-dialog').close(),{capture:true});}
+for(const id of ['writing-manager-open','layers-open','classes-open'])$('management-entries').append($(id));
 document.body.append(sidebarToggle);
 toolbarRow.append(briefLabel,$('auto-link-open'),$('undo-action'),$('redo-action'),historyToggle);
 historyPanel.append(undoPanel);

@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 import unittest
 from pathlib import Path
@@ -40,7 +41,7 @@ class DateLayoutTests(unittest.TestCase):
         self.assertEqual(a2['body']['created_at'],a['body']['created_at'])
         self.assertEqual(self.undo()[0],200)
         self.assertEqual(self.call('/api/lexeme?id='+a['id'])[1]['body']['created_at'],a['body']['created_at'])
-        with server.connect(audit=False) as db:db.execute('INSERT INTO lexemes VALUES(?,?,?,?,1)',('old','ordos','old',json.dumps(lexicon.normalize({}))))
+        with server.connect(audit=False) as db:source_fixtures.seed(db,'lexemes',('id', 'language_id', 'headword', 'body', 'revision'),('old', 'ordos', 'old', json.dumps(lexicon.normalize({})), 1))
         old=self.action('lexeme-save',id='old',revision=1,headword='old2',body={'created_at':'2099-01-01T00:00:00Z'})
         self.assertNotIn('created_at',old['body'])
         for order,expected in [('@added-asc',[a['id'],b['id'],'old']),('@added-desc',[b['id'],a['id'],'old'])]:
@@ -52,7 +53,7 @@ class DateLayoutTests(unittest.TestCase):
         a=self.action('morpheme-save',form='z',body={});b=self.action('morpheme-save',form='a',body={})
         changed=self.action('morpheme-save',id=a['id'],revision=a['revision'],form='z',body=dict(gloss='updated',created_at='2000-01-01T00:00:00Z'))
         self.assertEqual(changed['body']['created_at'],a['body']['created_at'])
-        with server.connect(audit=False) as db:db.execute('INSERT INTO morphemes VALUES(?,?,?,?,?,1)',('old-m','ordos','old',1,json.dumps(dict(readings=[]))))
+        with server.connect(audit=False) as db:source_fixtures.seed(db,'morphemes',('id', 'language_id', 'form', 'number', 'body', 'revision'),('old-m', 'ordos', 'old', 1, json.dumps(dict(readings=[])), 1))
         for order,first in [('@added-asc',a),('@added-desc',b)]:
             result=self.call('/api/morphemes?'+urlencode(dict(sort_order=order,page_size=10)))[1]
             self.assertEqual(result['items'][0]['id'],first['id']);self.assertEqual(result['items'][-1]['id'],'old-m')
@@ -103,9 +104,11 @@ class DateLayoutTests(unittest.TestCase):
         with server.connect(audit=False) as db:
             bundle=lexicon.export_bundle(db,'ordos')
             language=dict(db.execute("SELECT * FROM languages WHERE id='ordos'").fetchone())
-            other=self.action('save-language',name='Imported',metadata=json.loads(language['metadata']))['id']
+        other=self.action('save-language',name='Imported',metadata=json.loads(language['metadata']))['id']
+        with server.connect(audit=False) as db:
             result=lexicon.import_bundle(db,bundle,{'ordos':other},{},other)
-            imported=[{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT * FROM lexemes WHERE language_id=?',(other,))]
+            from record_sources import with_bodies
+            imported=list(with_bodies(db,'lexemes',db.execute('SELECT id,headword,language_id,revision FROM lexemes WHERE language_id=?',(other,))))
             self.assertEqual({r['body']['created_at'] for r in imported},{a['body']['created_at'],b['body']['created_at']})
             self.assertEqual([r['headword'] for r in dictionary_layout.sorted_rows(db,other,imported)],['b','a'])
         backup=self.call('/api/backup')[1];source=Path(self.temp.name)/'dates.json';source.write_text(json.dumps(backup),encoding='utf8');target=Path(self.temp.name)/'restored.sqlite3';restore(source,target)
@@ -121,8 +124,8 @@ class DateLayoutTests(unittest.TestCase):
         self.action('dict-org-layout-save',revision=root['revision'],levels=['pos'])
         leaf=self.tree([self.tree()['groups'][0]['key']]);self.move(leaf,'entries',b['id'],a['id'])
         with server.connect(audit=False) as db:
-            db.execute('INSERT INTO lexemes VALUES(?,?,?,?,1)',('old','ordos','old',json.dumps(lexicon.normalize({}))))
-            db.execute('INSERT INTO morphemes VALUES(?,?,?,?,?,1)',('old-m','ordos','old',1,json.dumps(dict(readings=[]))))
+            source_fixtures.seed(db,'lexemes',('id', 'language_id', 'headword', 'body', 'revision'),('old', 'ordos', 'old', json.dumps(lexicon.normalize({})), 1))
+            source_fixtures.seed(db,'morphemes',('id', 'language_id', 'form', 'number', 'body', 'revision'),('old-m', 'ordos', 'old', 1, json.dumps(dict(readings=[])), 1))
         bundle=self.call('/api/export-language?language=ordos')[1]
         other=self.action('save-language',name='New copy',metadata={})['id']
         self.action('import-language',_language=other,bundle=bundle)

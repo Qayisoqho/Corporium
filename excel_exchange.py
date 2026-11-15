@@ -168,8 +168,9 @@ def apply(db,dbpath,b,lid):
         db.execute('INSERT INTO texts(id,title,source,original,digest,errors,language_id) VALUES(?,?,?,?,?,?,?)',(tid,p['title'],str(b.get('filename','Excel')),'',str(uuid.uuid4()),'[]',lid))
         for position,s in long_tasks.steps(enumerate(p['sentences'],1)):
             rid=str(uuid.uuid4());body=analyze(s['body'])
-            db.execute('INSERT INTO entries(id,text_id,position,body) VALUES(?,?,?,?)',(rid,tid,position,json.dumps(body,ensure_ascii=False)))
-            lexicon.sync_entry(db,rid);units=annotations.units(db,'corpus',rid,body)
+            import sentence_rows
+            sentence_rows.write(db,'corpus',rid,body,columns=dict(text_id=tid,position=position),insert=True)
+            lexicon.sync_entry(db,rid,analyzed_body=body,stored_body=body);units=annotations.units(db,'corpus',rid,body)
             for c in long_tasks.steps(s['cells']):
                 uid=annotations.SENTENCE if c['word'] is None else units[c['word']]['id']
                 db.execute('INSERT INTO annotation_cells VALUES(?,?,?,?,?,?,1)',(str(uuid.uuid4()),'corpus',rid,uid,c['layer_id'],c['value']))
@@ -211,15 +212,20 @@ def workbook(sheets):
     return out.getvalue()
 
 def export(db,b,lid):
+    import record_sources
     ids=b.get('ids',[])
     if not isinstance(ids,list) or not ids or len(set(ids))!=len(ids):raise ValueError('请选择当前语言的文本')
     defs=annotations.layers(db,lid);sheets=[]
     for tid in ids:
         text=db.execute('SELECT * FROM texts WHERE id=? AND language_id=?',(tid,lid)).fetchone()
         if not text:raise ValueError('文本不存在或不属于当前语言')
-        has_redup=db.execute("SELECT 1 FROM entries WHERE text_id=? AND json_array_length(body,'$.reduplications')>0 LIMIT 1",(tid,)).fetchone() is not None
+        if record_sources.native(db):
+            sql="SELECT 1 FROM entries e JOIN sentence_text_rows s ON s.kind='corpus' AND s.owner_id=e.id WHERE e.text_id=? AND json_array_length(s.extra,'$.reduplications')>0 LIMIT 1"
+        else:
+            sql="SELECT 1 FROM entries WHERE text_id=? AND json_array_length(body,'$.reduplications')>0 LIMIT 1"
+        has_redup=db.execute(sql,(tid,)).fetchone() is not None
         rows=[['SentenceID','WordIndex','Morph','Gloss','IPA','Translation','Notes']+[d['name'] for d in defs]+(['Reduplication'] if has_redup else [])]
-        for number,r in enumerate(gloss_inheritance.iter_rows(db,db.execute('SELECT id,body FROM entries WHERE text_id=? ORDER BY position,id',(tid,)),'corpus'),1):
+        for number,r in enumerate(gloss_inheritance.iter_rows(db,db.execute('SELECT id FROM entries WHERE text_id=? ORDER BY position,id',(tid,)),'corpus',relational=True),1):
             body=gloss_inheritance.load(db,'corpus',r['id'],r['body'])
             if body.get('language_id') and body['language_id']!=lid:raise ValueError('文本含其他语言的句子，请先按语言拆分文本后导出')
             units=annotations.units(db,'corpus',r['id'],body);cells={(c['unit_id'],c['layer_id']):c['value'] for c in db.execute("SELECT * FROM annotation_cells WHERE owner_kind='corpus' AND record_id=?",(r['id'],))}

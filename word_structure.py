@@ -99,12 +99,13 @@ def writing_rows(body):
 def references(body):
     return {c['lexeme_id'] for a in body.get('word_structure',{}).get('analyses',[]) for c in a.get('components',[]) if c.get('lexeme_id')}
 
-def validate(db,entries):
+def validate_entries(db,entries,lookup):
+    """Validate the edited owners and their direct references."""
     import morphology,lexicon
+    import paradigms
     classes={r['id']:dict(r) for r in db.execute("SELECT * FROM category_classes WHERE kind='morph' ")}
     types={r['id']:r['language_id'] for r in db.execute('SELECT id,language_id FROM writing_types')}
-    edges={}
-    for xid,x in entries.items():
+    for x in entries:
         b=x['body'];data=normalize(b.get('word_structure',{}));lid=x['language_id'];members=set()
         for w in writing_rows(b):
             if types.get(w['type_id'])!=lid:raise ValueError('形态分析引用的书写类型不存在或语言不一致，请先调整引用')
@@ -120,13 +121,16 @@ def validate(db,entries):
             for c in a['components']:
                 morphology.check_features(db,lid,c['features'])
                 if c['lexeme_id']:
-                    target=entries.get(c['lexeme_id'])
+                    target=lookup(c['lexeme_id'])
                     if not target or target['language_id']!=lid:raise ValueError('组分关联词条不存在或语言不一致，请先解除关联')
                     lexicon.selection(target['body'],c['usage_id'],c['sense_id']);morphology.form_selection(target['body'],c['form_id'])
-                    import paradigms
                     paradigms.validate_selection(target['body'],c['usage_id'],c['sense_id'],c['form_id'])
                 elif c['usage_id'] or c['sense_id'] or c['form_id']:raise ValueError('请先关联组分的词条')
-        edges[xid]=references(b)
+
+
+def validate(db,entries):
+    validate_entries(db,entries.values(),entries.get)
+    edges={xid:references(x['body']) for xid,x in entries.items()}
     # No recursive containment, even across dictionary entries.
     done=set()
     for start in edges:
@@ -137,8 +141,8 @@ def validate(db,entries):
             if node in active:raise ValueError('词条的组分关联不能形成循环包含')
             if node in done:continue
             active.add(node);stack.append((node,True));stack.extend((n,False) for n in edges.get(node,[]))
-    for r in db.execute('SELECT id,body FROM morph_class_templates'):
-        if r['id'] not in classes:raise ValueError('主要部分模板缺少所属形态类')
+    for r in db.execute("SELECT t.body,c.id FROM morph_class_templates t LEFT JOIN category_classes c ON c.id=t.id AND c.kind='morph'"):
+        if r['id'] is None:raise ValueError('主要部分模板缺少所属形态类')
         template(json.loads(r['body']))
 
 def remap(data,owner,xmap,submap,classmap,typemap,tagmap):

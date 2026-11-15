@@ -1,3 +1,4 @@
+import source_fixtures
 import copy
 import json
 import unittest
@@ -76,7 +77,8 @@ class EvidenceReadTests(unittest.TestCase):
                 actual=lexicon.list_lexemes(db,'ordos','家',page_size='all',summary=True)
         self.assertEqual(actual,expected)
         self.assertFalse(any('SELECT b.owner_id,b.id,b.revision' in s for s in statements))
-        self.assertFalse(any('SELECT b.*' in s or 'SELECT id,position FROM corpus_units' in s for s in statements))
+        self.assertFalse(any(('SELECT b.*' in s and 'gloss_bindings b' in s) or
+                             'SELECT id,position FROM corpus_units' in s for s in statements))
 
     def test_only_changed_documents_prepare_full_bindings_after_local_override(self):
         e,ex,x,other=self.shared_fixture();third=self.example([('third','OTHER')]);z=self.word('third',['OTHER']);self.link(third,z,'@word',kind='independent')
@@ -99,10 +101,11 @@ class EvidenceReadTests(unittest.TestCase):
     def test_partial_cache_and_eviction_during_a_batch_keep_hits_and_field_catalog(self):
         e,ex,x=self.fixture()
         with server.connect(audit=False) as db:
-            source=json.loads(db.execute('SELECT body FROM dictionary_examples WHERE id=?',(ex['id'],)).fetchone()[0])
+            from independent_links import source_body
+            source=source_body(db,ex['id'],json.loads(db.execute('SELECT body FROM dictionary_examples_documents WHERE id=?',(ex['id'],)).fetchone()[0]))
             for i in range(105):
                 body=copy.deepcopy(source);body['notes']='特有证据'+str(i)
-                db.execute('INSERT INTO dictionary_examples VALUES(?,?,?,1)',('extra'+str(i),'ordos',json.dumps(body)))
+                source_fixtures.seed(db,'dictionary_examples',('id', 'language_id', 'body', 'revision'),('extra'+str(i), 'ordos', json.dumps(body), 1))
         expected=self.search('特有证据104')
         with evidence_index._lock:
             index=next(reversed(evidence_index._indexes.values()))

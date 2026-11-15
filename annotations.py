@@ -1,12 +1,18 @@
 """Configurable word layers, attached to stable word identities."""
 import json
+import sentence_rows
 import copy
 import uuid
+from collections import defaultdict
 import font_catalog
 import gloss_inheritance
 import display_spacing
 
 TABLES=('annotation_layers','annotation_cells')
+# Inline edits keep the owner and all catalogs in place. The transaction can
+# change its relations, inherited gloss and manually edited annotation cells.
+INDEPENDENT_INLINE_TABLES=('dictionary_examples','independent_links','independent_word_overrides',
+                           'annotation_cells','gloss_bindings','code_spans','code_time_links')
 def initialize(db):
     db.executescript('''CREATE TABLE IF NOT EXISTS annotation_layers(id TEXT PRIMARY KEY,language_id TEXT NOT NULL,name TEXT NOT NULL,font TEXT NOT NULL,style TEXT NOT NULL DEFAULT 'normal',position INTEGER NOT NULL DEFAULT 0,visible INTEGER NOT NULL DEFAULT 1,searchable INTEGER NOT NULL DEFAULT 1,revision INTEGER NOT NULL DEFAULT 1);
     CREATE TABLE IF NOT EXISTS annotation_cells(id TEXT PRIMARY KEY,owner_kind TEXT NOT NULL,record_id TEXT NOT NULL,unit_id TEXT NOT NULL,layer_id TEXT NOT NULL,value TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 1);
@@ -32,17 +38,22 @@ def attach(body,words,definitions,cells):
     for w,uid in zip(body.get('words',[]),words):
         w['extra_layers']=[dict(**l,value=values.get((uid,l['id']),'')) for l in definitions if l.get('anchor','word')=='word']
     body['sentence_layers']=[dict(**l,value=values.get((SENTENCE,l['id']),'')) for l in definitions if l.get('anchor','word')!='word']
-    body['annotation_review_count']=sum(not valid_cell(c,set(words),definitions) for c in cells)
+    live=set(words)
+    body['annotation_review_count']=sum(not valid_cell(c,live,definitions) for c in cells)
 
 def layers(db,lid):return [dict(r) for r in db.execute('SELECT * FROM annotation_layers WHERE language_id=? ORDER BY position,id',(lid,))]
 
-def owner(db,kind,rid):
+def owner_record(db,kind,rid):
     if kind=='corpus':
-        row=db.execute('SELECT e.body,e.revision,t.language_id FROM entries e JOIN texts t ON t.id=e.text_id WHERE e.id=?',(rid,)).fetchone()
-    elif kind=='independent':row=db.execute('SELECT body,revision,language_id FROM dictionary_examples WHERE id=?',(rid,)).fetchone()
+        row=db.execute('SELECT e.revision,t.language_id FROM entries e JOIN texts t ON t.id=e.text_id WHERE e.id=?',(rid,)).fetchone()
+    elif kind=='independent':row=db.execute('SELECT revision,language_id FROM dictionary_examples WHERE id=?',(rid,)).fetchone()
     else:raise ValueError('例句来源不正确')
     if not row:raise ValueError('例句已不存在')
-    body=gloss_inheritance.load(db,kind,rid,row['body']);lid=body.get('language_id') or row['language_id']
+    return row
+
+def owner(db,kind,rid):
+    row=owner_record(db,kind,rid)
+    body=gloss_inheritance.load(db,kind,rid,sentence_rows.one(db,kind,rid));lid=body.get('language_id') or row['language_id']
     return body,lid,row['language_id'],row['revision']
 
 def units(db,kind,rid,body):
@@ -89,7 +100,7 @@ def inline_save(db,b,lid):
     if any(not lexicon.text(w.get('form','')).strip() and not lexicon.text(w.get('gloss','')).strip() for w in new['words']):
         return inline_slots_save(db,{**b,'slot_ids':[w['id'] for w in d['words']]},lid)
     # Validate optimistic snapshots and layer cells before changing any core data.
-    mutate(db,'annotation-save',b,lid)
+    mutate(db,'annotation-save',b,lid,snapshot=d)
     body=d['body']
     import grammaticality
     grammaticality.copy_value(d['body'],body,new,b['kind'])
@@ -106,13 +117,15 @@ def inline_save(db,b,lid):
     import punctuation
     punctuation.recognize_inline(body,d,b.get('slot_ids',[w['id'] for w in d['words']]),b.get('cells',[]))
     analyze(body)
+    import auto_reduplication
+    auto_reduplication.on_save(db,b['kind'],b['id'],body,d['language_id'],previous=d['body'],word_ids=[w['id'] for w in d['words']])
     if b['kind']=='corpus':
         body['edited']=True
         checked,errors=parse(export_entry(body))
         if errors or len(checked)!=1 or any(checked[0][k]!=body[k] for k in ('ipa','translation')) or [(w['form'],w['gloss']) for w in checked[0]['words']]!=[(w['form'],w['gloss']) for w in body['words']]:raise ValueError('文本包含未配对括号或未转义引号，请修正后保存')
         gloss_inheritance.clear_metadata(body)
-        db.execute('UPDATE entries SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body,ensure_ascii=False),b['id']))
-        lexicon.sync_entry(db,b['id'])
+        sentence_rows.write(db,'corpus',b['id'],body)
+        lexicon.sync_entry(db,b['id'],analyzed_body=body,stored_body=body)
         fresh=units(db,'corpus',b['id'],body)
         mapping={a['id']:z['id'] for a,z in zip(d['words'],fresh)}
         # Explicit fixed-slot editing supplies correspondence even when both fields change.
@@ -121,7 +134,8 @@ def inline_save(db,b,lid):
         for c in affected:db.execute('INSERT INTO annotation_cells VALUES(?,?,?,?,?,?,?)',(c['id'],c['owner_kind'],c['record_id'],mapping[c['unit_id']],c['layer_id'],c['value'],c['revision']+int(mapping[c['unit_id']]!=c['unit_id'])))
     else:
         gloss_inheritance.clear_metadata(body)
-        db.execute('UPDATE dictionary_examples SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body,ensure_ascii=False),b['id']))
+        from independent_links import write_body
+        write_body(db,b['id'],body)
     return {'ok':True}
 
 
@@ -136,7 +150,7 @@ def create_sentence(db,b,lid):
         if not text or text[0]!=lid:raise ValueError('目标文本不存在或语言不一致')
         position=db.execute('SELECT COALESCE(MAX(position),0)+1 FROM entries WHERE text_id=?',(b['text_id'],)).fetchone()[0]
         empty=analyze(dict(function='pass',ipa='',translation='',notes='',words=[],raw='',line=None,edited=True))
-        db.execute('INSERT INTO entries(id,text_id,position,body) VALUES(?,?,?,?)',(rid,b['text_id'],position,json.dumps(empty)))
+        sentence_rows.write(db,'corpus',rid,empty,columns=dict(text_id=b['text_id'],position=position),insert=True)
     elif kind=='independent':
         result=dictionary_data.mutate(db,'example-save',{'body':{'targets':b.get('targets',[]),'words':[]}},lid)
         rid=result['id']
@@ -153,15 +167,18 @@ def create_sentence(db,b,lid):
         example_groups.mutate(db,lid,'save',dict(id=group['id'],token=b.get('example_group_token'),body=group['body'],members=[dict(example_id=m['example_id'],role=m['role']) for m in group['members']]+[dict(example_id=rid,role='')]))
     return dict(ok=True,id=rid,kind=kind,position=position,text_id=b.get('text_id'))
 
-def enrich(db,body,kind,rid):
+def enrich(db,body,kind,rid,*,snapshot=None):
     from corpus import analyze
+    if kind=='independent':
+        import independent_links
+        independent_links.source_body(db,rid,body)
     gloss_inheritance.resolve(db,kind,rid,body)
     if kind!='independent' and any('morphemes' not in w or any('gloss_fragments' not in m for m in w.get('morphemes',[])) for w in body.get('words',[])):
         if body.get('effective_language_id'):
             import languages
             languages.annotate(body,body.get('text_language_id'),{r['id']:dict(r) for r in db.execute('SELECT * FROM languages')})
         else:analyze(body)
-    try:data=get(db,kind,rid)
+    try:data=snapshot if snapshot is not None else get(db,kind,rid)
     except ValueError:return analyze(body) if kind=='independent' else body
     if kind=='independent':
         import languages
@@ -178,7 +195,92 @@ def enrich(db,body,kind,rid):
     code_switching.attach(db,body,kind,rid,data)
     return body
 
-def mutate(db,action,b,lid):
+
+def independent_card(db,rid):
+    from corpus import analyze
+    data=get(db,'independent',rid)
+    return enrich(db,analyze(data['body']),'independent',rid,snapshot=data)
+
+
+def evidence_cards(db,kind,records):
+    """Read one page's bodies, tier values and display dependencies in batches."""
+    import code_switching
+    import dictionary_layers
+    import grammaticality
+    import independent_links
+    import languages
+    import morpheme_colors
+    import sentence_rows
+    from corpus import analyze
+
+    if not records:return {}
+    owners={r['id']:r['language_id'] for r in records if r['id'] is not None}
+    ids=list(owners)
+    bodies=sentence_rows.read(db,kind,ids)
+    if not bodies:return {}
+    marks=','.join('?' for _ in ids)
+    cells=defaultdict(list)
+    for row in db.execute('SELECT * FROM annotation_cells WHERE owner_kind=? AND record_id IN ('+marks+')',[kind,*ids]):
+        cells[row['record_id']].append(row)
+    spans=defaultdict(list)
+    for row in db.execute('SELECT * FROM code_spans WHERE owner_kind=? AND record_id IN ('+marks+') ORDER BY rowid',[kind,*ids]):
+        spans[row['record_id']].append(row)
+    codes={r['id']:r for r in code_switching.catalog(db)} if spans else {}
+    word_ids=defaultdict(list)
+    numbers={}
+    if kind=='independent':
+        for body in bodies.values():body['targets']=[]
+        links=independent_links.images(db,db.execute('SELECT * FROM independent_links WHERE example_id IN ('+
+                                      marks+') ORDER BY example_id,position',ids).fetchall())
+        target_ids=set()
+        for row in links:
+            target=independent_links.target(row)
+            bodies[row['example_id']]['targets'].append(target)
+            if row['word_position'] is not None:target_ids.add(row['lexeme_id'])
+        for row in independent_links.overrides(db,ids):
+            words=bodies[row['example_id']]['words']
+            if row['position']<len(words):words[row['position']]=independent_links.word_value(row['word'])
+        for row in db.execute('SELECT id,language_id,number FROM example_numbers WHERE id IN ('+marks+')',ids):
+            numbers[row['language_id'],row['id']]=row['number']
+        prepared_colors={'catalog':morpheme_colors.target_types(db,target_ids)}
+    else:
+        for row in db.execute("SELECT entry_id,id FROM corpus_units WHERE kind='word' AND active=1 AND entry_id IN ("+marks+') ORDER BY entry_id,position',ids):
+            word_ids[row['entry_id']].append(row['id'])
+        prepared_colors=morpheme_colors.prepare(db,ids)
+        for body in bodies.values():grammaticality.strip_corpus(body)
+    effective={rid:body.get('language_id') or owners[rid] for rid,body in bodies.items()}
+    defs={lid:layers(db,lid) for lid in set(effective.values())}
+    catalog={};settings={}
+    if kind=='independent':
+        for lid in defs:
+            lang=dict(db.execute('SELECT * FROM languages WHERE id=?',(lid,)).fetchone())
+            catalog[lid]=lang
+            settings[lid]=json.loads(lang['metadata'])
+    gloss_inheritance.prefetch(db,kind,list(bodies))
+    layer_targets={}
+    for rid,body in bodies.items():
+        lid=effective[rid]
+        gloss_inheritance.resolve(db,kind,rid,body)
+        if kind=='independent':
+            body['library_number']=numbers.get((lid,rid))
+            languages.annotate(body,lid,catalog,settings=settings)
+            uids=[w.get('annotation_id','') for w in body['words']]
+        else:
+            analyze(body)
+            uids=word_ids[rid]
+        attach(body,uids,defs[lid],cells[rid])
+        dictionary_layers.project(db,body,kind,rid,lid,defs[lid],target_cache=layer_targets,unit_ids=uids)
+        morpheme_colors.attach(db,body,kind,rid,lid,prepared_colors)
+        if spans.get(rid):
+            data=dict(kind=kind,id=rid,body=body,language_id=lid,owner_language=owners[rid],
+                      words=[dict(id=uid,position=i) for i,uid in enumerate(uids)])
+            code_switching.attach(db,body,kind,rid,data,spans=spans[rid],codes=codes)
+        else:
+            code_switching.attach(db,body,kind,rid,spans=[])
+    return bodies
+
+
+def mutate(db,action,b,lid,*,snapshot=None):
     if action=='layer-order':
         current=layers(db,lid)
         snapshot=[dict(id=l['id'],revision=l['revision']) for l in current]
@@ -210,7 +312,7 @@ def mutate(db,action,b,lid):
         db.execute('UPDATE annotation_layers SET anchor=?,space_before=?,space_after=?,line_spacing=? WHERE id=?',(anchor,spacing['space_before'],spacing['space_after'],spacing['line_spacing'],xid))
         db.execute('UPDATE annotation_layers SET source=?,dictionary_field=? WHERE id=?',(source,field,xid))
         return {'ok':True,'id':xid}
-    data=get(db,b['kind'],b['id'])
+    data=snapshot if snapshot is not None else get(db,b['kind'],b['id'])
     if data['revision']!=b.get('revision'):raise ValueError('例句已修改，请重新打开标注层编辑器')
     # Full snapshot detects concurrent edits without modifying the sentence itself.
     if data['cells']!=b.get('before'):raise ValueError('附加标注已修改，请重新打开')
@@ -229,8 +331,14 @@ def mutate(db,action,b,lid):
             db.execute('INSERT INTO annotation_cells VALUES(?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET value=excluded.value,revision=annotation_cells.revision+1',(old['id'] if old else str(uuid.uuid4()),b['kind'],b['id'],c['unit_id'],c['layer_id'],c['value']))
     return {'ok':True}
 
-def validate(db):
-    if db.execute('SELECT 1 FROM annotation_cells c LEFT JOIN annotation_layers l ON l.id=c.layer_id WHERE l.id IS NULL').fetchone():raise ValueError('仍有标注引用此层，请先撤销标注内容或删除该层')
+def validate(db,cell_ids=None):
+    sql='SELECT 1 FROM annotation_cells c LEFT JOIN annotation_layers l ON l.id=c.layer_id'
+    if cell_ids is None:
+        rows=db.execute(sql+' WHERE l.id IS NULL LIMIT 1')
+    else:
+        import lexicon
+        rows=lexicon.scoped_rows(db,sql,[('c.id',cell_ids)],' AND l.id IS NULL LIMIT 1')
+    if next(iter(rows),None):raise ValueError('仍有标注引用此层，请先撤销标注内容或删除该层')
 
 def search_catalog(db,lid):
     fields=[]
@@ -275,9 +383,11 @@ class SearchFields:
         if self.field in ('all','writings') or self.field.startswith('writing:'):
             self.types={r['id']:dict(r) for r in db.execute("SELECT * FROM writing_types WHERE ?='all' OR language_id=?",(lid,lid)) if not self.field.startswith('writing:') or r['id']==self.field[8:]}
             import word_structure
-            sql=" UNION ALL ".join("SELECT id,language_id,json_extract(body,'$.orthographies') orthographies,json_extract(body,'$.writings') writings,json_extract(body,'$.word_structure') structure FROM "+table+" WHERE ?='all' OR language_id=?" for table in ('lexemes','morphemes'))
-            for r in long_tasks.steps(db.execute(sql,(lid,lid,lid,lid))) if self.types else ():
-                body=dict(orthographies=json.loads(r['orthographies'] or '[]'),writings=json.loads(r['writings'] or '[]'),word_structure=json.loads(r['structure'] or '{}'));values=[]
+            import record_sources
+            rows=(r for table in ('lexemes','morphemes') for r in record_sources.with_bodies(
+                db,table,db.execute("SELECT id,language_id FROM "+table+" WHERE ?='all' OR language_id=?",(lid,lid))))
+            for r in long_tasks.steps(rows) if self.types else ():
+                body=r['body'];values=[]
                 for w in [*body.get('orthographies',[]),*body.get('writings',[]),*word_structure.writing_rows(body)]:
                     if w.get('type_id') in self.types and self.types[w['type_id']]['language_id']==r['language_id'] and self.hit(w.get('text','')):
                         values.append(dict(field='writing:'+w['type_id'],label=self.types[w['type_id']]['name'],text=w['text']))
@@ -332,15 +442,30 @@ def search(db,q,*,ids_only=False):
     if not db.in_transaction:db.execute('BEGIN')
     from corpus import analyze,QueryMatcher,normalize
     import sentence_search_index
+    import record_sources
+    import sentence_scope_index
     source=q.get('source','all');lid=q.get('language','all');query=q.get('q','');field=q.get('field','all');mode=q.get('mode','contains');case=q.get('case')=='true'
     if source not in ('all','corpus','independent'):raise ValueError('例句来源无效')
     branches=[];args=[]
+    native = record_sources.native(db)
+    simple_page=not normalize(query,case) and field!='reduplication'
     if source in ('all','corpus'):
-        branches.append("SELECT 'corpus' kind,e.id,e.body,COALESCE(NULLIF(json_extract(e.body,'$.language_id'),''),t.language_id) language_id,t.language_id owner_language,t.title,e.text_id,e.position,t.rowid ordering,0 source_order FROM entries e JOIN texts t ON t.id=e.text_id WHERE (?='all' OR COALESCE(NULLIF(json_extract(e.body,'$.language_id'),''),t.language_id)=?)")
-        args.extend([lid,lid])
+        language = ('e.language_id' if simple_page else 's.language_id') if native else "json_extract(e.body,'$.language_id')"
+        value = 'COALESCE(NULLIF('+language+",''),t.language_id)"
+        body = 'NULL grammaticality' if native else 'e.body'
+        entries = 'corpus_sentence_keys' if native and simple_page else 'entries'
+        join = sentence_scope_index.source_join('corpus') if native and not simple_page else ''
+        scope = '1=1' if lid=='all' else f'{value}=?'
+        branches.append(f"SELECT 'corpus' kind,e.id,{body},{value} language_id,t.language_id owner_language,t.title,e.text_id,e.position,t.rowid ordering,0 source_order FROM {entries} e JOIN texts t ON t.id=e.text_id{join} WHERE {scope}")
+        if lid!='all':args.append(lid)
     if source in ('all','independent'):
-        branches.append("SELECT 'independent' kind,e.id,e.body,e.language_id,e.language_id owner_language,COALESCE(NULLIF(json_extract(e.body,'$.source'),''),'独立例句') title,NULL text_id,NULL position,e.rowid ordering,1 source_order FROM dictionary_examples e WHERE (?='all' OR e.language_id=?)")
-        args.extend([lid,lid])
+        title = 'NULL' if native else "COALESCE(NULLIF(json_extract(e.body,'$.source'),''),'独立例句')"
+        marked = native and q.get('grammaticality')
+        body = ('s.grammaticality' if marked else 'NULL grammaticality') if native else 'e.body'
+        join = " JOIN sentence_text_rows s ON s.kind='independent' AND s.owner_id=e.id" if marked else ''
+        scope = '1=1' if lid=='all' else 'e.language_id=?'
+        branches.append(f"SELECT 'independent' kind,e.id,{body},e.language_id,e.language_id owner_language,{title} title,NULL text_id,NULL position,e.rowid ordering,1 source_order FROM dictionary_examples e{join} WHERE {scope}")
+        if lid!='all':args.append(lid)
     sql=' UNION ALL '.join(branches)
     if q.get('text_id'):
         sql='SELECT * FROM ('+sql+') WHERE text_id=?';args.append(q['text_id'])
@@ -348,11 +473,11 @@ def search(db,q,*,ids_only=False):
     extra,values=code_switching.filter_sql(q,'q.kind','q.id')
     sql='SELECT * FROM ('+sql+') q WHERE 1=1'+extra;args.extend(values)
     import grammaticality
-    extra,values=grammaticality.filter_sql(q,'q.body','q.language_id');sql+=extra+(" AND q.kind='independent'" if extra else '');args.extend(values)
+    extra,values=grammaticality.filter_sql(q,'q.body','q.language_id',field='q.grammaticality' if native else None);sql+=extra+(" AND q.kind='independent'" if extra else '');args.extend(values)
     page=max(1,int(q.get('page',1)))
     indexed=None
-    if not normalize(query,case) and field!='reduplication':
-        if ids_only:return {'ids':[r[0] for r in db.execute('SELECT id FROM ('+sql+')',args)]}
+    if simple_page:
+        if ids_only:return sentence_search_index.collected_ids(ids_only,(r[0] for r in db.execute('SELECT id FROM ('+sql+')',args)))
         total=db.execute('SELECT COUNT(*) FROM ('+sql+')',args).fetchone()[0];pages=max(1,(total+19)//20);page=min(page,pages)
         visible=list(db.execute('SELECT * FROM ('+sql+') ORDER BY source_order,ordering,position LIMIT 20 OFFSET ?',[*args,(page-1)*20]))
     elif (indexed := sentence_search_index.search(db,sql,args,field,query,case,mode,page,20,ids_only=ids_only,custom_language=lid,include_original=True)) is not None:
@@ -371,7 +496,7 @@ def search(db,q,*,ids_only=False):
             return a==b if mode=='exact' else a.startswith(b) if mode=='prefix' else a.endswith(b) if mode=='suffix' else b in a
         matches=[]
         matcher=QueryMatcher(query,field,mode=mode,case=case)
-        for r in gloss_inheritance.iter_rows(db,db.execute('SELECT * FROM ('+sql+') ORDER BY source_order,ordering,position',args),lightweight=True):
+        for r in gloss_inheritance.iter_rows(db,db.execute('SELECT * FROM ('+sql+') ORDER BY source_order,ordering,position',args),lightweight=True,relational=native):
             # Dictionary values need current independent target references as
             # well as effective gloss text. The lightweight text-only resolver
             # intentionally does not retarget those references.
@@ -379,15 +504,17 @@ def search(db,q,*,ids_only=False):
             if field in ('all','original'):found=found or hit(b.get('original',''))
             if not found:found=bool(custom.values(r['kind'],r['id'],b,r['language_id']))
             if found:matches.append(r)
-        if ids_only:return {'ids':[r['id'] for r in matches]}
+        if ids_only:return sentence_search_index.collected_ids(ids_only,(r['id'] for r in matches))
         total=len(matches);pages=max(1,(total+19)//20);page=min(page,pages);visible=matches[(page-1)*20:page*20]
     items=[]
-    for r in visible:
-        b=enrich(db,analyze(json.loads(r['body'])),r['kind'],r['id'])
+    for r in gloss_inheritance.iter_rows(db,visible,relational=native):
+        b=enrich(db,analyze(record_sources.body(r,mutable=False)),r['kind'],r['id'])
         item={k:r[k] for k in ('kind','id','language_id','owner_language','title','text_id','position')};item['body']=b
-        if r['kind']=='independent':item['lexeme_id']=b['targets'][0]['lexeme_id'] if b.get('targets') else None
+        if r['kind']=='independent':
+            if native:item['title']=b.get('source') or '独立例句'
+            item['lexeme_id']=b['targets'][0]['lexeme_id'] if b.get('targets') else None
         items.append(item)
-    stats=indexed['code_summary'] if indexed is not None else code_switching.summary(db,sql,args,None if not normalize(query,case) and field!='reduplication' else {(r['kind'],r['id']) for r in matches})
+    stats=indexed['code_summary'] if indexed is not None else code_switching.summary(db,sql,args,None if simple_page else {(r['kind'],r['id']) for r in matches})
     return dict(items=items,total=total,page=page,pages=pages,code_summary=stats)
 
 
@@ -398,7 +525,7 @@ def inline_slots_save(db,b,lid):
     d=get(db,b['kind'],b['id'])
     if d['owner_language']!=lid:raise ValueError('例句不属于当前语言')
     # Validate concurrency and layer configuration before any mutation.
-    mutate(db,'annotation-save',{**b,'cells':[],'discard':[]},lid)
+    mutate(db,'annotation-save',{**b,'cells':[],'discard':[]},lid,snapshot=d)
     slots=b.get('slot_ids');new=b.get('body',{});words=new.get('words')
     if not isinstance(slots,list) or not isinstance(words,list) or len(slots)!=len(words) or len(slots)>10000 or any(not isinstance(s,str) for s in slots) or len(set(slots))!=len(slots):raise ValueError('词格对应关系无效')
     old={w['id']:(i,d['body']['words'][i]) for i,w in enumerate(d['words'])}
@@ -412,7 +539,8 @@ def inline_slots_save(db,b,lid):
         w=old[uid][1]
         return any(str(w.get(k,'')).strip() for k in ('form','gloss')) or next(v for v in d['words'] if v['id']==uid)['protected'] or any(c['unit_id']==uid and c['value'].strip() for c in d['cells'])
     if any(content(uid) for uid in removed) and b.get('delete_confirmed') is not True:raise ValueError('删除有内容或关联的词格需要确认')
-    body=copy.deepcopy(d['body']);updated=[];changed=[];kept=[];emptied=set()
+    body=copy.deepcopy({key:value for key,value in d['body'].items() if key!='words'})
+    updated=[];changed=[];kept=[];emptied=set()
     # Deleted/merged slots keep their manual analyses available for review.
     # Dictionary references and extra-layer cells already retain retired IDs.
     for uid in sorted(removed,key=lambda uid:old[uid][0]):
@@ -457,14 +585,37 @@ def inline_slots_save(db,b,lid):
     import punctuation
     punctuation.recognize_inline(body,d,slots,b.get('cells',[]))
     analyze(body)
+    import auto_reduplication
+    auto_reduplication.on_save(db,b['kind'],b['id'],body,d['language_id'],previous=d['body'],word_ids=[ids[s] for s in slots])
     if b['kind']=='corpus':
         body['edited']=True;checked,errors=parse(export_entry(body))
         if errors or len(checked)!=1 or any(checked[0][k]!=body[k] for k in ('ipa','translation')) or [(w['form'],w['gloss']) for w in checked[0]['words']]!=[(w['form'],w['gloss']) for w in body['words']]:raise ValueError('文本包含未配对括号或未转义引号，请修正后保存')
-    table='entries' if b['kind']=='corpus' else 'dictionary_examples'
+    import save_validation
+    same_words=False
+    native_before=None
+    if save_validation.trusted(db) and not changed and slots==[w['id'] for w in d['words']]:
+        # The editor carries effective/analysed words. A translation-only edit
+        # should not materialise them over the native source or its bindings.
+        prior=analyze(copy.deepcopy(d['body']))
+        defaults={'grammaticality':''}
+        if b['kind']=='independent':defaults['original']=''
+        exempt={'notes','translation','edited','warnings'}
+        same_words=all(prior.get(k,defaults.get(k))==body.get(k,defaults.get(k)) for k in prior.keys()|body.keys() if k not in exempt)
+        if same_words:
+            native_before=sentence_rows.one(db,b['kind'],b['id'])
+            native={**native_before,'words':[dict(word) for word in native_before['words']]}
+            for key in ('notes','translation'):
+                if prior.get(key,'')!=body.get(key,''):native[key]=body[key]
+            if b['kind']=='corpus':native['edited']=True
+            body=native
     gloss_inheritance.clear_metadata(body)
-    db.execute('UPDATE '+table+' SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body,ensure_ascii=False),b['id']))
-    if b['kind']=='corpus':
-        lexicon.sync_entry(db,b['id'],[ids[s] for s in slots])
+    if b['kind']=='independent':
+        from independent_links import write_body
+        write_body(db,b['id'],body)
+    else:
+        sentence_rows.write(db,'corpus',b['id'],body,previous=native_before)
+    if b['kind']=='corpus' and not same_words:
+        lexicon.sync_entry(db,b['id'],[ids[s] for s in slots],analyzed_body=body,stored_body=body)
         import link_review
         for uid in changed:link_review.mark(db,'unit_id=?',(uid,),'原词格的形式或标注已修改，请核对关联')
     cells=[]
@@ -481,6 +632,7 @@ def inline_slots_save(db,b,lid):
                 db.execute('INSERT INTO annotation_cells VALUES(?,?,?,?,?,?,1) ON CONFLICT(id) DO UPDATE SET value=excluded.value,revision=annotation_cells.revision+1',(old_cell['id'] if old_cell else str(uuid.uuid4()),b['kind'],b['id'],ids[uid],c['layer_id'],c['value']))
             continue
         cells.append({**c,'unit_id':ids.get(uid,uid)})
-    fresh=get(db,b['kind'],b['id'])
-    mutate(db,'annotation-save',{**b,'revision':fresh['revision'],'before':fresh['cells'],'layers':fresh['layers'],'cells':cells,'discard':[]},lid)
+    if cells:
+        fresh=d if same_words and b['kind']=='corpus' else get(db,b['kind'],b['id'])
+        mutate(db,'annotation-save',{**b,'revision':fresh['revision'],'before':fresh['cells'],'layers':fresh['layers'],'cells':cells,'discard':[]},lid,snapshot=fresh)
     return {'ok':True}

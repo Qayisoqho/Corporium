@@ -28,7 +28,8 @@ class APITests(unittest.TestCase):
         if origin: handler.headers['Origin']=origin
         handler.rfile=io.BytesIO(payload)
         result=[]
-        handler.send=lambda data,code=200,mime=None:result.append((code,data))
+        handler.send=lambda data,code=200,mime=None,**kwargs:result.append((code,data))
+        handler.send_bytes=lambda data,code,mime:result.append((code,json.loads(data)))
         if body is None:handler.do_GET()
         else:handler.do_POST()
         return result[0]

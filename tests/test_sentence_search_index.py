@@ -1,4 +1,5 @@
 """SQL search must preserve the original readers, including their differences."""
+import source_fixtures
 import copy
 import json
 import sqlite3
@@ -31,11 +32,12 @@ class SentenceSearchIndexTests(unittest.TestCase):
     def test_scalar_and_form_modes_unicode_scripts_short_and_literal_queries(self):
         self.seed('#pass([Straße é #sup[h] abcXYZ], (([root-n],[根-GEN]),([Straße],[路]),([é],[音]),([#],[边界]),([x#sub[2]],[x]),([so<l>ma],[home<PL>])), [家 PL a*b?c [x] 100%])')
         ex = self.example([('root-n','根-GEN'),('é','音')])
+        import record_sources
         with server.connect(audit=False) as db:
             for table in ('entries','dictionary_examples'):
-                for row in db.execute('SELECT id,body FROM '+table).fetchall():
-                    body=json.loads(row['body']);body['notes']='NUL\0tail %_ "quoted"';body['language_notes']='语言备注'
-                    db.execute('UPDATE '+table+' SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body,ensure_ascii=False),row['id']))
+                for row in record_sources.with_bodies(db,table,db.execute('SELECT id FROM '+table).fetchall()):
+                    body=row['body'];body['notes']='NUL\0tail %_ "quoted"';body['language_notes']='语言备注'
+                    record_sources.write(db,table,row['id'],body)
         pairs=[('ipa',q) for q in ('STRASSE','é','h','abc','XYZ')]
         pairs += [('translation',q) for q in ('家','PL','a*b?c','[x]','100%','absent')]
         pairs += [('notes',q) for q in ('\0tail','%_','"quoted"','语言备注')]
@@ -67,9 +69,9 @@ class SentenceSearchIndexTests(unittest.TestCase):
     def test_postings_follow_external_edits_deletion_and_rollback(self):
         e=self.seed();self.compare(dict(field='translation',q='translation'))
         with server.connect(audit=False) as db:
-            before=db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0]
+            before=db.execute('SELECT body FROM entries_documents WHERE id=?',(e['id'],)).fetchone()[0]
             body=json.loads(before);body['translation']='new external'
-            db.execute('UPDATE entries SET body=? WHERE id=?',(json.dumps(body),e['id']))
+            source_fixtures.replace(db,'entries',e['id'],json.dumps(body))
         self.assertEqual(self.compare(dict(field='translation',q='new external'))['total'],1)
         with server.connect(audit=False) as db:
             db.execute('BEGIN');db.execute('DELETE FROM entries WHERE id=?',(e['id'],))
@@ -122,10 +124,13 @@ class SentenceSearchIndexTests(unittest.TestCase):
         e=self.seed();ex=self.example([('home-n','家-GEN')])
         other=self.api('save-language',dict(name='Second language',metadata={}))['id']
         with server.connect(audit=False) as db:
-            row=db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()
+            row=db.execute('SELECT body FROM entries_documents WHERE id=?',(e['id'],)).fetchone()
             body=json.loads(row['body']);body['language_id']=other
-            db.execute('UPDATE entries SET body=? WHERE id=?',(json.dumps(body),e['id']))
-            db.execute('UPDATE dictionary_examples SET id=? WHERE id=?',(e['id'],ex['id']))
+            source_fixtures.replace(db,'entries',e['id'],json.dumps(body))
+            from record_sources import read,write
+            source=read(db,'dictionary_examples',ex['id'])
+            db.execute('DELETE FROM dictionary_examples WHERE id=?',(ex['id'],))
+            write(db,'dictionary_examples',e['id'],source,columns=dict(language_id='ordos'),insert=True)
         for lid in ('ordos',other,'all'):
             for field,term in [('ipa','ipa'),('form','home'),('morpheme','n')]:
                 q=dict(language=lid,field=field,q=term,include_independent='true')

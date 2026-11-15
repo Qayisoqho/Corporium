@@ -1,4 +1,5 @@
 """Contract checks for selective legacy snapshots and streaming full exports."""
+import source_fixtures
 import base64
 import hashlib
 import io
@@ -68,12 +69,12 @@ class ScalarEvidenceTests(unittest.TestCase):
 
     def test_scalar_tuple_cache_keeps_field_presence_types_unicode_and_nul_boundaries(self):
         with server.connect(audit=False) as db:
-            db.execute("INSERT INTO lexemes VALUES('target','ordos','entry','{}',1)")
+            source_fixtures.seed(db,'lexemes',('id', 'language_id', 'headword', 'body', 'revision'),('target', 'ordos', 'entry', '{}', 1))
             words=[dict(form='é',gloss='A\x00B'),dict(form='é\x00A',gloss='B'),
                 dict(form='é',gloss='A\x00B',form_kind='content',gloss_kind='content'),
                 dict(form='x',gloss='Y',form_kind=True,gloss_kind=1),dict(form='x',gloss='Y',form_kind='True',gloss_kind='1')]
             body=dict(words=words,targets=[dict(lexeme_id='target')])
-            db.execute("INSERT INTO dictionary_examples VALUES('ex','ordos',?,1)",(json.dumps(body),))
+            source_fixtures.seed(db,'dictionary_examples',('id', 'language_id', 'body', 'revision'),('ex', 'ordos', json.dumps(body), 1))
             for query in ('é','é\x00A','A\x00B','B','content','是','True','1','missing'):
                 for case in (True,False):self.compare(db,query,case)
 

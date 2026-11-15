@@ -27,7 +27,10 @@ def run(job):
     action=journal.action.set(journal.LABELS.get('/api/'+operation))
     scope=journal.scope.set(body['_language'])
     try:
-        with server.connect(path=job['project'],cancellable=True) as db:
+        update=server.save_validation.view_update(operation,body)
+        with server.connect(path=job['project'],cancellable=True,deferred=operation=='text-replace-preview',view_update=update) as db:
+            if operation in ('text-replace-preview','dictionary-replace-preview'):
+                db.execute('PRAGMA cache_size=-65536')
             lid=body['_language']
             if operation!='language-package-import':
                 if operation in ('analysis-run','analysis-save'):
@@ -38,6 +41,7 @@ def run(job):
             result=dispatch(db,Path(job['project']),operation,body,lid,created)
             long_tasks.checkpoint(None,'正在校验关联并整理撤销记录…')
         committed=True
+        if update is not None:update.attach(result)
         # Retention is a post-commit housekeeping step; cancelling must not prune old backups.
         import backup_policy,logging
         for folder in job.get('backup_folders',set()):

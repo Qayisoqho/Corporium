@@ -26,9 +26,14 @@ import font_catalog
 import dictionary_data
 import homepage
 import annotations
+import read_views
 import grammar
 import grammaticality
+import record_sources
+import sentence_rows
 import grammar_audit_cache
+import grammar_usage
+import save_validation
 import segmentation
 import categories
 import long_tasks
@@ -40,6 +45,7 @@ import dictionary_batch
 import sentence_dictionary
 import corpus_search
 import sentence_search_index
+import gloss_search_index
 import analysis_workspace
 import timeline
 import media_engine
@@ -74,9 +80,10 @@ class ThreadingHTTPServer(BaseThreadingHTTPServer):
 
 
 @contextmanager
-def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False, deferred=False):
-    db = sqlite3.connect(DB if path is None else path)
+def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False, deferred=False, restore=False, view_update=None, restore_changes=None, audit_tables=None):
+    db = sqlite3.connect(DB if path is None else path, factory=record_sources.Connection)
     db.row_factory = sqlite3.Row
+    record_sources.configure(db)
     import gloss_inheritance
     db.execute('PRAGMA foreign_keys=ON')
     gloss_token=gloss_inheritance.CURRENT.set(None)
@@ -84,7 +91,9 @@ def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False,
     observer=grammar_audit_cache.Snapshot(db) if observe_snapshot else None
     observer_token=grammar_audit_cache.CURRENT.set(observer)
     sync_token = lexicon.synced_entries.set({})
+    validation_token = save_validation.CURRENT.set(None)
     audit_promotion=None
+    statistics_prior=None
     try:
         try:
             if cancellable:
@@ -92,9 +101,22 @@ def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False,
                 job=long_tasks.CURRENT.get()
                 db.set_progress_handler(lambda:int(job['cancel'].is_set()),5000)
                 db.execute('BEGIN' if deferred else 'BEGIN IMMEDIATE')
-            if audit and journal.action.get():
+            if audit and (journal.action.get() or restore):
+                # Bounded page reuse across the source, relation and history
+                # writes of the same transaction.
+                db.execute('PRAGMA cache_size=-65536')
                 if not db.in_transaction:db.execute("BEGIN IMMEDIATE")
-                changes = journal.watch(db)
+                save_validation.begin(db)
+            if audit and restore and not journal.action.get():
+                import read_views
+                statistics_prior=read_views.token(db,'statistics')
+                changes=restore_changes
+            if audit and journal.action.get():
+                if view_update is not None:view_update.begin(db)
+                changes = journal.watch(db,tables=journal.TABLES if audit_tables is None or not save_validation.trusted(db) else audit_tables)
+                if journal.action.get() in {journal.LABELS['/api/save'],journal.LABELS['/api/example-save']}:
+                    import read_views
+                    statistics_prior=read_views.token(db,'statistics')
                 gloss_inheritance.CHANGES.set(changes)
                 audit_promotion=grammar_audit_cache.prepare_promotion(db)
             yield db
@@ -108,19 +130,25 @@ def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False,
                 import dictionary_form_sync
                 dictionary_form_sync.sync(db,changes)
                 lexicon.sync_changes(db,changes)
-                gloss_inheritance.synchronize(db,changes)
+                gloss_inheritance.synchronize(db,changes,association_removals=association_removals)
                 gloss_inheritance.validate_meaning_changes(db,meaning_changes)
                 grammaticality.validate(db,changes)
-                lexicon.validate_changes(db,changes,association_removals)
+                with save_validation.final_check(db):lexicon.validate_changes(db,changes,association_removals)
                 collaborators.cleanup(db,changes)
                 timeline.text_order.cleanup(db,changes)
                 object_media.cleanup(db,changes)
                 code_switching.sync_changes(db,changes)
-                if any(t in {'object_media','lexemes','morphemes','dictionary_examples','timeline_media','timeline_speakers'} for t,_ in changes):object_media.validate(db)
+                if any(t in object_media.SOURCES for t,_ in changes):
+                    object_media.validate_pending(db,full=not save_validation.trusted(db))
                 collaborators.validate_changes(db,changes)
-                if any(t in example_groups.TABLES or t=='dictionary_examples' for t,_ in changes):example_groups.validate(db)
+                if any(t in example_groups.TABLES or t=='dictionary_examples' for t,_ in changes):example_groups.validate_changes(db)
+                if statistics_prior is not None:read_views.preserve_sentence_statistics(db,statistics_prior,changes)
                 journal.record(db, changes, journal.action.get())
                 if any(a!=b for a,b in changes.values()):analysis_workspace.invalidate(db)
+                if view_update is not None:view_update.finish(db,changes)
+            elif audit and restore and statistics_prior is not None and changes is not None:
+                read_views.preserve_sentence_statistics(db,statistics_prior,changes)
+            save_validation.complete(db)
             if cancellable:long_tasks.committing(db)
             db.commit()
             if audit_promotion is not None:grammar_audit_cache.promote(db,audit_promotion,changes)
@@ -130,6 +158,7 @@ def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False,
             db.rollback()
             raise
     finally:
+        save_validation.CURRENT.reset(validation_token)
         grammar_audit_cache.CURRENT.reset(observer_token)
         if observer is not None:observer.close()
         if audit_promotion is not None:audit_promotion.close()
@@ -139,13 +168,23 @@ def connect(*, audit=True, path=None, cancellable=False, observe_snapshot=False,
         db.close()
 
 
-def init(*, seed_default_language=True):
+def init(*, seed_default_language=True, source_mode='drop', progress=None):
     """Initialize or migrate; an example can supply its own first language."""
     import storage_optimization
+    import independent_links
+    import independent_annotations
+    import source_schema
+    def report(step):
+        if progress is not None:progress(step,6)
+    report(1)
     DB.parent.mkdir(exist_ok=True)
+    validation_prior=None
+    remove_word_copy=False
     # Preserve the complete pre-migration database, including old undo records.
     if DB.exists():
         with closing(sqlite3.connect(DB)) as old:
+            validation_prior=save_validation.snapshot(old)
+            remove_word_copy=independent_links.has_word_source(old)
             missing_languages=not old.execute("SELECT 1 FROM sqlite_master WHERE name='languages'").fetchone()
             missing_dictionary=not old.execute("SELECT 1 FROM sqlite_master WHERE name='morphology_analyses'").fetchone() or not old.execute("SELECT 1 FROM sqlite_master WHERE name='morph_class_templates'").fetchone()
             missing_class_order=categories.needed(old)
@@ -164,18 +203,33 @@ def init(*, seed_default_language=True):
             missing_organization=not old.execute("SELECT 1 FROM sqlite_master WHERE name='semantic_classes'").fetchone()
             missing_collaborators=not old.execute("SELECT 1 FROM sqlite_master WHERE name='collaborator_assignments'").fetchone()
             missing_inheritance=not old.execute("SELECT 1 FROM sqlite_master WHERE name='gloss_migrations'").fetchone()
-            if missing_display_spacing or missing_class_order or missing_example_numbers or missing_example_groups or grammaticality.corpus_rows_needed(old) or storage_optimization.needed(old) or missing_inheritance or script_tags.needed(old) or manual_status.needed(old) or missing_code_spans or missing_object_media or missing_organization or missing_survey or missing_notes or missing_collaborators or missing_languages or missing_dictionary or missing_sentence_layers or missing_track_tree or missing_track_color or missing_session_order or missing_text_order or old.execute('PRAGMA user_version').fetchone()[0]<4 or not old.execute("SELECT 1 FROM sqlite_master WHERE name='corpus_units'").fetchone():
+            source_upgrade = record_sources.mode(old) == 'legacy' and source_mode != 'legacy'
+            if remove_word_copy or source_upgrade or independent_links.needed(old) or (source_mode!='legacy' and independent_annotations.needed(old)) or missing_display_spacing or missing_class_order or missing_example_numbers or missing_example_groups or grammaticality.corpus_rows_needed(old) or storage_optimization.needed(old) or missing_inheritance or script_tags.needed(old) or manual_status.needed(old) or missing_code_spans or missing_object_media or missing_organization or missing_survey or missing_notes or missing_collaborators or missing_languages or missing_dictionary or missing_sentence_layers or missing_track_tree or missing_track_color or missing_session_order or missing_text_order or old.execute('PRAGMA user_version').fetchone()[0]<4 or not old.execute("SELECT 1 FROM sqlite_master WHERE name='corpus_units'").fetchone():
                 backup_policy.sqlite_snapshot(DB.parent/'backups',old,'languages' if missing_languages else 'lexicon')
+    if remove_word_copy:
+        with connect(audit=False) as db:
+            independent_links.migrate_word_source(db)
+            validation_prior=save_validation.snapshot(db)
     with connect() as db:
+        report(2)
         db.executescript('''CREATE TABLE IF NOT EXISTS texts(id TEXT PRIMARY KEY,title TEXT,source TEXT,original TEXT,digest TEXT UNIQUE,errors TEXT);
         CREATE TABLE IF NOT EXISTS entries(id TEXT PRIMARY KEY,text_id TEXT,position INTEGER,body TEXT,revision INTEGER DEFAULT 1);
         CREATE INDEX IF NOT EXISTS entries_text ON entries(text_id,position);
         CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY,entry_id TEXT,created TEXT,body TEXT,revision INTEGER);''')
+        record_sources.views(db)
         metadata.initialize(db)
         journal.initialize(db)
         languages.initialize(db,seed_default=seed_default_language)
         code_switching.initialize(db)
+        report(3)
         lexicon.initialize(db)
+        independent_links.initialize(db)
+        sentence_rows.initialize(db)
+        import dictionary_rows
+        dictionary_rows.initialize(db)
+        import dictionary_relations
+        dictionary_relations.initialize(db)
+        report(4)
         analysis_workspace.initialize(db)
         timeline.initialize(db)
         object_media.initialize(db)
@@ -193,7 +247,15 @@ def init(*, seed_default_language=True):
         import word_analysis_memory
         word_analysis_memory.initialize(db)
         if grammaticality.migrate_corpus(db):analysis_workspace.invalidate(db)
+        report(5)
         sentence_search_index.initialize(db)
+        homepage.home_candidates.initialize(db)
+        if record_sources.native(db) and not read_views.association_batch_ready(db):read_views.initialize(db)
+        save_validation.initialize(db,validation_prior)
+    with connect(audit=False) as db:
+        report(6)
+        source_schema.migrate(db,source_mode)
+        independent_annotations.migrate(db)
     backup_policy.prune(DB.parent/'backups')
 
 
@@ -217,22 +279,30 @@ def import_into(db,title,source,original):
     db.execute('INSERT INTO texts(id,title,source,original,digest,errors,language_id) VALUES(?,?,?,?,?,?,?)', (tid, title, source, original, scoped_digest, json.dumps(errors, ensure_ascii=False),lid))
     for i, entry in long_tasks.steps(enumerate(entries)):
         eid=str(uuid.uuid4())
-        db.execute('INSERT INTO entries(id,text_id,position,body) VALUES(?,?,?,?)', (eid, tid, i+1, json.dumps(entry, ensure_ascii=False)))
-        lexicon.sync_entry(db,eid)
+        sentence_rows.write(db,'corpus',eid,entry,columns=dict(text_id=tid,position=i+1),insert=True)
+        lexicon.sync_entry(db,eid,analyzed_body=entry,stored_body=entry)
     return {'id': tid, 'count': len(entries), 'errors': errors}
+
+
+READ_PAGES=read_views.Cache(8*1024**2)
 
 
 class Handler(BaseHTTPRequestHandler):
     def ui_language(self):
         return ui_localization.language(getattr(self,'headers',{}))
 
-    def send(self, value, code=200, mime='application/json; charset=utf-8'):
+    def send(self, value, code=200, mime='application/json; charset=utf-8', *, cache_key=None):
         if mime.startswith('application/json'):
             value=ui_localization.present(value,urlparse(getattr(self,'path','')).path,self.ui_language())
         elif mime.startswith('text/html'):
             source=value.decode('utf-8') if isinstance(value,bytes) else value
             if isinstance(source,str) and '<body' in source and 'data-ui-ready=' not in source:value=ui_localization.bootstrap_html(source)
         data = json.dumps(value, ensure_ascii=False).encode() if mime.startswith('application/json') else value.encode() if isinstance(value, str) else value
+        if cache_key:
+            READ_PAGES.put(cache_key,data,len(data)+1024)
+        self.send_bytes(data,code,mime)
+
+    def send_bytes(self,data,code,mime):
         self.send_response(code)
         self.send_header('Content-Type', mime)
         self.send_header('Content-Length', str(len(data)))
@@ -240,6 +310,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.end_headers()
         self.wfile.write(data)
+
+    def send_read_page(self,db,read):
+        stamp=read_views.token(db,'dictionary')
+        check=save_validation.state(db) if stamp and record_sources.native(db) else None
+        key=(str(DB),stamp,check['epoch'],self.path,self.ui_language()) if check else None
+        cached=READ_PAGES.get(key)
+        if cached is not None:
+            return self.send_bytes(cached,200,'application/json; charset=utf-8')
+        return self.send(read(),cache_key=key)
 
     def do_GET(self):
         try:
@@ -274,7 +353,7 @@ class Handler(BaseHTTPRequestHandler):
             name='licenses.html' if url.path=='/licenses' else url.path[1:]
             mime='text/html' if url.path=='/licenses' else 'text/css' if url.path.endswith('.css') else 'text/javascript'
             return self.send((ROOT/'web'/name).read_bytes(),mime=mime+'; charset=utf-8')
-        if url.path=='/api/task-status':return self.send(long_tasks.view(DB,q.get('id')))
+        if url.path=='/api/task-status':return self.send(long_tasks.view(DB,q.get('id'),wait=q.get('wait')=='1'))
         if url.path=='/api/task-download':
             kind=q.get('kind')
             if kind not in ('project-backup','language-json','analysis-json','export'):raise ValueError('导出文件类型无效')
@@ -298,7 +377,11 @@ class Handler(BaseHTTPRequestHandler):
                 path=media_engine.playable(DB,asset,q.get('proxy')=='true')
             return media_engine.stream_file(self,path)
         if url.path=='/api/object-media':
-            with connect(audit=False) as db:return self.send(object_media.listing(db,q['kind'],q['id']))
+            with connect(audit=False) as db:
+                db.execute('BEGIN')
+                if q.get('kind')=='independent' and 'ids' in q:
+                    return self.send({'items':object_media.independent_listings(db,q['ids'].split(','))})
+                return self.send(object_media.listing(db,q['kind'],q['id']))
         if url.path=='/api/object-media-assets':
             with connect(audit=False) as db:
                 lid=q.get('language','ordos')
@@ -314,7 +397,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(data,mime=mime)
         if url.path in {'/font/'+r[1] for r in font_catalog.BUILTIN_FILES}:
             return self.send(font_catalog.read_file(font_catalog.builtin_path(url.path[6:]),q.get('v')),mime='font/otf' if url.path.endswith('.otf') else 'font/ttf')
-        with connect(observe_snapshot=url.path in ('/api/grammar-audit','/api/lexemes','/api/morphemes')) as db:
+        grammar_registry=url.path=='/api/grammar-audit' and q.get('view')=='registry'
+        observe=(url.path=='/api/grammar-audit' and not grammar_registry or
+                 url.path in ('/api/lexemes','/api/morphemes') and (q.get('q') or q.get('search')))
+        with connect(observe_snapshot=observe) as db:
             # Sentence bodies and stable units must come from the same snapshot.
             db.execute('BEGIN')
             lid=q.get('language','all')
@@ -363,34 +449,43 @@ class Handler(BaseHTTPRequestHandler):
             if url.path=='/api/analysis-result':return self.send(analysis_workspace.result_page(db,lid,q))
             if url.path=='/api/analysis-group':return self.send(analysis_workspace.evidence_page(db,lid,q))
             if url.path=='/api/analysis-export':return self.send(analysis_workspace.export_result(db,lid,q))
-            if url.path=='/api/grammar-tags':return self.send(grammar.listing(db,lid))
+            if url.path=='/api/grammar-tags':return self.send(grammar.definition_page(db,lid,q) if 'tag_page' in q else grammar.listing(db,lid))
             if url.path=='/api/grammar-reference':return self.send(grammar.reference())
             if url.path=='/api/grammaticality-types':return self.send(grammaticality.catalog(db,q.get('lexical_language',lid)))
             if url.path=='/api/backup-policy':return self.send(backup_policy.status(DB.parent/'backups'))
             if url.path=='/api/classes':return self.send(categories.listing(db,lid))
             if url.path=='/api/quick-edit-settings':return self.send(quick_edit.get(db,lid))
-            if url.path=='/api/homophones':return self.send(homophones.table(db,lid,q))
+            if url.path=='/api/homophones':
+                if q.get('interactive')=='1' and (q.get('page_size')=='all' or db.execute('SELECT 1 FROM hp_dirty LIMIT 1 OFFSET 8').fetchone()):
+                    return self.send({'needs_task':True})
+                return self.send(homophones.table(db,lid,q))
             if url.path=='/api/synonyms':return self.send(synonyms.list_links(db,lid,q.get('kind'),q.get('id')))
             if url.path=='/api/synonym-search':return self.send(synonyms.search(db,lid,q))
             if url.path=='/api/homophone-phonology':return self.send(phonology.get(db,lid))
             if url.path=='/api/homophone-words':return self.send(homophones.source_words(db,lid,q.get('identity',''),q.get('page',1)))
-            if url.path=='/api/morphemes':return self.send(morpheme_registry.listing(db,lid,q.get('q',''),q.get('page',1),q.get('status',''),q.get('search'),q.get('page_size',30),q.get('sort_order','')))
+            if url.path=='/api/morphemes':return self.send(morpheme_registry.listing(db,lid,q.get('q',''),q.get('page',1),q.get('status',''),q.get('search'),q.get('page_size',30),q.get('sort_order',''),focus=q.get('focus','')))
             if url.path=='/api/morpheme':return self.send(morpheme_registry.detail(db,q['id'],lid))
             if url.path=='/api/dictionary-counts':
                 return self.send({table:db.execute('SELECT count(*) FROM '+table+(' WHERE language_id=?' if lid!='all' else ''),(lid,) if lid!='all' else ()).fetchone()[0] for table in ('lexemes','morphemes')})
             if url.path=='/api/morpheme-components':return self.send(morpheme_registry.components(db,q['id'],lid))
-            if url.path=='/api/morphology-options':return self.send(lexicon.morphology.options(db,lid,q.get('entry_id','')))
-            if url.path=='/api/grammar-audit':return self.send(grammar.audit(db,q))
+            if url.path=='/api/morphology-options':return self.send(lexicon.morphology.options(db,lid,q.get('entry_id',''),editor=q.get('editor')=='1'))
+            if url.path=='/api/morphology-choices':return self.send(lexicon.morphology.choices(db,lid,q.get('q',''),q.get('page',1),q.get('exclude','')))
+            if url.path=='/api/grammar-audit':
+                if q.get('interactive')=='1' and grammar_registry and grammar_usage.pending(db)>8:
+                    return self.send({'needs_task':True,'definitions':grammar.definition_page(db,lid,q)})
+                if grammar_registry:return self.send_read_page(db,lambda:grammar.audit(db,q))
+                return self.send(grammar.audit(db,q))
             if url.path=='/api/homonym-preview':return self.send(lexicon.homonyms.plan(db,q.get('lexical_language',lid),q.get('form',''),q.get('exclude','')))
             if url.path=='/api/lexemes':
-                return self.send(lexicon.list_lexemes(db,q.get('lexical_language',lid),q.get('q',''),q.get('page',1),q.get('page_size',30),category=q.get('semantic_class',''),order=q.get('sort_order',''),search=q.get('search'),summary=q.get('summary')=='1',targets=q.get('targets')=='all',counts=q.get('counts')!='0'))
+                return self.send(lexicon.list_lexemes(db,q.get('lexical_language',lid),q.get('q',''),q.get('page',1),q.get('page_size',30),category=q.get('semantic_class',''),order=q.get('sort_order',''),search=q.get('search'),summary=q.get('summary')=='1',targets=q.get('targets')=='all',counts=q.get('counts')!='0',focus=q.get('focus','')))
             if url.path=='/api/vocabulary-options':
                 import vocabulary_selection
                 return self.send(vocabulary_selection.catalog(db,lid,q.get('target','morpheme')))
             if url.path=='/api/morpheme-search-options':
                 import morpheme_search
-                return self.send(morpheme_search.catalog(db,lid))
-            if url.path=='/api/dictionary-search-options':return self.send(lexicon.dictionary_search.catalog(db,q.get('lexical_language',lid)))
+                return self.send_read_page(db,lambda:morpheme_search.catalog(db,lid))
+            if url.path=='/api/dictionary-search-options':
+                return self.send_read_page(db,lambda:lexicon.dictionary_search.catalog(db,q.get('lexical_language',lid)))
             if url.path=='/api/dictionary-organization':return self.send(dictionary_organization.listing(db,q.get('lexical_language',lid)))
             if url.path=='/api/dictionary-layout':
                 import dictionary_layout
@@ -405,11 +500,12 @@ class Handler(BaseHTTPRequestHandler):
             if url.path=='/api/independent-example':
                 d=annotations.get(db,'independent',q.get('id'))
                 if lid not in ('all',d['language_id']):raise ValueError('例句不属于当前语言')
+                if any(t.get('segmentation_ref') for t in d['body']['targets']):analyze(d['body'])
                 code_switching.attach(db,d['body'],'independent',d['id'],d)
                 return self.send(d)
             if url.path=='/api/sentence-search-fields':return self.send(annotations.search_catalog(db,lid))
             if url.path=='/api/sentence-index-status':return self.send({'pending':sentence_search_index.pending(db,q.get('field',''))})
-            if url.path=='/api/example-library':return self.send(annotations.search(db,q))
+            if url.path=='/api/example-library':return self.send_read_page(db,lambda:annotations.search(db,q))
             if url.path=='/api/punctuation-settings':return self.send(punctuation.settings(db,lid))
             if url.path=='/api/dictionary-layer-fields':
                 import dictionary_layers
@@ -437,17 +533,22 @@ class Handler(BaseHTTPRequestHandler):
             if url.path=='/api/writing-types':
                 return self.send(dictionary_data.types(db,q.get('lexical_language',lid),catalog_only=q.get('catalog_only')=='1'))
             if url.path=='/api/dictionary-examples':
+                if q.get('paged')=='1':return self.send(dictionary_data.example_page(db,q['id'],q.get('page',1),q.get('form_id','all'),q.get('focus')))
                 return self.send(dictionary_data.examples(db,q['id']))
             if url.path=='/api/lexeme-auto-preview':
                 q.update({k:v[0] for k,v in parse_qs(url.query,keep_blank_values=True).items() if k=='ignore_symbols'})
-                return self.send(lexicon.auto_link_plan(db,lid,q.get('text_id',''),q.get('ignore_symbols','-=.'),q.get('ignore_position','edges')))
+                return self.send(lexicon.auto_link_plan(db,lid,q.get('text_id',''),q.get('ignore_symbols','-=.'),q.get('ignore_position','edges'),
+                    review=q.get('reuse_preview')=='1',prepare_index=True))
             if url.path=='/api/lexeme':
-                return self.send(lexicon.get_lexeme(db,q['id']))
+                return self.send(lexicon.get_lexeme(db,q['id'],relational=True))
             if url.path=='/api/dictionary-reference-state':
                 import dictionary_targets
                 return self.send(dictionary_targets.reference_state(db,q['id'],lid))
             if url.path=='/api/lexeme-examples':
                 return self.send(lexicon.examples(db,q['id'],q.get('page',1),q.get('kind','all'),q.get('form_id','all')))
+            if url.path=='/api/lexeme-evidence-rows':
+                return self.send(lexicon.evidence_rows(db,lid,q['id'],q.get('view_revision'),
+                    json.loads(q.get('corpus','[]')),json.loads(q.get('independent','[]'))))
             if url.path=='/api/unit-dictionary':
                 return self.send(lexicon.unit_info(db,q['id']))
             if url.path == '/api/undo-state':
@@ -460,12 +561,30 @@ class Handler(BaseHTTPRequestHandler):
                 import text_copy
                 return self.send(text_copy.preview(db,q.get('id'),lid))
             if url.path == '/api/texts':
-                rows = db.execute("SELECT t.id,t.title,t.source,t.errors,t.language_id,l.name language_name,i.folder_id,COALESCE(i.metadata,'{}') metadata,COALESCE(i.revision,0) info_revision,COUNT(e.id) count FROM texts t JOIN languages l ON l.id=t.language_id LEFT JOIN entries e ON e.text_id=t.id LEFT JOIN text_info i ON i.text_id=t.id WHERE (?='all' OR t.language_id=?) GROUP BY t.id ORDER BY COALESCE(json_extract(i.metadata,'$._sidebar_order'),t.rowid),t.rowid",(lid,lid)).fetchall()
-                return self.send([dict(r) for r in rows])
+                # Count through entries_text without joining every sentence to
+                # the navigation metadata or reading its row from the table.
+                sql = """SELECT t.id,t.title,t.source,t.errors,t.language_id,l.name language_name,i.folder_id,
+                    COALESCE(i.metadata,'{}') metadata,COALESCE(i.revision,0) info_revision,
+                    (SELECT count(*) FROM entries e WHERE e.text_id=t.id) count
+                    FROM texts t JOIN languages l ON l.id=t.language_id LEFT JOIN text_info i ON i.text_id=t.id"""
+                args = ()
+                if lid != 'all':
+                    sql += ' WHERE t.language_id=?'
+                    args = (lid,)
+                sql += " ORDER BY COALESCE(json_extract(i.metadata,'$._sidebar_order'),t.rowid),t.rowid"
+                return self.send([dict(r) for r in db.execute(sql,args)])
             if url.path == '/api/folders':
                 return self.send([dict(r) for r in db.execute("SELECT * FROM folders WHERE (?='all' OR language_id=?) ORDER BY position,id",(lid,lid))])
+            if url.path=='/api/entry-page':
+                size=int(q.get('page_size',20))
+                if size not in (10,20,50,100):raise ValueError('每页条数无效')
+                if not db.in_transaction:db.execute('BEGIN')
+                row=db.execute("SELECT e.text_id,e.position FROM entries e JOIN texts t ON t.id=e.text_id WHERE e.id=? AND (?='all' OR t.language_id=?)",(q.get('id'),lid,lid)).fetchone()
+                if not row:raise ValueError('句子不存在或不属于当前语言')
+                rank=db.execute('SELECT count(*) FROM entries WHERE text_id=? AND position<=?',(row['text_id'],row['position'])).fetchone()[0]
+                return self.send(dict(text_id=row['text_id'],page=max(1,(rank-1)//size+1)))
             if url.path == '/api/entries':
-                return self.send(corpus_search.search(db,q,lid))
+                return self.send_read_page(db,lambda:corpus_search.search(db,q,lid))
             if url.path == '/api/history':
                 rows = db.execute('SELECT * FROM history WHERE entry_id=? ORDER BY id DESC', (q['id'],)).fetchall()
                 result=[]
@@ -474,15 +593,22 @@ class Handler(BaseHTTPRequestHandler):
                     for c in journal.decode_changes(step['changes']):
                         before,after=c['before'],c['after']
                         if c['table']=='entries' and before and after and before['id']==q['id'] and before['body']!=after['body']:
-                            result.append({'created':step['created'],'body':json.loads(before['body']),'revision':before['revision']})
+                            result.append({'created':step['created'],'body':record_sources.body(before),'revision':before['revision']})
                 result.extend({**dict(r),'body':json.loads(r['body'])} for r in rows)
                 owner=db.execute('SELECT t.language_id FROM entries e JOIN texts t ON t.id=e.text_id WHERE e.id=?',(q['id'],)).fetchone()
                 limit=journal.state(db,owner[0] if owner else 'ordos')['step_limit']
                 return self.send(result[:limit])
             if url.path == '/api/positions':
+                if record_sources.native(db):
+                    rows=db.execute("SELECT e.id,e.position,substr(s.translation,1,100) translation FROM entries e "
+                                    "JOIN sentence_text_rows s ON s.kind='corpus' AND s.owner_id=e.id WHERE e.text_id=? ORDER BY e.position",(q['id'],))
+                    return self.send([dict(r) for r in rows])
                 return self.send([{'id':r['id'],'position':r['position'],'translation':json.loads(r['body'])['translation'][:100]} for r in db.execute('SELECT id,position,body FROM entries WHERE text_id=? ORDER BY position',(q['id'],))])
             if url.path == '/api/backup':
-                return self.send({'format':'ordos-corpus-v1', 'created':datetime.now(timezone.utc).isoformat(), 'object_media_files':object_media.backup_files(db,DB), **{table:[dict(r) for r in db.execute('SELECT rowid AS rowid,* FROM '+table)] for table in metadata.TABLES}})
+                tables={table:record_sources.backup_rows(db,table) for table in metadata.TABLES}
+                tables['undo_steps']=[journal.portable_step(row) for row in tables['undo_steps']]
+                return self.send({'format':'ordos-corpus-v1','created':datetime.now(timezone.utc).isoformat(),
+                                  'object_media_files':object_media.backup_files(db,DB),**tables})
             if url.path == '/api/word-transfer-snapshot':
                 return self.send(word_transfer.snapshot(db,q['kind'],q['id']))
             if url.path == '/api/export-language':
@@ -492,7 +618,7 @@ class Handler(BaseHTTPRequestHandler):
                 if q.get('original') == 'true':
                     return self.send(text['original'],mime='text/plain; charset=utf-8')
                 import gloss_inheritance
-                entries = [gloss_inheritance.load(db,'corpus',r['id'],r['body']) for r in gloss_inheritance.iter_rows(db,db.execute('SELECT id,body FROM entries WHERE text_id=? ORDER BY position',(q['id'],)),'corpus')]
+                entries = [gloss_inheritance.load(db,'corpus',r['id'],r['body']) for r in gloss_inheritance.iter_rows(db,db.execute('SELECT id FROM entries WHERE text_id=? ORDER BY position',(q['id'],)),'corpus',relational=True)]
                 return self.send('\n\n'.join(export_entry(e) for e in entries),mime='text/plain; charset=utf-8')
         files = {'/classes.js':'classes.js','/display-tools.js':'display-tools.js','/ui-tools.js':'ui-tools.js','/grammar.js':'grammar.js','/inline-editor.js':'inline-editor.js','/example-library.js':'example-library.js','/':'index.html','/fonts.js':'fonts.js','/home.js':'home.js','/dictionary-manager.js':'dictionary-manager.js','/app.js':'app.js','/organize.js':'organize.js','/metadata.js':'metadata.js','/undo.js':'undo.js','/languages.js':'languages.js','/lexicon.js':'lexicon.js','/lexicon-extra.js':'lexicon-extra.js','/style.css':'style.css'}
         files.update({'/reduplication.js':'reduplication.js','/text-tools.js':'text-tools.js','/word-structure.js':'word-structure.js','/punctuation.js':'punctuation.js','/workspace-layout.js':'workspace-layout.js','/typography.js':'typography.js','/morphology.js':'morphology.js','/segmentation.js':'segmentation.js','/multipart-forms.js':'multipart-forms.js','/multipart-forms.css':'multipart-forms.css','/favicon.ico':'favicon.ico'})
@@ -520,6 +646,7 @@ class Handler(BaseHTTPRequestHandler):
         files['/dialogue.css']='dialogue.css'
         files['/workspace-navigation.js']='workspace-navigation.js'
         files['/workspace-loading.js']='workspace-loading.js'
+        files['/render-ready.js']='render-ready.js'
         files['/morpheme-colors.js']='morpheme-colors.js'
         files['/morph-color-settings.js']='morph-color-settings.js'
         files['/dictionary-replace.js']='dictionary-replace.js'
@@ -547,6 +674,8 @@ class Handler(BaseHTTPRequestHandler):
         files['/sentence-inspector.js']='sentence-inspector.js'
         files['/object-media.js']='object-media.js'
         files['/recorder.js']='recorder.js'
+        files['/chinese-mode.js']='chinese-mode.js'
+        files['/management-language.js']='management-language.js'
         files['/recorder.css']='recorder.css'
         files.update({'/playback-volume.js':'playback-volume.js','/playback-volume.css':'playback-volume.css'})
         files.update({'/licenses':'licenses.html','/license-notices.js':'license-notices.js','/license-notices.css':'license-notices.css'})
@@ -647,6 +776,17 @@ class Handler(BaseHTTPRequestHandler):
                 request=body.get('request',{})
                 if not isinstance(request,dict):raise ValueError('任务参数无效')
                 return self.send({'id':long_tasks.submit(DB,body.get('kind'),{**request,'language':request.get('language',body.get('_language','ordos'))})})
+            if self.path=='/api/analysis-maintenance':
+                if long_tasks.active(DB):return self.send({'pending':True,'removed':0,'runs':0})
+                with connect(audit=False) as db:
+                    db.execute('PRAGMA busy_timeout=0')
+                    try:
+                        db.execute('BEGIN IMMEDIATE')
+                        result=analysis_workspace.maintain(db)
+                    except sqlite3.OperationalError as error:
+                        if getattr(error,'sqlite_errorcode',None) not in (sqlite3.SQLITE_BUSY,sqlite3.SQLITE_LOCKED):raise
+                        result={'pending':True,'removed':0,'runs':0}
+                return self.send(result)
             if self.path=='/api/task-cancel':return self.send(long_tasks.cancel(DB,body.get('id')))
             if self.path=='/api/task-forget':
                 long_tasks.view(DB,body.get('id'))
@@ -718,6 +858,34 @@ class Handler(BaseHTTPRequestHandler):
                         result=language_deletion.remove(db,DB,body) if self.path=='/api/delete-language' else language_deletion.preview(db,body)
                 except sqlite3.Error as error:raise ValueError('删除未完成，资料已保留：'+str(error)) from error
                 return self.send(result)
+            if self.path in ('/api/example-links-save','/api/dictionary-examples-unlink') or (
+                self.path=='/api/segmentation-link' and body.get('kind')=='independent'
+            ):
+                import independent_links
+                path=self.path.removeprefix('/api/')
+                with connect() as db:
+                    lid=languages.request_scope(db,path,body)
+                    journal.scope.set(lid)
+                    if path=='example-links-save':result=independent_links.save_selection(db,body,lid)
+                    elif path=='segmentation-link':result=segmentation.link(db,body,lid)
+                    else:result=lexicon.mutate(db,path,body,lid)
+                return self.send(result)
+            if self.path=='/api/inline-save':
+                update=save_validation.view_update('inline-save',body)
+                tables=annotations.INDEPENDENT_INLINE_TABLES if body.get('kind')=='independent' else None
+                with connect(view_update=update,audit_tables=tables) as db:
+                    lid=languages.request_scope(db,'inline-save',body)
+                    journal.scope.set(lid)
+                    result=annotations.inline_save(db,body,lid)
+                if update is not None:update.attach(result)
+                return self.send(result)
+            if self.path in ('/api/undo','/api/redo','/api/undo-limit'):
+                observed={}
+                with connect(restore=True,restore_changes=observed) as db:
+                    lid=languages.request_scope(db,self.path.removeprefix('/api/'),body)
+                    journal.scope.set(lid)
+                    result=journal.apply(db,self.path,body,observed)
+                return self.send(result)
             with connect(audit=False) as db:
                 lid=languages.request_scope(db,self.path.removeprefix('/api/'),body)
             journal.scope.set(lid)
@@ -726,7 +894,7 @@ class Handler(BaseHTTPRequestHandler):
                     t=db.execute('SELECT * FROM texts WHERE id=? AND language_id=?',(body.get('id'),lid)).fetchone()
                     if not t:raise ValueError('请选择当前语言的文本')
                     import gloss_inheritance
-                    content='\n\n'.join(export_entry(gloss_inheritance.load(db,'corpus',r['id'],r['body'])) for r in gloss_inheritance.iter_rows(db,db.execute('SELECT id,body FROM entries WHERE text_id=? ORDER BY position,id',(t['id'],)),'corpus'))
+                    content='\n\n'.join(export_entry(gloss_inheritance.load(db,'corpus',r['id'],r['body'])) for r in gloss_inheritance.iter_rows(db,db.execute('SELECT id FROM entries WHERE text_id=? ORDER BY position,id',(t['id'],)),'corpus',relational=True))
                 raw=content.encode('utf-8')
                 with tempfile.NamedTemporaryFile(suffix='.typ',dir=language_exchange.STAGING.name,delete=False) as f:
                     f.write(raw);path=Path(f.name)
@@ -767,11 +935,14 @@ class Handler(BaseHTTPRequestHandler):
             if self.path=='/api/collaborator-save':
                 with connect() as db:result=collaborators.save(db,body,lid)
                 return self.send(result)
-            if self.path in ('/api/dictionary-replace-preview','/api/dictionary-replace-apply'):
-                with connect() as db:result=(dictionary_replace.preview if self.path.endswith('-preview') else dictionary_replace.apply)(db,body,lid)
-                return self.send(result)
-            if self.path in ('/api/text-replace-preview','/api/text-replace-apply'):
-                with connect() as db:result=(text_replace.preview if self.path.endswith('-preview') else text_replace.apply)(db,body,lid)
+            if self.path in ('/api/dictionary-replace-preview','/api/dictionary-replace-apply',
+                             '/api/text-replace-preview','/api/text-replace-apply'):
+                operation=self.path.removeprefix('/api/')
+                module=dictionary_replace if operation.startswith('dictionary-') else text_replace
+                update=save_validation.view_update(operation,body)
+                with connect(view_update=update) as db:
+                    result=(module.preview if operation.endswith('-preview') else module.apply)(db,body,lid)
+                if update is not None:update.attach(result)
                 return self.send(result)
             if self.path in ('/api/punctuation-preview','/api/punctuation-apply'):
                 with connect() as db:result=(punctuation.preview if self.path.endswith('-preview') else punctuation.apply)(db,body,lid)
@@ -800,9 +971,6 @@ class Handler(BaseHTTPRequestHandler):
             if self.path=='/api/word-transfer':
                 with connect() as db:result=word_transfer.apply(db,body,lid)
                 return self.send(result)
-            if self.path=='/api/inline-save':
-                with connect() as db:result=annotations.inline_save(db,body,journal.scope.get())
-                return self.send(result)
             if self.path=='/api/gloss-source-save':
                 import gloss_inheritance
                 with connect() as db:result=gloss_inheritance.set_mode(db,body,lid)
@@ -818,7 +986,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(result)
             if self.path in ('/api/writing-save','/api/writing-delete','/api/example-save','/api/example-delete'):
                 with connect() as db:
-                    result=dictionary_data.mutate(db,self.path.removeprefix('/api/'),body,lid)
+                    result=dictionary_data.mutate(db,self.path.removeprefix('/api/'),body,lid,
+                                                  sentence_edit=self.path=='/api/example-save')
                 return self.send(result)
             if self.path=='/api/dictionary-copy':
                 with connect() as db:result=lexicon.duplicate(db,lid,body)
@@ -828,7 +997,10 @@ class Handler(BaseHTTPRequestHandler):
                 with connect() as db:result=(morpheme_conversion.preview if self.path.endswith('-preview') else morpheme_conversion.convert)(db,lid,body)
                 return self.send(result)
             if self.path in ('/api/morpheme-sync-writings','/api/morpheme-save','/api/morpheme-assign','/api/morpheme-merge','/api/morpheme-delete','/api/morpheme-unassign'):
-                with connect() as db:result=morpheme_registry.mutate(db,self.path.removeprefix('/api/'),body,lid)
+                operation=self.path.removeprefix('/api/')
+                update=save_validation.view_update(operation,body)
+                with connect(view_update=update) as db:result=morpheme_registry.mutate(db,operation,body,lid)
+                if update is not None:update.attach(result)
                 return self.send(result)
             if self.path=='/api/quick-edit-settings':
                 with connect() as db:result=quick_edit.save(db,lid,body)
@@ -846,9 +1018,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.path=='/api/morpheme-save-preview':
                 with connect() as db:result=morpheme_registry.save_plan(db,lid,body.get('id'),lexicon.normalize(body.get('body',{})),body.get('assignments'))
                 return self.send(result)
-            if self.path in ('/api/lexeme-save','/api/lexeme-delete','/api/lexeme-link','/api/lexeme-unlink','/api/lexeme-auto-link','/api/dictionary-examples-unlink'):
-                with connect() as db:
-                    result=lexicon.mutate(db,self.path.removeprefix('/api/'),body,lid)
+            if self.path in ('/api/lexeme-save','/api/lexeme-delete','/api/lexeme-link','/api/lexeme-unlink','/api/lexeme-auto-link'):
+                operation=self.path.removeprefix('/api/')
+                update=save_validation.view_update(operation,body)
+                with connect(view_update=update) as db:
+                    result=lexicon.mutate(db,operation,body,lid)
+                if update is not None:update.attach(result)
                 return self.send(result)
             if self.path=='/api/import-language':
                 with connect() as db:
@@ -857,10 +1032,6 @@ class Handler(BaseHTTPRequestHandler):
             if self.path=='/api/save-language':
                 with connect() as db:
                     result=languages.save(db,body)
-                return self.send(result)
-            if self.path in ('/api/undo','/api/redo','/api/undo-limit'):
-                with connect() as db:
-                    result = journal.apply(db,self.path,body)
                 return self.send(result)
             if self.path in ('/api/organize-text','/api/save-text-info','/api/save-folder','/api/delete-folder','/api/order-folder'):
                 with connect() as db:
@@ -887,15 +1058,15 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == '/api/save':
                 with connect() as db:
                     if not db.in_transaction: db.execute('BEGIN IMMEDIATE')
-                    row = db.execute('SELECT * FROM entries WHERE id=?',(body['id'],)).fetchone()
+                    row = db.execute('SELECT revision FROM entries WHERE id=?',(body['id'],)).fetchone()
                     if row is None:
                         raise ValueError('条目不存在')
                     if row['revision'] != body['revision']:
                         return self.send({'error':'此条目已被修改，请刷新后再编辑'},409)
                     import gloss_inheritance
                     gloss_inheritance.check_revision(db,'corpus',body['id'],body)
-                    entry = json.loads(row['body'])
-                    previous_entry=gloss_inheritance.load(db,'corpus',body['id'],row['body'])
+                    entry = sentence_rows.one(db,'corpus',body['id'])
+                    previous_entry=gloss_inheritance.load(db,'corpus',body['id'],record_sources.object_value(entry))
                     entry.update({k:body[k] for k in ('ipa','translation','words','notes')})
                     entry['words']=[{k:w.get(k,'content') for k in ('form','gloss','form_kind','gloss_kind')} for w in body['words']]
                     entry['words'],_=compact_edited_pairs(entry['words'],previous_entry['words'])
@@ -906,11 +1077,14 @@ class Handler(BaseHTTPRequestHandler):
                     grammaticality.copy_value(previous_entry,entry,body,'corpus')
                     entry['edited'] = True
                     analyze(entry)
+                    import auto_reduplication
+                    owner=db.execute('SELECT t.language_id FROM entries e JOIN texts t ON t.id=e.text_id WHERE e.id=?',(body['id'],)).fetchone()
+                    auto_reduplication.on_save(db,'corpus',body['id'],entry,owner[0],previous=previous_entry)
                     # Ensure edited content still exports as one structurally identical call.
                     check, errors = parse(export_entry(entry))
                     if errors or len(check) != 1 or any(check[0][k] != entry[k] for k in ('ipa','translation')) or [(w['form'],w['gloss']) for w in check[0]['words']] != [(w['form'],w['gloss']) for w in entry['words']]:
                         raise ValueError('文本包含未配对的括号或未转义引号；请修正后保存')
-                    db.execute('UPDATE entries SET body=?,revision=revision+1 WHERE id=?',(json.dumps(entry,ensure_ascii=False),body['id']))
+                    sentence_rows.write(db,'corpus',body['id'],entry)
                 with connect() as db:
                     review=db.execute('SELECT COUNT(*) FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id WHERE u.entry_id=? AND u.active=0',(body['id'],)).fetchone()[0]
                 return self.send({'ok':True,'dictionary_review_count':review})
@@ -922,7 +1096,7 @@ class Handler(BaseHTTPRequestHandler):
                     pos = db.execute('SELECT COALESCE(MAX(position),0)+1 FROM entries WHERE text_id=?',(body['text_id'],)).fetchone()[0]
                     entry = analyze({'function':'pass','ipa':'','translation':'','words':[],'raw':'','line':None,'edited':True})
                     eid=str(uuid.uuid4())
-                    db.execute('INSERT INTO entries(id,text_id,position,body) VALUES(?,?,?,?)',(eid,body['text_id'],pos,json.dumps(entry)))
+                    sentence_rows.write(db,'corpus',eid,entry,columns=dict(text_id=body['text_id'],position=pos),insert=True)
                 return self.send({'ok':True,'position':pos,'id':eid})
             self.send({'error':'未知操作'},404)
         except (ValueError, KeyError, TypeError, OSError) as exc:

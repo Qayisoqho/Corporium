@@ -1,3 +1,4 @@
+import source_fixtures
 import copy
 import json
 import sqlite3
@@ -30,26 +31,26 @@ class AuditSpeedTests(unittest.TestCase):
             with self.subTest(mode=mode):
                 with server.connect(audit=False) as db:db.execute('PRAGMA journal_mode='+mode)
                 self.audit()
-                with (patch.object(grammar,'analyze',side_effect=AssertionError('tag edit rescanned source')) if mode=='delete' else nullcontext()):
+                with (patch.object(grammar,'audit_word_facts',side_effect=AssertionError('tag edit rescanned source')) if mode=='delete' else nullcontext()):
                     tag=self.tag('pl',aliases=['PLURAL'])
                     current=self.audit()
                 self.assertEqual(current,self.fresh())
                 for values in [dict(description='description',category='number'),dict(symbol='plural',aliases=['PL']),dict(symbol='plural',aliases=['PL','NOM'])]:
-                    with server.connect(audit=False) as db:before=[tuple(r) for r in db.execute('SELECT id,body FROM entries ORDER BY id')]
+                    with server.connect(audit=False) as db:before=[tuple(r) for r in db.execute('SELECT id,body FROM entries_documents ORDER BY id')]
                     code,_=self.call('/api/grammar-save',{**tag,**values});self.assertEqual(code,200)
-                    with server.connect(audit=False) as db:changed=before!=[tuple(r) for r in db.execute('SELECT id,body FROM entries ORDER BY id')]
+                    with server.connect(audit=False) as db:changed=before!=[tuple(r) for r in db.execute('SELECT id,body FROM entries_documents ORDER BY id')]
                     # Registered-label renaming now rewrites recognized old tags.
                     # Reusing pre-rename source facts would return stale content.
-                    guard=patch.object(grammar,'analyze',wraps=grammar.analyze) if changed else patch.object(grammar,'analyze',side_effect=AssertionError('tag-only edit rescanned source')) if mode=='delete' else nullcontext()
+                    guard=patch.object(grammar,'audit_word_facts',wraps=grammar.audit_word_facts) if changed else patch.object(grammar,'audit_word_facts',side_effect=AssertionError('tag-only edit rescanned source')) if mode=='delete' else nullcontext()
                     with guard as analyzed:current=self.audit(lower='true')
                     if changed:self.assertTrue(analyzed.called)
                     self.assertEqual(current,self.fresh(lower='true'))
                     tag=next(t for t in self.call('/api/grammar-tags?language=ordos')[1] if t['id']==tag['id'])
                 code,_=self.call('/api/grammar-delete',{**tag,'confirmed':True});self.assertEqual(code,200)
-                with (patch.object(grammar,'analyze',side_effect=AssertionError('delete rescanned source')) if mode=='delete' else nullcontext()):current=self.audit()
+                with (patch.object(grammar,'audit_word_facts',side_effect=AssertionError('delete rescanned source')) if mode=='delete' else nullcontext()):current=self.audit()
                 self.assertEqual(current,self.fresh())
                 code,_=self.call('/api/grammar-ignore',dict(items=[dict(symbol='PL')]));self.assertEqual(code,200)
-                with (patch.object(grammar,'analyze',side_effect=AssertionError('ignore rescanned source')) if mode=='delete' else nullcontext()):current=self.audit()
+                with (patch.object(grammar,'audit_word_facts',side_effect=AssertionError('ignore rescanned source')) if mode=='delete' else nullcontext()):current=self.audit()
                 self.assertEqual(current,self.fresh())
                 code,_=self.call('/api/grammar-unignore',dict(items=[dict(symbol='PL')]));self.assertEqual(code,200)
 
@@ -60,10 +61,10 @@ class AuditSpeedTests(unittest.TestCase):
             self.audit();real=cache.promote
             def raced(db,proof,changes):
                 with closing(sqlite3.connect(server.DB)) as writer:
-                    writer.execute("UPDATE entries SET body=json_set(body,'$.words[0].gloss','NOM')");writer.commit()
+                    source_fixtures.patch_values(writer,'entries',None,((('words', 0, 'gloss'), 'NOM'),));writer.commit()
                 real(db,proof,changes)
             with patch.object(cache,'promote',raced):tag=self.tag('PL')
-            with patch.object(grammar,'analyze',wraps=grammar.analyze) as analyze:current=self.audit()
+            with patch.object(grammar,'audit_word_facts',wraps=grammar.audit_word_facts) as analyze:current=self.audit()
             self.assertTrue(analyze.called);self.assertEqual(current,self.fresh())
             self.assertIn('NOM',[u['symbol'] for u in current['unknown']])
             self.call('/api/grammar-delete',{**tag,'confirmed':True})
@@ -72,16 +73,16 @@ class AuditSpeedTests(unittest.TestCase):
         self.seed('#pass([], (([a-b],[NOM-PL]),([c],[PST])), [])');self.audit()
         code,r=self.call('/api/grammar-register-batch',dict(items=[dict(symbol='NOM'),dict(symbol='PL')]))
         self.assertEqual(code,200,r)
-        with patch.object(grammar,'analyze',side_effect=AssertionError('batch registration rescanned sources')):current=self.audit()
+        with patch.object(grammar,'audit_word_facts',side_effect=AssertionError('batch registration rescanned sources')):current=self.audit()
         self.assertEqual(current,self.fresh())
         self.assertEqual(self.call('/api/grammar-ignore',dict(items=[dict(symbol='PST')]))[0],200)
-        with patch.object(grammar,'analyze',side_effect=AssertionError('ignore rescanned sources')):current=self.audit()
+        with patch.object(grammar,'audit_word_facts',side_effect=AssertionError('ignore rescanned sources')):current=self.audit()
         self.assertEqual(current,self.fresh())
 
     def test_source_edit_undo_and_dictionary_meaning_changes_invalidate_facts(self):
         e=self.seed();x=self.word();self.link(e['words'][0]['unit_id'],x);self.audit()
         e=self.entries()[0];e['notes']='changed';code,_=self.call('/api/save',e);self.assertEqual(code,200)
-        with patch.object(grammar,'analyze',wraps=grammar.analyze) as analyze:current=self.audit()
+        with patch.object(grammar,'audit_word_facts',wraps=grammar.audit_word_facts) as analyze:current=self.audit()
         self.assertTrue(analyze.called);self.assertEqual(current,self.fresh())
         self.undo();self.assertEqual(self.audit(),self.fresh())
         x=self.call('/api/lexeme?id='+x['id'])[1];x['body']['usages'][0]['senses'][0]['short_gloss']='PL'
@@ -104,7 +105,7 @@ class AuditSpeedTests(unittest.TestCase):
         try:
             with server.connect() as db:
                 db.execute("UPDATE grammar_tags SET description='mixed',revision=revision+1 WHERE id=?",(tag['id'],))
-                db.execute("UPDATE entries SET body=json_set(body,'$.words[0].gloss','NOM')")
+                source_fixtures.patch_values(db,'entries',None,((('words', 0, 'gloss'), 'NOM'),))
         finally:journal.action.reset(token)
         self.assertEqual(self.audit(),self.fresh())
         before=self.audit()
@@ -118,6 +119,8 @@ class AuditSpeedTests(unittest.TestCase):
             a=grammar.corpus.analyze(dict(ipa='',translation='',words=[copy.deepcopy(w)]))['words'][0]
             b=copy.deepcopy(w);cache_.apply(b,n)
             self.assertEqual(b,a);self.assertLessEqual(cache_.bytes,25000);self.assertLessEqual(len(cache_.values),2)
+            self.assertEqual(cache_.fact(w),cache_.summarize(a))
+            self.assertLessEqual(cache_.fact_bytes,25000);self.assertLessEqual(len(cache_.facts),2)
 
     def test_orphan_lexeme_and_morpheme_links_are_absent_from_fresh_and_cached_audits(self):
         e=self.seed('#pass([], (([a],[A]),([b],[B])), [])');x=self.word()

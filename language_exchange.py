@@ -11,6 +11,7 @@ import fieldwork_notes
 import code_switching
 import gloss_inheritance
 import grammaticality
+import record_sources
 
 
 def export_bundle(db,lid,stream=False):
@@ -18,9 +19,12 @@ def export_bundle(db,lid,stream=False):
     text_rows=[dict(r) for r in db.execute('SELECT * FROM texts WHERE language_id=? ORDER BY rowid',(lid,))]
     for t in text_rows:
         t['info']=dict(db.execute('SELECT * FROM text_info WHERE text_id=?',(t['id'],)).fetchone() or {})
-        t['entries']=streaming_json.Rows(db,'SELECT * FROM entries WHERE text_id=? ORDER BY position',(t['id'],),transform=lambda r:gloss_inheritance.export_body(db,'corpus',r)) if stream else [gloss_inheritance.export_body(db,'corpus',r) for r in gloss_inheritance.iter_rows(db,db.execute('SELECT * FROM entries WHERE text_id=? ORDER BY position',(t['id'],)),'corpus')]
+        sql='SELECT id,text_id,position,revision FROM entries WHERE text_id=? ORDER BY position'
+        t['entries']=streaming_json.Rows(db,sql,(t['id'],),transform=lambda r:gloss_inheritance.export_body(db,'corpus',r),source='entries') if stream else [gloss_inheritance.export_body(db,'corpus',r) for r in gloss_inheritance.iter_rows(db,db.execute(sql,(t['id'],)),'corpus',relational=True)]
     # Include referenced languages so mixed-language annotations remain interpretable.
-    refs={r[0] for r in db.execute("SELECT DISTINCT json_extract(e.body,'$.language_id') FROM entries e JOIN texts t ON t.id=e.text_id WHERE t.language_id=?",(lid,))}-{None,'',lid}
+    source='corpus_sentence_keys' if record_sources.native(db) else 'entries'
+    language_field='e.language_id' if record_sources.native(db) else "json_extract(e.body,'$.language_id')"
+    refs={r[0] for r in db.execute(f"SELECT DISTINCT {language_field} FROM {source} e JOIN texts t ON t.id=e.text_id WHERE t.language_id=?",(lid,))}-{None,'',lid}
     dictionary=lexicon.export_bundle(db,lid,stream=stream)
     refs|={x['language_id'] for x in dictionary['lexemes']+dictionary['annotation_layers']}-{lid}
     people_bundle=collaborators.export_bundle(db,lid)

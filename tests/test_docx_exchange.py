@@ -33,7 +33,7 @@ class DocxTests(unittest.TestCase):
         b={**self.config(u),**overrides};p=self.api('preview',**b);r=self.api('import',**b,signature=p['signature']);return r,p
 
     def bodies(self,tid):
-        with server.connect(audit=False) as db:return [json.loads(r[0]) for r in db.execute('SELECT body FROM entries WHERE text_id=? ORDER BY position',(tid,))]
+        with server.connect(audit=False) as db:return [json.loads(r[0]) for r in db.execute('SELECT body FROM entries_documents WHERE text_id=? ORDER BY position',(tid,))]
 
     def mutate(self,raw,fn):
         output=io.BytesIO()
@@ -134,9 +134,9 @@ class DocxTests(unittest.TestCase):
         h=test_gloss_inheritance.GlossInheritanceTests();h.call=self.call
         row=self.call('/api/import',dict(title='继承',content='#pass([], (([home],[原值]),), [])'))[1]
         e=self.call('/api/entries?text='+row['id'])[1]['items'][0];lex=h.word('home',['家']);h.link(e,lex,'@word');h.change(lex,'住所')
-        with server.connect(audit=False) as db:before=tuple(db.execute('SELECT body,revision FROM entries WHERE id=?',(e['id'],)).fetchone())
+        with server.connect(audit=False) as db:before=tuple(db.execute('SELECT body,revision FROM entries_documents WHERE id=?',(e['id'],)).fetchone())
         result=self.api('export',id=row['id']);parsed=x.read(io.BytesIO(base64.b64decode(result['data'])));self.assertEqual(parsed['sentences'][0]['words'][0]['gloss'],'住所')
-        with server.connect(audit=False) as db:self.assertEqual(tuple(db.execute('SELECT body,revision FROM entries WHERE id=?',(e['id'],)).fetchone()),before)
+        with server.connect(audit=False) as db:self.assertEqual(tuple(db.execute('SELECT body,revision FROM entries_documents WHERE id=?',(e['id'],)).fetchone()),before)
 
     def test_export_batches_word_identities_and_layer_cells(self):
         raw=x.document('批量',[dict(body=dict(ipa='',translation='',notes='',words=[dict(form='a',gloss='A')])) for _ in range(12)])

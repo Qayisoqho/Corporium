@@ -4,9 +4,12 @@ undoPanel.innerHTML=(globalThis.CorporiumI18n?.f("8ad84b94f6ceb8",()=>[])??'<div
 document.querySelector('header').after(undoPanel);
 let undoState=null,undoBusy=false;
 const originalApi=api;
-async function refreshUndo(){
-  await loadLanguages();
-  undoState=await originalApi('undo-state');
+async function refreshUndo({reloadLanguages=true}={}){
+  if(reloadLanguages)await loadLanguages();
+  renderUndoState(await originalApi('undo-state'));
+}
+function renderUndoState(state){
+  undoState=state;
   window.corporiumWorkspaceRevision=undoState.workspace_revision;
   for(const kind of ['undo','redo']){
     const b=$(''+kind+'-action'),step=undoState[kind];
@@ -27,9 +30,18 @@ async function refreshUndo(){
 }
 // Some independent editors only need the history controls, without reloading their workspace.
 window.corporiumRefreshUndoState=refreshUndo;
+// Verify the commit is still the latest one before keeping any existing rows.
+window.corporiumRefreshSavedHistory=async function(update,snapshot){
+  const owner=activeLanguage;
+  if(!update||window.corporiumWorkspaceRevision!==update.base)return false;
+  const state=snapshot||await originalApi('undo-state');
+  if(owner!==activeLanguage||window.corporiumWorkspaceRevision!==update.base||state.workspace_revision!==update.current)return false;
+  renderUndoState(state);
+  return true;
+};
 api=async function(path,body){
   const result=await originalApi(path,body);
-  if(body&&!path.startsWith('analysis-')&&path!=='morpheme-save-preview'&&!['docx-inspect','docx-preview','docx-export','docx-template'].includes(path)){
+  if(body&&!result?._view_update&&!path.startsWith('analysis-')&&path!=='morpheme-save-preview'&&!['docx-inspect','docx-preview','docx-export','docx-template'].includes(path)){
     // Grammar editors own their one post-save audit, after the editor closes.
     const refresh=['grammaticality-save','grammaticality-type-save','grammaticality-type-delete','grammar-save','grammar-delete','grammar-register-batch','grammar-ignore','grammar-unignore','lexeme-unlink','dictionary-examples-unlink'].includes(path)?window.corporiumRefreshUndoState:refreshUndo;
     await refresh().catch(()=>{$('notice').textContent=(globalThis.CorporiumI18n?.f("3e3bd58ba777cf",()=>[])??'数据已保存，但操作记录刷新失败，请刷新页面。')});

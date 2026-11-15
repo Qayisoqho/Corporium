@@ -9,17 +9,34 @@ async function leaveSentenceDrafts(){
  discardEmptySentenceDrafts();
  if([...inlineDrafts.values()].some(d=>d.isNew))throw Error((globalThis.CorporiumI18n?.f("4ef2d2e24ec9e9",()=>[])??'请先保存或取消正在新建的句子。'));
 }
+async function revealCreatedRecord(node,current=()=>true){
+ await nextLayoutFrame();await nextLayoutFrame();
+ if(typeof node==='function')node=node();
+ if(!current()||!node?.isConnected)return;
+ if(!node.hasAttribute('tabindex'))node.tabIndex=-1;
+ node.focus({preventScroll:true});node.scrollIntoView({block:'nearest',behavior:'instant'});
+}
 async function beginSentenceDraft(options={}){
  await leaveSentenceDrafts();
  if(inlineDrafts.size)throw Error((globalThis.CorporiumI18n?.f("7b4b55309f371d",()=>[])??'请先保存或取消正在编辑的句子。'));
  const kind=options.kind||'independent',lid=options.language_id||activeLanguage;
  if(lid==='all')throw Error((globalThis.CorporiumI18n?.f("d4f5e1484c024f",()=>[])??'请先选择一种语言。'));
  const originWorkspace=workspace,originLanguage=activeLanguage;
+ if(kind==='corpus'&&workspace==='corpus'&&options.text_id){
+  clearFilters();window.CorporiumDialogue?.showOriginal(options.text_id);
+  await selectText(options.text_id,{readResults:false});
+  page=Number.MAX_SAFE_INTEGER;await search();
+  if(workspace!==originWorkspace||activeLanguage!==originLanguage||selected!==options.text_id)return;
+ }
  const layers=await api('layers?lexical_language='+encodeURIComponent(lid));
  if(workspace!==originWorkspace||activeLanguage!==originLanguage)return;
+ if(kind==='corpus'&&workspace==='corpus'&&selected!==options.text_id)return;
  if(inlineDrafts.size)throw Error((globalThis.CorporiumI18n?.f("dcef2e484f007e",()=>[])??'请先保存或取消正在编辑的句子。'));
  const id='draft:'+crypto.randomUUID(),key=inlineKey(kind,id),host=document.createElement('article');host.className='entry new-sentence-draft';
  const d={kind,id,isNew:true,workspace,language_id:lid,owner_language:lid,body:{ipa:'',translation:'',notes:'',original:'',words:[]},words:[],cells:[],before:[],layers,orphaned:[],dirty:false,...options,host};
+ d.onSaved??=kind==='corpus'&&workspace==='corpus'?saveNewCorpusInPlace:
+  workspace==='library'?r=>window.CorporiumExampleGroups.revealCreated(r.id):
+  workspace==='dictionary'&&!options.host?async r=>{exampleSource='independent';exampleForm='all';await loadDictionary();await focusStandaloneExample(r.id);return true;}:undefined;
  const slot='new:'+crypto.randomUUID();d.words.push({id:slot,protected:false});d.body.words.push({form:'',gloss:''});
  inlineDrafts.set(key,d);
  host.innerHTML=(globalThis.CorporiumI18n?.f("d8661b92678a4b",()=>[renderEditableExample(d.body,kind,id)])??'<div class="entry-head"><strong>新建句子</strong><small>保存后建立记录，可保存空句</small></div>'+renderEditableExample(d.body,kind,id));
@@ -28,13 +45,13 @@ async function beginSentenceDraft(options={}){
  return d;
 }
 async function saveNewCorpusInPlace(r,d){
- const detail=await api('annotations?kind=corpus&id='+encodeURIComponent(r.id));
- const e={...detail.body,id:r.id,kind:'corpus',text_id:r.text_id,position:r.position,title:texts.find(t=>t.id===r.text_id)?.title||'',text_language_id:detail.owner_language,warnings:detail.body.warnings||[],revision:detail.revision};
- const box=document.createElement('div');box.innerHTML=corpusEntryCard(e);const card=box.firstElementChild;
- const top=d.host.getBoundingClientRect().top;d.host.replaceWith(card);items.push(e);
- card.querySelector('[data-edit]').onclick=safe(()=>edit(e));
- card.querySelector('[data-context]').onclick=safe(async()=>{clearFilters();await selectText(r.text_id);page=Math.ceil(r.position/pageSize());await search();$('entry-'+r.id)?.scrollIntoView({block:'center'});});
- await loadTexts();window.scrollBy({top:card.getBoundingClientRect().top-top,behavior:'instant'});return true;
+ const current=()=>workspace===d.workspace&&activeLanguage===d.language_id&&selected===d.text_id;
+ if(!current())return true;
+ const location=await api('entry-page?'+new URLSearchParams({id:r.id,page_size:pageSize()}));
+ if(!current())return true;
+ d.host?.remove();clearFilters();page=location.page;
+ await loadTexts();if(!current())return true;
+ await search();await revealCreatedRecord($('entry-'+r.id),current);return true;
 }
 (()=>{
  const oldStandalone=openStandalone;

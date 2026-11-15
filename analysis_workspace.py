@@ -11,6 +11,7 @@ import math
 import uuid
 import zlib
 import io
+import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -24,9 +25,10 @@ import code_switching
 import morpheme_colors
 import analysis_payload
 import grammaticality
+import analysis_counts
 
 TABLES=('analysis_state','analysis_runs','analysis_saved','analysis_groups','analysis_evidence')
-VERSION=15
+VERSION=18
 FIELDS=('reduplication','form','morpheme','tag','lexeme','pos','ipa','translation','notes','grammaticality')
 SENTENCE_FIELDS=('ipa','translation','notes','grammaticality')
 DIMENSIONS=('value','form','tag','lexeme','pos','text','sentence_speaker','speakers','place','date','genre','folder','grammaticality')
@@ -42,10 +44,13 @@ class RecordStream:
     def __iter__(self):return materialized_items(self.db,self.hits,reuse_words=True)
 
 
-def pack(value):
+def pack(value,*,compact_counts=False):
     # Keep the same JSON/base64/zlib format while avoiding full Unicode AND
     # UTF-8 copies of a large research snapshot at the same time.
-    compressor=zlib.compressobj(6);out=io.BytesIO();encoder=json.JSONEncoder(ensure_ascii=False,separators=(',',':'))
+    out=io.BytesIO();encoder=json.JSONEncoder(ensure_ascii=False,separators=(',',':'))
+    compact=(compact_counts and isinstance(value,dict) and 'records' not in value and
+             analysis_payload.can_group_counts(value.get('hits',[])))
+    compressor=zlib.compressobj(1 if compact else 6)
     def encoded_key(key):
         if isinstance(key,str):return encoder.encode(key)
         if key is None or isinstance(key,(int,float,bool)):return encoder.encode(encoder.encode(key))
@@ -61,13 +66,20 @@ def pack(value):
         yield '{'
         for i,(key,item) in enumerate(value.items()):
             if i:yield ','
-            yield encoded_key(key);yield ':'
-            if key=='records' and isinstance(item,(dict,RecordStream)):yield from pairs(item.items() if isinstance(item,dict) else item)
+            yield encoded_key(analysis_payload.COUNTED_HITS if key=='hits' and compact else key);yield ':'
+            if key=='hits' and compact:
+                from itertools import islice
+                groups=analysis_payload.counted_groups(item);yield '[';first=True
+                while batch:=list(islice(groups,512)):
+                    if not first:yield ','
+                    first=False;yield encoder.encode(batch)[1:-1]
+                yield ']'
+            elif key=='records' and isinstance(item,(dict,RecordStream)):yield from pairs(item.items() if isinstance(item,dict) else item)
             elif isinstance(item,list):
                 yield '['
-                for n,row in enumerate(item):
-                    if n:yield ','
-                    yield encoder.encode(row)
+                for start in range(0,len(item),512):
+                    if start:yield ','
+                    yield encoder.encode(item[start:start+512])[1:-1]
                 yield ']'
             else:yield encoder.encode(item)
         yield '}'
@@ -83,11 +95,51 @@ def pack(value):
 
 
 def unpack(value):
-    return json.loads(zlib.decompress(base64.b64decode(value)))
+    result=json.loads(zlib.decompress(base64.b64decode(value)))
+    if isinstance(result,dict) and analysis_payload.COUNTED_HITS in result:
+        decoded={}
+        for key,item in result.items():
+            if key==analysis_payload.COUNTED_HITS:
+                decoded['hits']=[hit for group in item for hit in analysis_payload.count_hits(group)]
+            else:decoded[key]=item
+        result=decoded
+    return result
 
 
 def now():return datetime.now(timezone.utc).isoformat()
 def uid():return str(uuid.uuid4())
+
+
+def initialize_payloads(db):
+    import record_sources
+    record_sources.schema_sql(db,'''
+    CREATE TABLE IF NOT EXISTS analysis_run_payloads(key BLOB PRIMARY KEY,payload TEXT NOT NULL) WITHOUT ROWID;
+    CREATE TABLE IF NOT EXISTS analysis_run_references(
+        id TEXT PRIMARY KEY REFERENCES analysis_runs(id) ON DELETE CASCADE ON UPDATE CASCADE,
+        key BLOB NOT NULL REFERENCES analysis_run_payloads(key)) WITHOUT ROWID;
+    CREATE INDEX IF NOT EXISTS analysis_run_reference_key ON analysis_run_references(key);
+    CREATE TRIGGER IF NOT EXISTS analysis_run_release_payload AFTER DELETE ON analysis_run_references BEGIN
+        DELETE FROM analysis_run_payloads WHERE key=OLD.key AND NOT EXISTS(
+            SELECT 1 FROM analysis_run_references WHERE key=OLD.key);
+    END;
+    CREATE TRIGGER IF NOT EXISTS analysis_run_replace_payload AFTER UPDATE OF payload ON analysis_runs
+        WHEN NEW.payload IS NOT OLD.payload BEGIN
+        DELETE FROM analysis_run_references WHERE id=NEW.id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS analysis_run_remove_reference AFTER DELETE ON analysis_runs BEGIN
+        DELETE FROM analysis_run_references WHERE id=OLD.id;
+    END;
+    CREATE VIEW IF NOT EXISTS analysis_run_documents AS
+        SELECT a.rowid,a.id,a.language_id,a.created,a.query,a.version,a.summary,COALESCE(p.payload,a.payload) payload
+        FROM analysis_runs a LEFT JOIN analysis_run_references r ON r.id=a.id
+        LEFT JOIN analysis_run_payloads p ON p.key=r.key;
+    ''')
+
+
+def drop_backup_views(db):
+    db.execute('DROP VIEW IF EXISTS analysis_run_documents')
+    for name in ('analysis_run_release_payload','analysis_run_replace_payload','analysis_run_remove_reference'):
+        db.execute('DROP TRIGGER IF EXISTS '+name)
 
 
 def initialize(db):
@@ -100,7 +152,9 @@ def initialize(db):
     CREATE TABLE IF NOT EXISTS analysis_evidence(id TEXT PRIMARY KEY,group_id TEXT NOT NULL,entry_id TEXT NOT NULL,word_position INTEGER NOT NULL,notes TEXT NOT NULL,created TEXT NOT NULL,payload TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS analysis_evidence_group ON analysis_evidence(group_id);
     ''')
-    invalidate(db)
+    initialize_payloads(db)
+    db.execute('INSERT OR IGNORE INTO analysis_state VALUES(1,?)',(uid(),))
+    analysis_counts.initialize(db)
     trim(db)
 
 
@@ -108,7 +162,11 @@ def invalidate(db):
     db.execute('INSERT INTO analysis_state VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version',(uid(),))
 
 
-def version(db):return db.execute('SELECT version FROM analysis_state WHERE id=1').fetchone()[0]
+def version(db):
+    import read_views
+    value=db.execute('SELECT version FROM analysis_state WHERE id=1').fetchone()[0]
+    token=read_views.token(db,'content')
+    return value+':'+token.hex() if token else value
 
 
 def trim(db):
@@ -187,6 +245,8 @@ def sources(db,lid,scope):
 
 
 def calculate(db,lid,q):
+    import dictionary_rows
+    import record_sources
     judgment_catalog={r['id']:grammaticality.definitions(r['metadata']) for r in db.execute('SELECT id,metadata FROM languages')}
     custom=analysis_fields.Context(db,q);word_counter=corpus_statistics.WordCounter()
     people=people_queries.Context(db);scope=q['scope']
@@ -199,7 +259,34 @@ def calculate(db,lid,q):
     if scope['source']=='independent':eligible=set()
     elif scope['speaker_state']!='any' or any(scope[k] for k in ('text_id','folder_id','speakers','place','date','genre','speaker_ids','collaborator_ids','collaborator_role')):
         eligible={r['id'] for r in db.execute('SELECT id,text_id FROM entries') if r['text_id'] in selected and people.text_matches(r['text_id'],scope) and people.sentence_matches(people.attribution('corpus',r['id']),scope)}
-    lexical={r['id']:{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT id,headword,body,language_id FROM dictionary_targets')}
+    labels=dict(db.execute('SELECT id,headword FROM lexemes UNION ALL SELECT id,form FROM morphemes'))
+    lexical={}
+    complete=set()
+    needs_definition=any(analysis_fields.custom(c['field']) for c in conditions)
+    native=record_sources.native(db)
+    def load_targets(ids,expanded):
+        if native:
+            full=list(expanded-complete)
+            for start in range(0,len(full),200):
+                values=dictionary_rows.targets(db,full[start:start+200],prepare=False)
+                complete.update(values)
+                lexical.update(values)
+        missing=list(ids-lexical.keys())
+        for start in range(0,len(missing),400):
+            batch=missing[start:start+400]
+            marks=','.join('?' for _ in batch)
+            if not native:
+                sql='SELECT id,headword,body,language_id FROM dictionary_targets WHERE id IN ('+marks+')'
+                for r in db.execute(sql,batch):lexical[r['id']]={**dict(r),'body':json.loads(r['body'])}
+                continue
+            for kind,(table,form) in dictionary_rows.SOURCES.items():
+                rows=db.execute(f'SELECT id,language_id,{form} AS headword FROM {table} WHERE id IN ({marks})',batch).fetchall()
+                selected=[r['id'] for r in rows]
+                usages=defaultdict(list)
+                for usage in dictionary_rows.usage_fields(db,kind,selected):
+                    usages[usage['target_id']].append(dict(id=usage['usage_id'],pos=usage['pos'] or ''))
+                for row in rows:
+                    lexical[row['id']]={**dict(row),'body':{'usages':usages[row['id']]}}
     import component_links
     def load_batch(ids):
         units.clear();links.clear()
@@ -211,7 +298,11 @@ def calculate(db,lid,q):
             FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id LEFT JOIN corpus_units p ON p.id=u.parent_id
             LEFT JOIN component_links c ON c.id=l.id LEFT JOIN lexical_reviews v ON v.id=l.id
             WHERE u.active=1 AND u.entry_id IN ('''+marks+')'
-        for r in long_tasks.steps(db.execute(sql,ids)):
+        batch_links=list(db.execute(sql,ids))
+        valid=[r for r in batch_links if r['review_id'] is None]
+        load_targets({r['lexeme_id'] for r in valid},
+                     {r['lexeme_id'] for r in valid if needs_definition or r['component_body'] is not None})
+        for r in long_tasks.steps(batch_links):
             x=lexical.get(r['lexeme_id'])
             if not x or r['review_id'] is not None or component_links.review(x['body'],json.loads(r['component_body']) if r['component_body'] is not None else None):continue
             usage=next((u for u in x['body']['usages'] if u['id']==r['usage_id']),None)
@@ -223,20 +314,22 @@ def calculate(db,lid,q):
     def matches(value,index):return conditions[index]['field']=='grammaticality' or (conditions[index]['field']=='reduplication' and not conditions[index]['value']) or analysis_fields.custom(conditions[index]['field']) or accepts(value,conditions[index],q['case'])
     analysis_cache=corpus.WordAnalysisCache()
     def sentences():
+        import record_sources
         if scope['source']!='independent' and selected:
             where='1=1';args=[]
             if len(selected)<=400:
                 where='e.text_id IN ('+','.join('?' for _ in selected)+')';args=list(selected)
-            cursor=db.execute('SELECT e.id,e.text_id,e.body FROM texts t CROSS JOIN entries e ON e.text_id=t.id WHERE '+where+corpus_code+' ORDER BY t.rowid,e.position',[*args,*corpus_args])
+            cursor=db.execute('SELECT e.id,e.text_id FROM texts t CROSS JOIN entries e ON e.text_id=t.id WHERE '+where+corpus_code+' ORDER BY t.rowid,e.position',[*args,*corpus_args])
             while batch:=cursor.fetchmany(400):
                 ready=[r for r in batch if (eligible is None or r['id'] in eligible) and r['text_id'] in selected and people.text_matches(r['text_id'],scope)]
                 load_batch([r['id'] for r in ready])
                 gloss_inheritance.prefetch(db,'corpus',[r['id'] for r in ready],changed_only=True)
-                for r in long_tasks.steps(ready):yield dict(r),selected[r['text_id']],'corpus',r['id']
+                for r in long_tasks.steps(record_sources.with_bodies(db,'entries',ready)):
+                    yield r,selected[r['text_id']],'corpus',r['id']
         # Text-level filters must never silently include unrelated dictionary examples.
         text_scope=any(scope[k] for k in ('text_id','folder_id','speakers','place','date','genre','collaborator_ids','collaborator_role'))
         if scope['source']!='corpus' and not text_scope:
-            for r in long_tasks.steps(gloss_inheritance.iter_rows(db,db.execute("SELECT d.* FROM dictionary_examples d WHERE (?='all' OR d.language_id=?)"+independent_code+' ORDER BY d.rowid',[lid,lid,*independent_args]),'independent')):
+            for r in long_tasks.steps(gloss_inheritance.iter_rows(db,db.execute("SELECT d.id,d.language_id FROM dictionary_examples d WHERE (?='all' OR d.language_id=?)"+independent_code+' ORDER BY d.rowid',[lid,lid,*independent_args]),'independent',relational=True)):
                 units.clear();links.clear()
                 key='independent:'+r['id'];body=corpus.analyze(gloss_inheritance.load(db,'independent',r['id'],r['body']),cache=analysis_cache)
                 for i,w in long_tasks.steps(enumerate(body['words'])):
@@ -248,7 +341,8 @@ def calculate(db,lid,q):
         if not source:continue
         attribution=people.attribution(kind,record_id)
         if not people.sentence_matches(attribution,scope):continue
-        body=r['body'] if isinstance(r['body'],dict) else gloss_inheritance.load(db,kind,record_id,r['body'],metadata=False,lightweight=True);effective=body.get('language_id') or source['language_id']
+        body=r['body'] if kind=='independent' else gloss_inheritance.load(db,kind,record_id,r['body'],metadata=False,lightweight=True)
+        effective=body.get('language_id') or source['language_id']
         if q['scope']['sentence_language'] and effective!=q['scope']['sentence_language']:continue
         sentence_count+=1
         words=body['words'];positions=[i for i,w in enumerate(words) if word_counter(w)]
@@ -308,7 +402,7 @@ def calculate(db,lid,q):
                 hits.append(dict(entry_id=r['id'],word=pos,unit_id=unit,value=value,dimensions=dims))
                 if len(hits)>200000:raise ValueError('命中超过 200000 处，请缩小语料范围或检索条件')
     matched={('independent',h['entry_id'].partition(':')[2]) if h['entry_id'].startswith('independent:') else ('corpus',h['entry_id']) for h in hits}
-    return dict(hits=hits,labels={'sentence_speaker':people.people,'text':{k:v['title'] for k,v in selected.items()},'lexeme':{k:v['headword'] for k,v in lexical.items()}},scope_sentences=sentence_count,scope_words=word_count,linked_words=linked_words,code_summary=code_switching.summary_records(db,matched))
+    return dict(hits=hits,labels={'sentence_speaker':people.people,'text':{k:v['title'] for k,v in selected.items()},'lexeme':labels},scope_sentences=sentence_count,scope_words=word_count,linked_words=linked_words,code_summary=code_switching.summary_records(db,matched))
 
 
 def summarize(result):
@@ -320,7 +414,29 @@ def run(db,lid,b):
     q=analysis_fields.prepare(db,lid,normalize(b.get('query')));raw=encode(q)
     if not db.in_transaction:db.execute('BEGIN IMMEDIATE')
     v=version(db)
-    cached=db.execute('SELECT payload,summary FROM analysis_runs WHERE language_id=? AND query=? AND version=? ORDER BY rowid DESC LIMIT 1',(lid,raw,v)).fetchone()
+    result=None
+    counts_version=None
+    if q.get('kind')=='counts':
+        counts_version=count_version(db,q,current_version=v)
+        cached=db.execute('''SELECT a.id,a.summary,c.key FROM analysis_runs a JOIN analysis_count_sources c
+            ON c.source='run' AND c.id=a.id JOIN analysis_count_cache s ON s.key=c.key
+            WHERE a.language_id=? AND a.query=? AND c.version=?
+            ORDER BY a.rowid DESC LIMIT 1''',(lid,raw,counts_version)).fetchone()
+    else:
+        cached=db.execute('SELECT payload,summary FROM analysis_runs WHERE language_id=? AND query=? AND version=? ORDER BY rowid DESC LIMIT 1',(lid,raw,v)).fetchone()
+    if cached and counts_version is not None:
+        rid=uid()
+        # Keep an independent recent record, sharing only the immutable result.
+        # The payload remains available if the disposable count index is cleared.
+        key=cached['key']
+        if db.execute('SELECT 1 FROM analysis_run_payloads WHERE key=?',(key,)).fetchone() is None:
+            db.execute('INSERT INTO analysis_run_payloads SELECT ?,payload FROM analysis_run_documents WHERE id=?',
+                       (key,cached['id']))
+        db.execute('INSERT INTO analysis_runs VALUES(?,?,?,?,?,?,?)',(rid,lid,now(),raw,v,cached['summary'],''))
+        db.execute('INSERT INTO analysis_run_references VALUES(?,?)',(rid,key))
+        db.execute("INSERT INTO analysis_count_sources VALUES('run',?,?,?)",(rid,cached['key'],counts_version))
+        trim(db)
+        return dict(id=rid,query=q,summary=json.loads(cached['summary']),version=v,cached=True)
     if cached:payload,summary=cached['payload'],cached['summary']
     else:
         if q.get('kind')=='counts':
@@ -331,19 +447,24 @@ def run(db,lid,b):
             summary=encode(dict(kind='counts',**{k:v for k,v in stats.items() if k!='rows'}))
         else:
             result=calculate(db,lid,q);summary=encode(summarize(result))
-        payload=pack(result)
-    rid=uid();db.execute('INSERT INTO analysis_runs VALUES(?,?,?,?,?,?,?)',(rid,lid,now(),raw,v,summary,payload));trim(db)
+        payload=pack(result,compact_counts=q.get('kind')=='counts')
+    rid=uid();db.execute('INSERT INTO analysis_runs VALUES(?,?,?,?,?,?,?)',(rid,lid,now(),raw,v,summary,payload))
+    if q.get('kind')=='counts':analysis_counts.store(db,'run',rid,payload,result,counts_version)
+    trim(db)
     return dict(id=rid,query=q,summary=json.loads(summary),version=v,cached=bool(cached))
 
 
 def owned(db,table,rid,lid):
-    row=db.execute('SELECT * FROM '+table+' WHERE id=? AND language_id=?',(rid,lid)).fetchone()
+    source='analysis_run_documents' if table=='analysis_runs' else table
+    row=db.execute('SELECT * FROM '+source+' WHERE id=? AND language_id=?',(rid,lid)).fetchone()
     if not row:raise ValueError('记录已不存在，或不属于当前语言范围')
     return row
 
 
-def record_metadata(db,rid,lid,snapshot=False):
-    table='analysis_saved' if snapshot else 'analysis_runs';row=owned(db,table,rid,lid)
+def record_metadata(db,rid,lid,snapshot=False,*,indexed=False):
+    table='analysis_saved' if snapshot else 'analysis_runs'
+    row=analysis_counts.indexed_row(db,'saved' if snapshot else 'run',rid,lid) if indexed else None
+    if row is None:row=owned(db,table,rid,lid)
     if snapshot:
         if row['kind']!='snapshot':raise ValueError('这不是结果快照，请重新运行收藏查询')
         saved=json.loads(row['body']);return row,saved['query'],saved['summary'],saved['version'],True
@@ -367,31 +488,43 @@ def source_record(record):
 
 def materialized_items(db,hits,*,reuse_words=False):
     if not hits:return
+    import sentence_rows
     judgments={r['id']:grammaticality.definitions(r['metadata']) for r in db.execute('SELECT id,metadata FROM languages')}
     # Retained cards keep the native analyzer's shared internal segment objects.
     # Streaming snapshots can reuse serialized analyses and release each card.
     analysis_cache=corpus.WordAnalysisCache() if reuse_words else None
     ids=list(dict.fromkeys(h['entry_id'] for h in hits))
-    people=people_queries.Context(db)
+    people=people_queries.Context(db,sentence_ids=ids if len(ids)<=400 else None)
     independent=[key.partition(':')[2] for key in ids if key.startswith('independent:')]
     ids=[key for key in ids if not key.startswith('independent:')]
+    if reuse_words and len(ids)+len(independent)>2000:
+        # The export's records are keyed by ID. Keep hit order, and read the
+        # source tables in their native key order to reuse adjacent pages.
+        db.execute('PRAGMA cache_size=-32768')
+        ids.sort()
+        independent.sort()
     for start in long_tasks.steps(range(0,len(independent),400)):
         chunk=independent[start:start+400]
-        for r in long_tasks.steps(db.execute('SELECT * FROM dictionary_examples WHERE id IN ('+','.join('?' for _ in chunk)+')',chunk)):
-            body=annotations.enrich(db,json.loads(r['body']),'independent',r['id'])
+        bodies=sentence_rows.read(db,'independent',chunk)
+        for r in long_tasks.steps(db.execute('SELECT id,language_id,revision,rowid FROM dictionary_examples WHERE id IN ('+','.join('?' for _ in chunk)+')',chunk)):
+            body=annotations.enrich(db,bodies[r['id']],'independent',r['id'])
             body['grammaticality_display']=dict(grammaticality.selected(body.get('grammaticality',''),judgments[r['language_id']]))
             yield 'independent:'+r['id'],{**dict(r),'kind':'independent','body':body,'owner_language':r['language_id'],'title':'词典独立例句','position':None,'metadata':{},'attribution':people.attribution('independent',r['id'])}
     definitions=defaultdict(list)
+    codes={r['id']:r for r in code_switching.catalog(db)}
     for r in long_tasks.steps(db.execute('SELECT * FROM annotation_layers ORDER BY position,id')):definitions[r['language_id']].append(dict(r))
     for start in long_tasks.steps(range(0,len(ids),400)):
         chunk=ids[start:start+400]
-        placeholders=','.join('?' for _ in chunk);units=defaultdict(dict);cells=defaultdict(list)
+        placeholders=','.join('?' for _ in chunk);units=defaultdict(dict);cells=defaultdict(list);spans=defaultdict(list)
         for u in long_tasks.steps(db.execute("SELECT entry_id,position,id FROM corpus_units WHERE active=1 AND kind='word' AND entry_id IN ("+placeholders+')',chunk)):units[u['entry_id']][u['position']]=u['id']
         for c in long_tasks.steps(db.execute("SELECT * FROM annotation_cells WHERE owner_kind='corpus' AND record_id IN ("+placeholders+')',chunk)):cells[c['record_id']].append(dict(c))
+        for s in db.execute("SELECT * FROM code_spans WHERE owner_kind='corpus' AND record_id IN ("+placeholders+') ORDER BY rowid',chunk):
+            spans[s['record_id']].append(dict(s))
         colors=morpheme_colors.prepare(db,chunk)
+        bodies=sentence_rows.read(db,'corpus',chunk)
         gloss_inheritance.prefetch(db,'corpus',chunk)
-        for r in long_tasks.steps(db.execute("SELECT e.*,t.title,t.language_id owner_language,COALESCE(i.metadata,'{}') metadata FROM entries e JOIN texts t ON t.id=e.text_id LEFT JOIN text_info i ON i.text_id=t.id WHERE e.id IN ("+','.join('?' for _ in chunk)+')',chunk)):
-            body=corpus.analyze(gloss_inheritance.load(db,'corpus',r['id'],r['body']),cache=analysis_cache);language=body.get('language_id') or r['owner_language']
+        for r in long_tasks.steps(db.execute("SELECT e.id,e.text_id,e.position,e.revision,e.rowid,t.title,t.language_id owner_language,COALESCE(i.metadata,'{}') metadata FROM entries e JOIN texts t ON t.id=e.text_id LEFT JOIN text_info i ON i.text_id=t.id WHERE e.id IN ("+','.join('?' for _ in chunk)+')',chunk)):
+            body=corpus.analyze(gloss_inheritance.load(db,'corpus',r['id'],bodies[r['id']]),cache=analysis_cache);language=body.get('language_id') or r['owner_language']
             grammaticality.strip_corpus(body)
             annotations.attach(body,[units[r['id']].get(i,'') for i in range(len(body['words']))],definitions[language],cells[r['id']])
             if any(l.get('source')=='dictionary' for l in definitions[language]):
@@ -401,7 +534,7 @@ def materialized_items(db,hits,*,reuse_words=False):
                     for layer in word.get('extra_layers',[]):
                         if layer.get('derived'):layer['unit_id']=units[r['id']].get(index,'')
             morpheme_colors.attach(db,body,'corpus',r['id'],language,prepared=colors)
-            code_switching.attach(db,body,'corpus',r['id'])
+            code_switching.attach(db,body,'corpus',r['id'],spans=spans[r['id']],codes=codes)
             yield r['id'],{**dict(r),'kind':'corpus','body':body,'metadata':json.loads(r['metadata']),'attribution':people.attribution('corpus',r['id'])}
 
 
@@ -412,26 +545,36 @@ def context_forms(db,hits,case):
         chosen=[key.partition(':')[2] if independent else key for key in ids if key.startswith('independent:')==independent]
         for start in long_tasks.steps(range(0,len(chosen),400)):
             batch=chosen[start:start+400]
-            for row in db.execute('SELECT id,body FROM '+table+' WHERE id IN ('+','.join('?' for _ in batch)+')',batch):
-                key=('independent:' if independent else '')+row['id']
-                result[key]=tuple(corpus.normalize(w['form'],case) for w in json.loads(row['body'])['words'])
+            import sentence_rows
+            kind='independent' if independent else 'corpus'
+            bodies=sentence_rows.read(db,kind,batch)
+            for rid,body in bodies.items():
+                key=('independent:' if independent else '')+rid
+                result[key]=tuple(corpus.normalize(w['form'],case) for w in body['words'])
     return result
 
 
 def result_page(db,lid,b):
-    row,q,summary,v,frozen=record_metadata(db,b['id'],lid,b.get('snapshot')=='true')
-    stale=v!=version(db)
+    if not db.in_transaction:db.execute('BEGIN')
+    row,q,summary,v,frozen=record_metadata(db,b['id'],lid,b.get('snapshot')=='true',indexed=True)
+    stale=not current_run(db,row,q) if not frozen else v!=version(db)
     common=dict(id=row['id'],query=q,summary=summary,version=v,stale=stale,snapshot=frozen,created=row['created'])
     if stale and not frozen:return {**common,'items':[],'total':0,'page':1,'pages':1,'frequencies':[]}
     if q.get('kind')=='counts':
-        result=analysis_payload.statistics_metadata(row['payload'])
-        if 'vocabulary' not in result:return {**common,'statistics':result['statistics'],'items':[],'page':1,'pages':1}
-        import vocabulary_statistics
-        profile,indices=vocabulary_statistics.page(result,b)
-        selected=analysis_payload.selected_hits(row['payload'],indices,validated=True)
+        indexed=analysis_counts.page(db,'saved' if frozen else 'run',row,b)
+        if indexed is not None:
+            statistics,profile,selected=indexed
+        else:
+            result=analysis_payload.statistics_metadata(row['payload'])
+            if 'vocabulary' not in result:return {**common,'statistics':result['statistics'],'items':[],'page':1,'pages':1}
+            import vocabulary_statistics
+            profile,indices=vocabulary_statistics.page(result,b)
+            selected=analysis_payload.selected_hits(row['payload'],indices,validated=True)
+            statistics=result['statistics']
+        if frozen and selected and 'payload' not in row.keys():row=owned(db,'analysis_saved',row['id'],lid)
         records=analysis_payload.read(row['payload'],only={'records'},record_ids={h['entry_id'] for h in selected}).get('records',{}) if frozen and selected else materialize(db,selected)
         profile['items']=[{**h,'record':source_record(records.get(h['entry_id']))} for h in selected]
-        return {**common,'statistics':result['statistics'],'vocabulary':profile,'items':[],'page':1,'pages':1}
+        return {**common,'statistics':statistics,'vocabulary':profile,'items':[],'page':1,'pages':1}
     if b.get('sort') in ('left','right') and frozen:
         import tempfile
         with tempfile.TemporaryFile() as spool:return read_page(db,row,q,b,common,spool)
@@ -461,7 +604,11 @@ def read_page(db,row,q,b,common,spool=None):
     return {**common,'items':items,**plan}
 
 
-def page_plan(db,result,q,b,*,forms=None):
+import read_views
+PAGE_ORDERS=read_views.Cache(24*1024**2)
+
+
+def ranked_hits(db,result,q,b,forms):
     dimension=b.get('dimension','value')
     if dimension not in DIMENSIONS:raise ValueError('分布维度无效')
     hits=result['hits'];bins={}
@@ -484,20 +631,85 @@ def page_plan(db,result,q,b,*,forms=None):
             return words[:p][::-1] if sort=='left' else words[p+1:]
         filtered.sort(key=context_key)
     elif sort=='value':filtered.sort(key=lambda pair:pair[1]['value'].casefold())
-    pages=max(1,math.ceil(len(filtered)/30));page=max(1,min(int(b.get('page',1)),pages));chosen=filtered[(page-1)*30:page*30]
+    from array import array
+    return array('I',(i for i,_ in filtered)),frequencies
+
+
+def page_plan(db,result,q,b,*,forms=None):
+    stamp=read_views.token(db,'analysis') if 'id' in b else None
+    key=(stamp,read_views.token(db,'dictionary'),b['id'],b.get('snapshot'),b.get('dimension','value'),
+         b.get('sort','source'),'value' in b,b.get('value'),q['case']) if stamp else None
+    ranked=PAGE_ORDERS.get(key)
+    if ranked is None:
+        ranked=ranked_hits(db,result,q,b,forms)
+        indices,frequencies=ranked
+        cost=512+indices.itemsize*len(indices)+sum(384+4*(len(str(f['value']))+len(str(f['label']))) for f in frequencies)
+        PAGE_ORDERS.put(key,ranked,cost)
+    indices,frequencies=ranked
+    pages=max(1,math.ceil(len(indices)/30));page=max(1,min(int(b.get('page',1)),pages))
+    chosen=[(i,result['hits'][i]) for i in indices[(page-1)*30:page*30]]
     # Frequency lists are paginated too; every row can drill into the same run.
     frequency_pages=max(1,math.ceil(len(frequencies)/100));fp=max(1,min(int(b.get('frequency_page',1)),frequency_pages))
-    return dict(chosen=chosen,total=len(filtered),page=page,pages=pages,frequencies=frequencies[(fp-1)*100:fp*100],frequency_page=fp,frequency_pages=frequency_pages,frequency_total=len(frequencies))
+    return dict(chosen=chosen,total=len(indices),page=page,pages=pages,frequencies=[dict(f) for f in frequencies[(fp-1)*100:fp*100]],frequency_page=fp,frequency_pages=frequency_pages,frequency_total=len(frequencies))
+
+
+def count_version(db,query,*,current_version=None,statistics_version=None):
+    import read_views
+    v=version(db) if current_version is None else current_version
+    if statistics_version is None:
+        token=read_views.token(db,'statistics');statistics_version=token.hex() if token else v
+    if query.get('vocabulary'):
+        # Entry-only selection reads dictionary metadata, never sentence notes
+        # or example text. Include all entry/catalog dependencies conservatively.
+        own=read_views.token(db,'own')
+        return 'entry-counts-v1:'+statistics_version+':'+own.hex() if own else v
+    return statistics_version
+
+
+def current_run(db,row,query=None,*,current_version=None,statistics_version=None):
+    v=version(db) if current_version is None else current_version
+    q=json.loads(row['query']) if query is None else query
+    if q.get('engine',VERSION)!=VERSION:return False
+    if row['version']==v:return True
+    if q.get('kind')!='counts':return False
+    expected=count_version(db,q,current_version=v,statistics_version=statistics_version)
+    proof=db.execute('''SELECT s.version FROM analysis_count_sources s JOIN analysis_count_cache c ON c.key=s.key
+      WHERE s.source='run' AND s.id=?''',(row['id'],)).fetchone()
+    return bool(proof and proof[0]==expected)
+
+
+def recent_metadata(db):
+    # Payloads and frequency rows are never read by a catalogue request.
+    return db.execute('SELECT id,language_id,created,query,summary,version FROM analysis_runs ORDER BY rowid DESC LIMIT 30').fetchall()
 
 
 def listing(db,lid):
     v=version(db)
-    # Recent runs are disposable caches; explicit snapshots and research stay separate.
-    db.execute('DELETE FROM analysis_runs WHERE version<>?',(v,))
-    recent=[{**dict(r),'query':json.loads(r['query']),'summary':json.loads(r['summary']),'stale':r['version']!=v} for r in db.execute('SELECT id,created,query,summary,version FROM analysis_runs WHERE language_id=? ORDER BY rowid DESC',(lid,))]
+    import read_views
+    token=read_views.token(db,'statistics');statistics_version=token.hex() if token else v
+    recent=[]
+    for row in recent_metadata(db):
+        if row['language_id']!=lid:continue
+        query=json.loads(row['query'])
+        if current_run(db,row,query,current_version=v,statistics_version=statistics_version):
+            recent.append({k:row[k] for k in ('id','created','version')} | dict(query=query,summary=json.loads(row['summary']),stale=False))
     saved=[{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT id,kind,name,notes,created,body FROM analysis_saved WHERE language_id=? ORDER BY rowid DESC',(lid,))]
     groups=[dict(r) for r in db.execute('SELECT g.*,(SELECT COUNT(*) FROM analysis_evidence e WHERE e.group_id=g.id) count FROM analysis_groups g WHERE language_id=? ORDER BY rowid DESC',(lid,))]
     return dict(recent=recent,saved=saved,groups=groups,limit=30,version=v)
+
+
+def maintain(db, *, budget_ms=12):
+    """Idle-only collection; saved snapshots and evidence are never candidates."""
+    start=time.monotonic();v=version(db)
+    import read_views
+    token=read_views.token(db,'statistics');stats=token.hex() if token else v
+    expired=[r['id'] for r in recent_metadata(db) if not current_run(db,r,current_version=v,statistics_version=stats)]
+    deleted=0
+    for identifier in expired:
+        db.execute('DELETE FROM analysis_runs WHERE id=?',(identifier,));deleted+=1
+        if (time.monotonic()-start)*1000>=budget_ms:break
+    result=analysis_counts.reclaim(db,budget_ms=max(0,budget_ms-(time.monotonic()-start)*1000))
+    return dict(pending=result['pending'] or deleted<len(expired),removed=result['removed'],runs=deleted)
 
 
 def mutate(db,lid,action,b):
@@ -510,11 +722,14 @@ def mutate(db,lid,action,b):
         elif kind=='query':body={'query':analysis_fields.prepare(db,lid,normalize(b['query']))}
         else:
             source,q,summary,v,_=record_metadata(db,b['run_id'],lid)
-            if v!=version(db):raise ValueError('语料已更新，请重新运行后保存快照')
+            if not current_run(db,source,q):raise ValueError('语料已更新，请重新运行后保存快照')
+            v=version(db)
             result=analysis_payload.read(source['payload'])
             result['records']=RecordStream(db,result['hits']);result['languages']=[dict(r) for r in db.execute('SELECT * FROM languages')]
             body=dict(query=q,summary=summary,version=v,engine=VERSION);payload=pack(result)
-        sid=uid();db.execute('INSERT INTO analysis_saved VALUES(?,?,?,?,?,?,?,?)',(sid,lid,kind,name,notes,now(),encode(body),payload));return {'id':sid}
+        sid=uid();db.execute('INSERT INTO analysis_saved VALUES(?,?,?,?,?,?,?,?)',(sid,lid,kind,name,notes,now(),encode(body),payload))
+        if kind=='snapshot' and q.get('kind')=='counts':analysis_counts.store(db,'saved',sid,payload,result)
+        return {'id':sid}
     if action=='rename':
         owned(db,'analysis_saved',b['id'],lid);name=text(b.get('name',''),200).strip()
         if not name:raise ValueError('名称不能为空')
@@ -537,7 +752,9 @@ def mutate(db,lid,action,b):
     if action=='evidence':
         owned(db,'analysis_groups',b['group_id'],lid)
         source,q,summary,v,frozen=record_metadata(db,b['run_id'],lid,bool(b.get('snapshot')))
-        if not frozen and v!=version(db):raise ValueError('语料已更新，请重新运行后收集例证')
+        if not frozen:
+            if not current_run(db,source,q):raise ValueError('语料已更新，请重新运行后收集例证')
+            v=version(db)
         index=b.get('index')
         if type(index) is not int or index<0:raise ValueError('请选择有效例证')
         h,records=analysis_payload.occurrence(source['payload'],index);records=records or materialize(db,[h]);e=records.get(h['entry_id'])
@@ -566,7 +783,9 @@ def evidence_page(db,lid,b):
 
 def export_result(db,lid,b):
     row,result,q,summary,v,frozen=record(db,b['id'],lid,b.get('snapshot')=='true')
-    if not frozen and v!=version(db):raise ValueError('语料已更新，请重新运行后导出，或导出已保存快照')
+    if not frozen:
+        if not current_run(db,row,q):raise ValueError('语料已更新，请重新运行后导出，或导出已保存快照')
+        v=version(db)
     records=result.get('records') or materialize(db,result['hits'])
     for card in records.values():source_record(card)
     return dict(format='corporium-analysis-v1',created=row['created'],engine=VERSION,query=q,summary=summary,data_version=v,hits=result['hits'],records=records,statistics=result.get('statistics'),languages=result.get('languages') or [dict(r) for r in db.execute('SELECT * FROM languages')],**({'vocabulary':result['vocabulary']} if 'vocabulary' in result else {}))
@@ -578,7 +797,9 @@ def export_file(db,dbpath,lid,b):
     from pathlib import Path
     import language_exchange
     row,q,summary,v,frozen=record_metadata(db,b['id'],lid,b.get('snapshot')=='true')
-    if not frozen and v!=version(db):raise ValueError('语料已更新，请重新运行后导出，或导出已保存快照')
+    if not frozen:
+        if not current_run(db,row,q):raise ValueError('语料已更新，请重新运行后导出，或导出已保存快照')
+        v=version(db)
     payload=row['payload'];extra={}
     header=dict(format='corporium-analysis-v1',created=row['created'],engine=VERSION,query=q,summary=summary,data_version=v)
     encoder=json.JSONEncoder(ensure_ascii=False,separators=(',',':'));path=None

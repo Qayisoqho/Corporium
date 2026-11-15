@@ -5,7 +5,9 @@ import struct
 import unittest
 import wave
 from pathlib import Path
+from unittest.mock import patch
 import test_lexicon
+import journal
 import server
 import object_media
 import language_exchange
@@ -76,13 +78,17 @@ class ObjectMediaTests(unittest.TestCase):
         server.DB=old
         with server.connect(audit=False) as db:package=language_exchange.prepare(db,server.DB,'ordos',False)
         path=language_exchange.staged(server.DB,package['token'],'export');self.assertEqual(package['included_media'],2)
-        with server.connect() as db:
-            result=language_exchange.import_new(db,server.DB,path,'Imported',[])
-            rows=list(db.execute('SELECT * FROM object_media WHERE language_id=?',(result['language_id'],)));self.assertEqual(len(rows),2)
-            for row in rows:
-                owner=object_media.owner(db,row['kind'],row['record_id']);self.assertNotEqual(owner['id'],x['id']);asset=server.timeline.media_view(db,row['asset_id']);media_engine.resolve(server.DB,asset)
-                body=json.loads(row['body'])
-                if body['speakers']:self.assertNotEqual(body['speakers'][0],pid);self.assertIn(body['target_id'],[v['id'] for v in json.loads(owner['body'])['variants']])
+        scope=journal.scope.set('ordos')
+        try:
+            with server.connect() as db:
+                result=language_exchange.import_new(db,server.DB,path,'Imported',[])
+                rows=list(db.execute('SELECT * FROM object_media WHERE language_id=?',(result['language_id'],)));self.assertEqual(len(rows),2)
+                for row in rows:
+                    owner=object_media.owner(db,row['kind'],row['record_id']);self.assertNotEqual(owner['id'],x['id']);asset=server.timeline.media_view(db,row['asset_id']);media_engine.resolve(server.DB,asset)
+                    body=json.loads(row['body'])
+                    if body['speakers']:self.assertNotEqual(body['speakers'][0],pid);self.assertIn(body['target_id'],[v['id'] for v in owner['body']['variants']])
+        finally:
+            journal.scope.reset(scope)
 
     def test_undone_media_is_portable_and_redo_uses_restored_file(self):
         x=self.word();self.assertEqual(self.add(x,self.image())[0],200);self.assertEqual(self.undo()[0],200)
@@ -97,10 +103,49 @@ class ObjectMediaTests(unittest.TestCase):
         code,e=self.call('/api/example-save',dict(language_id='ordos',body={'ipa':'sample','words':[],'translation':''}));self.assertEqual(code,200,e)
         self.assertEqual(self.add(e,self.audio(),kind='independent')[0],200)
         self.assertEqual(self.add(e,self.image(),kind='independent')[0],400)
+        code,empty=self.call('/api/example-save',dict(body={'ipa':'without media','words':[]}));self.assertEqual(code,200,empty)
+        ids=(e['id'],empty['id'])
+        code,batch=self.call('/api/object-media?kind=independent&ids='+','.join((*ids,'missing')))
+        self.assertEqual(code,200,batch)
+        self.assertEqual(batch['items'],{rid:self.call('/api/object-media?kind=independent&id='+rid)[1] for rid in ids})
         x=self.word();self.assertEqual(self.add(x,self.image())[0],200)
         code,r=self.call('/api/lexeme-delete',dict(id=x['id'],revision=x['revision'],confirmed=True));self.assertEqual(code,200,r)
         with server.connect(audit=False) as db:self.assertFalse(db.execute('SELECT 1 FROM object_media WHERE record_id=?',(x['id'],)).fetchone())
         self.assertEqual(self.undo()[0],200)
         self.assertEqual(len(self.call('/api/object-media?kind=lexeme&id='+x['id'])[1]['items']),1)
+
+    def test_save_checks_only_affected_attachments_and_external_asset_changes(self):
+        word=self.word()
+        self.assertEqual(self.add(word,self.audio(),dict(target_id=word['body']['variants'][0]['id']))[0],200)
+        self.assertEqual(self.add(word,self.image())[0],200)
+        code,peer=self.call('/api/lexeme-save',dict(headword='peer',body={'usages':[]}))
+        self.assertEqual(code,200,peer)
+        self.assertEqual(self.add(peer,self.image())[0],200)
+        route='/api/object-media?kind=lexeme&id='+word['id']
+        media=self.call(route)[1]
+        before=self.call('/api/lexeme?id='+word['id'])[1]
+        before['body']['notes']='changed detail'
+        with patch.object(object_media,'owner',wraps=object_media.owner) as read, \
+                patch.object(object_media,'validate_body',wraps=object_media.validate_body) as check:
+            status,saved=self.call('/api/lexeme-save',before)
+            self.assertEqual(status,200,saved)
+            self.assertEqual([(c.args[1],c.args[2]) for c in read.call_args_list],[('lexeme',word['id'])])
+            self.assertEqual(check.call_count,2)
+        self.assertEqual(self.call(route)[1],media)
+        self.assertEqual(self.undo()[0],200)
+        self.assertEqual(self.call(route)[1],media)
+        self.assertEqual(self.undo('redo')[0],200)
+        self.assertEqual(self.call(route)[1],media)
+
+        asset=media['items'][0]['asset_id']
+        with server.connect(audit=False) as db:
+            db.execute("UPDATE timeline_media SET metadata=json_set(metadata,'$.duration_ms',10) WHERE id=?",(asset,))
+        other=self.call('/api/lexeme?id='+peer['id'])[1]
+        other['body']['notes']='must be rolled back'
+        history=self.call('/api/undo-state')[1]
+        self.assertEqual(self.call('/api/lexeme-save',other)[0],400)
+        self.assertEqual(self.call('/api/undo-state')[1],history)
+        with server.connect(audit=False) as db:
+            self.assertEqual(db.execute('SELECT id FROM object_media_validation_dirty').fetchall()[0][0],media['items'][0]['id'])
 
 if __name__=='__main__':unittest.main()

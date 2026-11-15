@@ -41,14 +41,17 @@ class DesktopTests(unittest.TestCase):
         import journal
         import language_exchange
         source=desktop.ASSETS/'packaging'/'examples'/'Telira.corporium'
+        snapshot=source.with_suffix('.corporium-backup')
         original=hashlib.sha256(source.read_bytes()).hexdigest()
+        original_snapshot=hashlib.sha256(snapshot.read_bytes()).hexdigest()
         bundle=language_exchange.read(source)
         try:
             expected=language_exchange.info(bundle)
             catalogs={(r['kind'],r['name']) for r in bundle.get('category_classes',[]) if r['kind']!='_seed'}
         finally:bundle.close()
         scope=journal.scope.get();action=journal.action.get();path=self.root/'Tëlira example';path.mkdir()
-        result=self.projects.create_example(path)
+        with patch('language_exchange.import_new',side_effect=AssertionError('Must use the SQLite starter')):
+            result=self.projects.create_example(path)
         self.assertEqual(result['project'],str(path))
         self.assertEqual(self.projects.current,path)
         self.assertEqual(journal.scope.get(),scope)
@@ -65,9 +68,12 @@ class DesktopTests(unittest.TestCase):
             self.assertEqual({(r['kind'],r['name']) for r in db.execute("SELECT kind,name FROM category_classes WHERE kind!='_seed'")},catalogs)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM gloss_bindings').fetchone()[0],db.execute('SELECT COUNT(*) FROM lexical_links WHERE sense_id IS NOT NULL').fetchone()[0])
             self.assertGreater(db.execute('SELECT COUNT(*) FROM gloss_bindings').fetchone()[0],0)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM undo_steps').fetchone()[0],0)
+            self.assertNotIn('body',{r['name'] for r in db.execute('PRAGMA table_info(entries)')})
             self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
             self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
         self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(),original)
+        self.assertEqual(hashlib.sha256(snapshot.read_bytes()).hexdigest(),original_snapshot)
         reopened=desktop.Projects(self.root/'settings');self.assertTrue(reopened.restore_last())
         self.assertEqual(reopened.current,path)
         with server.connect(audit=False) as db:self.assertEqual(db.execute('SELECT name FROM languages').fetchone()[0],'Tëlira')
@@ -77,12 +83,13 @@ class DesktopTests(unittest.TestCase):
         self.projects.create(self.root/'first')
         old_db=server.DB;generation=self.projects.generation;settings=dict(self.projects.settings);scope=journal.scope.get()
         target=self.root/'example';target.mkdir()
-        def fail(db,*args):
-            db.execute("INSERT INTO languages VALUES('partial','partial','{}',1)")
-            journal.scope.set('partial')
-            raise ValueError('import failed')
-        with patch('language_exchange.import_new',side_effect=fail):
-            with self.assertRaisesRegex(ValueError,'import failed'):self.projects.create_example(target)
+        assets=self.root/'damaged-assets';examples=assets/'packaging'/'examples';examples.mkdir(parents=True)
+        (examples/'Telira.corporium-backup').write_bytes(b'corrupt snapshot')
+        (examples/'Telira.corporium').touch()
+        import zipfile
+        with patch.object(desktop,'ASSETS',assets),patch('language_exchange.import_new') as fallback:
+            with self.assertRaises(zipfile.BadZipFile):self.projects.create_example(target)
+            fallback.assert_not_called()
         self.assertEqual(list(target.iterdir()),[])
         self.assertEqual(list(self.root.glob('.corporium-example-*')),[])
         self.assertEqual(server.DB,old_db);self.assertEqual(journal.scope.get(),scope)
@@ -94,6 +101,16 @@ class DesktopTests(unittest.TestCase):
         with patch.object(desktop,'ASSETS',self.root):
             with self.assertRaisesRegex(ValueError,'Tëlira'):self.projects.create_example(self.root/'missing-example')
         self.assertFalse((self.root/'missing-example').exists())
+
+    def test_example_older_resources_fall_back_to_language_exchange(self):
+        import shutil
+        assets=self.root/'old-assets';examples=assets/'packaging'/'examples';examples.mkdir(parents=True)
+        shutil.copyfile(desktop.ASSETS/'packaging'/'examples'/'Telira.corporium',examples/'Telira.corporium')
+        with patch.object(desktop,'ASSETS',assets):
+            self.projects.create_example(self.root/'legacy-example')
+        with server.connect(audit=False) as db:
+            self.assertEqual(db.execute('SELECT name FROM languages').fetchone()[0],'Tëlira')
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM entries').fetchone()[0],168)
 
     def test_example_bridge_uses_native_folder_selection_and_handles_cancel(self):
         bridge=desktop.Bridge(self.projects);bridge._origin='http://127.0.0.1:8980'

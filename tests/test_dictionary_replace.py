@@ -1,7 +1,10 @@
 import unittest
+from unittest.mock import patch
 import json
+import homonyms
 import server
 import test_lexicon
+import record_sources
 
 class DictionaryReplaceTests(unittest.TestCase):
     setUp=test_lexicon.LexiconTests.setUp
@@ -42,14 +45,15 @@ class DictionaryReplaceTests(unittest.TestCase):
 
     def test_headword_collision_requires_confirmation_and_preserves_links(self):
         e=self.seed();x=self.word();self.link(e['words'][0]['unit_id'],x);peer=self.simple('house')
-        args=dict(field='headword',find='home',replacement='house',scope='language')
+        args=dict(field='headword',find='home',replacement='house',scope='language',reuse_preview=True)
         code,p=self.call('/api/dictionary-replace-preview',args);self.assertEqual(code,200,p);self.assertFalse(p['blocked']);self.assertTrue(p['conflicts'])
         self.assertEqual(self.call('/api/lexeme?id='+x['id'])[1]['headword'],'home')
         generation=self.call('/api/undo-state')[1]['generation']
         code,r=self.apply(args,p);self.assertEqual(code,200,r);self.assertTrue(r['needs_confirmation'])
         self.assertEqual(self.call('/api/undo-state')[1]['generation'],generation)
         self.assertEqual(self.call('/api/lexeme?id='+peer['id'])[1]['revision'],peer['revision'])
-        code,r=self.apply(args,p,confirm_conflicts=True);self.assertEqual(code,200,r)
+        code,r=self.apply(args,p,confirm_conflicts=True,confirm_preview=True);self.assertEqual(code,200,r)
+        self.assertFalse(r.get('needs_confirmation'))
         after=self.call('/api/lexeme?id='+x['id'])[1];self.assertEqual(after['headword'],'house')
         self.assertNotEqual(after['body']['homonym_number'],self.call('/api/lexeme?id='+peer['id'])[1]['body']['homonym_number'])
         self.assertEqual(self.entries()[0]['words'][0]['form'],'house-n')
@@ -71,6 +75,58 @@ class DictionaryReplaceTests(unittest.TestCase):
         code,r=self.apply(args,fresh,keys=[remaining[0]['key']],pending_keys=[remaining[0]['key']]);self.assertEqual(code,200,r)
         self.assertEqual(self.call('/api/lexeme?id='+x['id'])[1]['body']['notes'],'𐐀 oldold oldold')
 
+    def test_continued_preview_uses_reviewed_unicode_ranges_and_one_undo_per_click(self):
+        x=self.simple(notes='𐐀 old old');y=self.simple('second')
+        proof=self.simple('proof','guard');proof['body']['notes']='prepared'
+        self.assertEqual(self.call('/api/lexeme-save',proof)[0],200)
+        args,preview=self.preview(replacement='oldold',reuse_preview=True)
+        args['_view_revision']=self.call('/api/undo-state')[1]['workspace_revision']
+        key=preview['changes'][0]['key']
+        with patch.object(server.dictionary_replace,'plan',side_effect=AssertionError('preview reread')):
+            code,result=self.apply(args,preview,keys=[key]);self.assertEqual(code,200,result)
+            self.assertEqual(result['_view_update']['values'],{'notes':'𐐀 oldold old'})
+            remaining=result['remaining_preview']
+            self.assertEqual([c['key'] for c in remaining['changes']],result['remaining_keys'])
+            self.assertEqual(len(remaining['changes']),3)
+            code,result=self.apply(args,remaining,keys=[remaining['changes'][0]['key']]);self.assertEqual(code,200,result)
+        notes=lambda word:self.call('/api/lexeme?id='+word['id'])[1]['body']['notes']
+        self.assertEqual((notes(x),notes(y)),('𐐀 oldold oldold','old old'))
+        self.assertEqual(self.undo()[0],200);self.assertEqual(notes(x),'𐐀 oldold old')
+        self.assertEqual(self.undo()[0],200);self.assertEqual(notes(x),'𐐀 old old')
+
+    def test_continued_preview_rejects_external_source_write(self):
+        word=self.simple()
+        args,preview=self.preview(reuse_preview=True)
+        code,result=self.apply(args,preview,keys=[preview['changes'][0]['key']]);self.assertEqual(code,200,result)
+        with server.connect(audit=False) as db:
+            db.execute("UPDATE dictionary_value_rows SET value='unreviewed old' WHERE target_kind='lexeme' AND target_id=? AND parent=0 AND slot='notes'",(word['id'],))
+        self.assertEqual(self.apply(args,result['remaining_preview'])[0],400)
+        self.assertEqual(self.call('/api/lexeme?id='+word['id'])[1]['body']['notes'],'unreviewed old')
+
+    def test_note_replacement_preserves_inferred_homonym_numbers(self):
+        word=self.simple('peer','old')
+        with server.connect(audit=False) as db:
+            confirmation=homonyms.plan(db,'ordos','peer')['token']
+        code,peer=self.call('/api/lexeme-save',dict(headword='peer',body={},homonym_confirmation=confirmation))
+        self.assertEqual(code,200,peer)
+        with server.connect(audit=False) as db:
+            for entry in (word,peer):
+                body=record_sources.read(db,'lexemes',entry['id'])
+                record_sources.write(db,'lexemes',entry['id'],{**body,'homonym_number':None})
+        proof=self.simple('proof','guard');proof['body']['notes']='prepared'
+        self.assertEqual(self.call('/api/lexeme-save',proof)[0],200)
+        before=self.call('/api/lexeme?id='+peer['id'])[1]
+        args,p=self.preview(reuse_preview=True)
+        args['_view_revision']=self.call('/api/undo-state')[1]['workspace_revision']
+        code,r=self.apply(args,p);self.assertEqual(code,200,r)
+        self.assertEqual(r['_view_update']['values'],{'notes':'new'})
+        self.assertEqual(self.call('/api/lexeme?id='+peer['id'])[1],before)
+        with server.connect(audit=False) as db:
+            self.assertIsNone(record_sources.read(db,'lexemes',word['id'])['homonym_number'])
+            self.assertIsNone(record_sources.read(db,'lexemes',peer['id'])['homonym_number'])
+        self.assertEqual(self.undo()[0],200)
+        self.assertEqual(self.call('/api/lexeme?id='+word['id'])[1]['body']['notes'],'old')
+
     def test_page_sizes_and_search_scope_cover_all_pages(self):
         for i in range(12):self.simple('item'+str(i))
         first=self.call('/api/lexemes?page_size=10')[1];second=self.call('/api/lexemes?page_size=10&page=2')[1]
@@ -88,7 +144,7 @@ class DictionaryReplaceTests(unittest.TestCase):
         code,x=self.call('/api/lexeme-save',x);self.assertEqual(code,200,x)
         before=x['body'];uids=[u['id'] for u in before['usages']]
         for field in ('variant','writing','short_gloss','definition','notes','tag_value'):
-            args=dict(field=field,find='old',replacement='new',scope='current',lexeme_id=x['id'])
+            args=dict(field=field,find='old',replacement='new',scope='language')
             code,p=self.call('/api/dictionary-replace-preview',args);self.assertEqual(code,200,p);self.assertFalse(p['blocked']);self.assertTrue(p['changes'])
             code,r=self.apply(args,p,confirm_conflicts=True);self.assertEqual(code,200,r)
         after=self.call('/api/lexeme?id='+x['id'])[1]['body']
@@ -116,14 +172,22 @@ class DictionaryReplaceTests(unittest.TestCase):
 
     def test_search_scope_remains_fixed_during_individual_replacement(self):
         x=self.simple(notes='old old')
-        args,p=self.preview(scope='search',query='old old')
+        args,p=self.preview(scope='search',query='old old',reuse_preview=True)
         args['scope_ids']=p['scope_ids']
         code,r=self.apply(args,p,keys=[p['changes'][0]['key']]);self.assertEqual(code,200,r)
-        fresh=self.call('/api/dictionary-replace-preview',args)[1]
+        fresh=r['remaining_preview']
         self.assertEqual(fresh['records'],1);self.assertEqual(len(fresh['changes']),1)
         self.assertEqual(fresh['changes'][0]['key'],r['remaining_keys'][0])
         self.assertEqual(self.apply(args,fresh)[0],200)
         self.assertEqual(self.call('/api/lexeme?id='+x['id'])[1]['body']['notes'],'new new')
+
+    def test_continued_current_scope_rechecks_active_filters(self):
+        word=self.simple(notes='old old')
+        args,p=self.preview(scope='current',lexeme_id=word['id'],query='old old',reuse_preview=True)
+        code,r=self.apply(args,p,keys=[p['changes'][0]['key']]);self.assertEqual(code,200,r)
+        self.assertEqual(r['remaining_preview']['records'],0)
+        self.assertEqual(r['remaining_preview']['changes'],[])
+        self.assertEqual(self.call('/api/lexeme?id='+word['id'])[1]['body']['notes'],'new old')
 
     def test_find_only_returns_unchanged_matches_and_cannot_apply(self):
         x=self.simple('old')
@@ -142,6 +206,20 @@ class DictionaryReplaceTests(unittest.TestCase):
         args,p=self.preview(field='headword',find='old',replacement='new',scope='search',search={'field':'notes','conditions':[{'field':'headword','op':'prefix','value':'old'}]},query='keep')
         self.assertEqual([c['id'] for c in p['changes']],[x['id']])
         self.assertEqual(self.apply(args,p)[0],200)
+
+    def test_headword_and_fixed_scope_only_load_candidate_definitions(self):
+        first=self.simple('Keep')
+        second=self.simple('other')
+        self.simple('third')
+        with server.connect() as db,patch.object(record_sources,'read_many',wraps=record_sources.read_many) as read:
+            plan,_,_=server.dictionary_replace.plan(db,dict(field='headword',find='keep',case=False,mode='exact',find_only=True),'ordos')
+            self.assertEqual(plan['records'],3)
+            self.assertEqual([c['id'] for c in plan['changes']],[first['id']])
+            self.assertEqual([call.args[2] for call in read.call_args_list],[[first['id']]])
+            read.reset_mock()
+            plan,_,_=server.dictionary_replace.plan(db,dict(field='notes',find='old',scope='search',scope_ids=[second['id']]),'ordos')
+            self.assertEqual(plan['scope_ids'],[second['id']])
+            self.assertEqual([call.args[2] for call in read.call_args_list],[[second['id']]])
 
     def morph(self,form='old',**body):
         code,x=self.call('/api/morpheme-save',{'form':form,'body':body})

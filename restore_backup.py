@@ -3,8 +3,10 @@ import argparse
 import json
 import zipfile
 from pathlib import Path
+import independent_links
 import server
 import timeline_colors
+import record_sources
 
 
 def restore(source, destination):
@@ -29,7 +31,16 @@ def restore(source, destination):
                 for row in data.get(table,[]):
                     import storage_optimization
                     row=storage_optimization.compatible_row(table,row)
+                    if table in independent_links.TABLES:
+                        # A legacy example can also supply targets in its body.
+                        db.execute('DELETE FROM '+table+' WHERE id=?',(row['id'],))
+                        independent_links.restore_row(db,table,row)
+                        continue
                     columns = [c for c in row if c in allowed]
+                    if table in record_sources.TABLES:
+                        record_sources.write(db,table,row['id'],record_sources.body(row,mutable=False),
+                                             columns={c:row[c] for c in columns if c not in ('id','body')},insert=True)
+                        continue
                     db.execute('INSERT OR REPLACE INTO '+table+' ('+','.join(columns)+') VALUES ('+','.join('?' for _ in columns)+')',[row[c] for c in columns])
             if 'undo_scopes' not in data:
                 db.execute('DELETE FROM undo_scopes')
@@ -50,7 +61,7 @@ def restore(source, destination):
                 gloss_inheritance.migrate(db)
             server.object_media.restore_files(db,destination,data.get('object_media_files',{}),created)
             storage_optimization.migrate(db,force=True)
-            server.categories.initialize(db)
+            server.categories.initialize(db,repair=True)
             server.lexicon.validate_links(db)
             server.timeline.hierarchy.validate(db)
             server.grammar_survey.validate(db)
@@ -59,7 +70,7 @@ def restore(source, destination):
             server.fieldwork_notes.validate(db)
             server.code_switching.validate(db)
             server.code_switching.rebuild(db)
-            server.object_media.validate(db)
+            server.object_media.validate_pending(db,full=True)
             server.analysis_workspace.invalidate(db)
             server.analysis_workspace.trim(db)
     except Exception:

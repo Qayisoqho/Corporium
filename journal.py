@@ -1,6 +1,7 @@
 """Bounded, transactional undo journal. Temporary triggers capture only touched rows."""
 import object_media
 import json
+import record_sources
 import hashlib
 import io
 from contextvars import ContextVar
@@ -13,6 +14,7 @@ import grammar_survey
 import fieldwork_notes
 import code_switching
 import gloss_inheritance
+import independent_links
 import undo_codec
 
 decode_changes=undo_codec.decode
@@ -36,6 +38,7 @@ LABELS['/api/import-language'] = '导入语言数据'
 LABELS.update({'/api/lexeme-save':'保存词条','/api/lexeme-delete':'删除词条','/api/lexeme-link':'关联词典用例','/api/lexeme-unlink':'解除词典关联'})
 LABELS['/api/lexeme-auto-link']='批量关联词典'
 LABELS['/api/dictionary-examples-unlink']='解除独立例句词典关联'
+LABELS['/api/example-links-save']='保存独立例句词典关联'
 LABELS['/api/lexeme-to-morpheme']='词条转为语素'
 LABELS['/api/split']='拆分文本'
 LABELS['/api/duplicate-entry']='复制句子'
@@ -83,35 +86,66 @@ def initialize(db):
     INSERT OR IGNORE INTO undo_settings VALUES(1,20,0);''')
 
 
-def watch(db):
-    changes = {}
-    for table in TABLES:
-        cols = [r['name'] for r in db.execute('PRAGMA table_info('+table+')')]
-        def capture(kind, rid, *values, table=table, cols=cols):
+def watch(db, changes=None, *, tables=TABLES):
+    if changes is None:changes={}
+    relational = record_sources.native(db)
+    related = any(table in independent_links.TABLES for table in tables) and independent_links.snapshots.enabled(db)
+    if related and isinstance(db,record_sources.Connection) and 'independent_links' in tables:
+        db.audits_independent_links=True
+    for table in tables:
+        native = table in record_sources.TABLES and relational
+        snapshot = table in independent_links.TABLES and related
+        cols = record_sources.META[table] if native else [r['name'] for r in db.execute('PRAGMA table_info('+table+')')]
+        def capture(kind, rid, *values, table=table, cols=cols, snapshot=snapshot):
             if previewing.get():return 0
             key = (table, rid)
             row = dict(zip(cols, values))
+            if table in record_sources.TABLES:
+                row['body'] = record_sources.image(db,table,row['id'],kind,row.get('body'))
             row['rowid'] = rid
+            if snapshot:
+                if table=='independent_links':
+                    pending=getattr(db,'independent_appending',None) if kind=='insert' else None
+                    if pending is not None:
+                        for col in independent_links.snapshots.REF_COLUMNS:row.pop(col)
+                        if row['id'] in pending:row['segmentation_ref']=pending[row['id']]
+                    else:row=independent_links.image(db,row)
+                else:row=independent_links.override_images(db,[row])[0]
             if key not in changes:
                 changes[key] = [None if kind == 'insert' else row, None]
             changes[key][1] = None if kind == 'delete' else row
             return 0
         db.create_function('audit_'+table, -1, capture)
+        batched_revisions = native and table=='dictionary_examples' and isinstance(db,record_sources.Connection)
+        if batched_revisions:
+            db.example_revision_journal=changes
+            db.create_function('audit_example_revision_batch',0,lambda: int(getattr(db,'capturing_example_revisions',False)))
         # UPDATE needs both the initial and final row, including repeated updates.
-        for event, kind, ref in [('INSERT','insert','new'),('DELETE','delete','old'),('UPDATE','before','old')]:
+        events = [('INSERT','insert','new'),('DELETE','delete','old'),('UPDATE','before','old')]
+        if snapshot:events.append(('UPDATE','after','new'))
+        for event, kind, ref in events:
             args = ','.join(ref+'.'+c for c in cols)
             tail = ''
-            if event == 'UPDATE':
+            if event == 'UPDATE' and not snapshot:
                 tail = "SELECT audit_%s('after',new.rowid,%s);" % (table, ','.join('new.'+c for c in cols))
-            db.execute("CREATE TEMP TRIGGER audit_%s_%s AFTER %s ON %s BEGIN SELECT audit_%s('%s',%s.rowid,%s); %s END" % (table,event,event,table,table,kind,ref,args,tail))
+            before = (native or snapshot) and event=='DELETE' or snapshot and kind=='before'
+            timing = 'BEFORE' if before else 'AFTER'
+            when = ' WHEN NOT audit_example_revision_batch()' if batched_revisions and event=='UPDATE' else ''
+            db.execute(f"CREATE TEMP TRIGGER audit_{table}_{kind} {timing} {event} ON {table}{when} BEGIN "
+                       f"SELECT audit_{table}('{kind}',{ref}.rowid,{args}); {tail} END")
     return changes
 
 
 def trim(db):
     lid=scope.get()
-    limit = state(db)['step_limit']
-    db.execute('DELETE FROM undo_steps WHERE language_id=? AND id NOT IN (SELECT id FROM undo_steps WHERE language_id=? ORDER BY id DESC LIMIT ?)',(lid,lid,limit))
-    db.execute('DELETE FROM history WHERE entry_id IN (SELECT e.id FROM entries e JOIN texts t ON t.id=e.text_id WHERE t.language_id=?) AND id NOT IN (SELECT h.id FROM history h JOIN entries e ON e.id=h.entry_id JOIN texts t ON t.id=e.text_id WHERE t.language_id=? ORDER BY h.id DESC LIMIT ?)',(lid,lid,limit))
+    row=db.execute('SELECT step_limit FROM undo_scopes WHERE language_id=?',(lid,)).fetchone()
+    limit=row[0] if row else 20
+    db.execute('DELETE FROM undo_steps WHERE id IN (SELECT id FROM undo_steps WHERE language_id=? ORDER BY id DESC LIMIT -1 OFFSET ?)',(lid,limit))
+    # Start at the small history table. The corpus can contain many more
+    # sentences than the number with any retained edit history.
+    db.execute('''DELETE FROM history WHERE id IN (SELECT h.id FROM history h
+        CROSS JOIN entries e ON e.id=h.entry_id CROSS JOIN texts t ON t.id=e.text_id
+        WHERE t.language_id=? ORDER BY h.id DESC LIMIT -1 OFFSET ?)''',(lid,limit))
 
 
 def encode_changes(delta):
@@ -126,19 +160,58 @@ def encode_changes(delta):
     return out.getvalue()
 
 
+def portable_step(row):
+    """Keep the established JSON backup's row-image format readable by older builds."""
+    result=dict(row)
+    try:
+        changes=decode_changes(result['changes'])
+    except ValueError:
+        return result
+    converted=False
+    for change in changes:
+        if change['table'] in independent_links.TABLES:
+            for side in ('before','after'):
+                image=change.get(side)
+                if image:
+                    portable=independent_links.portable_image(change['table'],image)
+                    if image!=portable:
+                        change[side]=portable
+                        converted=True
+            continue
+        if change['table'] not in record_sources.TABLES:
+            continue
+        for side in ('before','after'):
+            image=change.get(side)
+            if image and isinstance(image.get('body'),dict):
+                image['body']=json.dumps(image['body'],ensure_ascii=False)
+                converted=True
+    if converted:result['changes']=undo_codec.encode(changes)
+    return result
+
+
 def record(db, changes, label):
     # A newly created language is a stable container; its later edits are undoable.
     new_languages={b['id'] for (t,_),(a,b) in changes.items() if t=='languages' and a is None and b}
     delta = [{'table':t,'before':a,'after':b} for (t,_),(a,b) in changes.items() if a != b and not (t=='languages' and a is None) and not (t=='category_classes' and a is None and b and b['language_id'] in new_languages)]
     if not delta:
         return
+    # These row images already include the binding changes made by the save.
+    # Older journals may need inheritance rebuilt after restoring the rows.
+    inheritance_sources=record_sources.TABLES|{'lexical_links',*independent_links.TABLES,*gloss_inheritance.TABLES}
+    if any(change['table'] in inheritance_sources for change in delta):
+        delta[0]['inheritance_complete']=True
     # Current transactions capture the synchronized units and segments too.
     # Older journals lack this proof and keep conservative reconciliation.
     synced=lexicon.synced_entries.get() or {}
     for change in delta:
+        if change['table']=='dictionary_examples' and independent_links.revision_only(change['before'],change['after']):
+            change['revision_only']=True
+            for side in ('before','after'):
+                change[side]={k:v for k,v in change[side].items() if k!='body'}
         if change['table']=='entries':
             before,after=change['before'],change['after'];eid=(after or before)['id']
-            if eid in synced and synced[eid]==(after['body'] if after else None):change['units_complete']=True
+            if eid in synced and record_sources.same_body(synced[eid],after['body'] if after else None):
+                change['units_complete']=True
     if label == '移动句子':
         count = sum(c['table']=='entries' and c['before'] is not None and c['after'] is not None and c['before']['text_id']!=c['after']['text_id'] for c in delta)
         label = f'移动 {count} 条句子'
@@ -179,8 +252,178 @@ def state(db, lid=None):
     return {**settings,'steps':steps,'undo':next((s for s in steps if s['applied']),None),'redo':next((s for s in reversed(steps) if not s['applied']),None)}
 
 
-def apply(db, path, body):
-    db.execute('BEGIN IMMEDIATE')
+def restore_sentence_display(db,changes,redo,observed):
+    """Replay display-only edits in place when the full journal source agrees."""
+    import sentence_rows
+    if record_sources.mode(db) not in ('single','drop') or not any(c.get('inheritance_complete') for c in changes):
+        return False
+    sources = {}
+    expected_key,target_key = ('before','after') if redo else ('after','before')
+    for change in changes:
+        table = change['table']
+        if table=='history':
+            continue
+        if (table not in sentence_rows.TABLES.values() or change.get('revision_only')
+                or not gloss_inheritance.same_annotation_source(change['before'],change['after'])):
+            return False
+        expected,target = change[expected_key],change[target_key]
+        if not isinstance(expected['body'],dict) or not isinstance(target['body'],dict):
+            return False
+        sources.setdefault(table,{})[expected['id']] = (expected,target)
+    if not sources:
+        return False
+
+    batches = []
+    now = int(datetime.now(timezone.utc).timestamp()*1000000)
+    for table,images in sources.items():
+        keys = sorted(images)
+        kind = record_sources.KINDS[table]
+        fields = ','.join(record_sources.META[table])
+        for start in range(0,len(keys),200):
+            batch = keys[start:start+200]
+            marks = ','.join('?' for _ in batch)
+            metadata = {r['id']:dict(r) for r in db.execute(f'SELECT rowid,{fields} FROM {table} WHERE id IN ({marks})',batch)}
+            bodies = sentence_rows.read(db,kind,batch)
+            entries = []
+            for key in batch:
+                expected,target = images[key]
+                row = metadata.get(key)
+                if (row is None or any(value!=expected[name] for name,value in row.items() if name!='revision')
+                        or bodies.get(key)!=expected['body']):
+                    return False
+                entries.append((key,bodies[key],target['body'],max(now,target['revision'])))
+            batches.append((kind,entries))
+    if observed is not None:
+        import save_validation
+        watch(db,observed,tables=sources if save_validation.trusted(db) else TABLES)
+    for kind,entries in batches:
+        sentence_rows.write_display_batch(db,kind,entries)
+    return True
+
+
+def isolated_dictionary_edit(db,changes,redo):
+    """Check the original dictionary row before scoping a metadata replay."""
+    import save_validation
+    if len(changes)!=1 or not save_validation.trusted(db):return None
+    change=changes[0];table=change['table']
+    if table!='lexemes' or not change.get('inheritance_complete'):return None
+    before,after=change['before'],change['after']
+    if not (save_validation.text_only([(table,before,after)]) or
+            save_validation.sense_text_only([(table,before,after)])):return None
+    expected=before if redo else after
+    fields=','.join(record_sources.META[table])
+    row=db.execute(f'SELECT rowid,{fields} FROM {table} WHERE id=?',(expected['id'],)).fetchone()
+    if row is None or any(row[key]!=expected[key] for key in row.keys() if key!='revision'):return None
+    body=record_sources.read(db,table,expected['id'])
+    if not record_sources.same_body(body,expected['body']):return None
+    return body
+
+
+def undo_appended_links(db,changes,observed):
+    """Undo native association-only additions in physical row order.
+
+    The row images may be older than the current revision, but every value that
+    defines the link must still agree. Mixed and older histories keep the general
+    replay, including the inheritance reconciliation it performs.
+    """
+    import long_tasks
+    import save_validation
+    from collections import defaultdict
+
+    if not (record_sources.native(db) and save_validation.trusted(db) and
+            changes and changes[0].get('inheritance_complete')):return False
+    tables=('gloss_bindings','morphology_analyses','independent_links','lexical_links')
+    inserted=defaultdict(dict);bindings={};revisions={}
+    for change in changes:
+        table,before,after=(change[k] for k in ('table','before','after'))
+        if (table=='dictionary_examples' and change.get('revision_only') and
+                before and after and before['id']==after['id'] and before['language_id']==after['language_id']):
+            revisions[after['id']]=1
+        elif table in tables and before is None and after:
+            inserted[table][after['id']]=after
+        elif table=='gloss_bindings' and before and after and all(
+                before[k]==after.get(k) for k in before if k not in
+                ('revision','source_hash','source_binding_revision','source_meaning_revision')):
+            bindings[after['id']]=(before,after)
+        else:return False
+    if not (inserted['independent_links'] or inserted['lexical_links']):return False
+    # Cascading children are part of the same checked relationship. Outside
+    # edits invalidate the validation proof via their persistent triggers.
+    if sum(map(len,inserted.values()))>=10000:db.execute('PRAGMA cache_size=-196608')
+
+    # Select once per table and compare before deleting anything. Index locality
+    # matters on large projects, especially for UUID-keyed association rows.
+    actual={}
+    typed_links=independent_links.snapshots.enabled(db)
+    for table in tables:
+        expected=inserted[table]
+        if table=='gloss_bindings':expected={**expected,**{bid:after for bid,(_,after) in bindings.items()}}
+        if not expected:continue
+        rows=[]
+        keys=sorted(expected)
+        cursor=db.cursor()
+        if table=='independent_links':
+            cursor.row_factory=None
+            columns='rowid,'+independent_links._LINK_COLUMNS
+            if typed_links:columns+=','+','.join(independent_links.snapshots.REF_COLUMNS)
+        else:
+            columns='rowid,*'
+        for start in range(0,len(keys),800):
+            batch=keys[start:start+800]
+            long_tasks.checkpoint()
+            rows.extend(cursor.execute(f'SELECT {columns} FROM {table} WHERE id IN ('+','.join('?' for _ in batch)+')',batch))
+        if table=='independent_links':
+            if not independent_links.verify_appended(db,rows,expected,related=typed_links):
+                return False
+            actual[table]=sorted(rows,key=lambda row:row[0])
+            continue
+        if len(rows)!=len(expected) or any(
+                any(value!=expected[row['id']].get(key) for key,value in dict(row).items()
+                    if key not in ('rowid','revision')) for row in rows):
+            return False
+        actual[table]=sorted((row for row in rows if table!='gloss_bindings' or row['id'] not in bindings),
+                             key=lambda row:row['rowid'])
+
+    # A lexical link can have later analysis or review rows that are outside
+    # the original operation. Only remove links whose dependents are covered.
+    lexical=inserted['lexical_links'].keys()
+    for table in ('component_links','lexical_reviews','morphology_analyses'):
+        ids=lexical-inserted[table].keys() if table=='morphology_analyses' else lexical
+        if ids and next(lexicon.scoped_rows(db,'SELECT 1 FROM '+table,[('id',ids)],' LIMIT 1'),None):
+            return False
+
+    from read_views import association_batch
+    minimum=int(datetime.now(timezone.utc).timestamp()*1000000)
+    with association_batch(db):
+        if bindings:
+            if observed is not None:watch(db,observed,tables=('gloss_bindings',))
+            # Replay touched binding stamps in place. Their owner, word, mode
+            # and inherited meaning were verified above and keep their identity.
+            db.executemany('''UPDATE gloss_bindings SET source_hash=?,source_binding_revision=?,
+              source_meaning_revision=?,revision=max(revision,?,?)+1 WHERE id=?''',
+                ((before['source_hash'],before['source_binding_revision'],before['source_meaning_revision'],
+                  before['revision'],minimum,bid) for bid,(before,_) in bindings.items()))
+        if revisions:
+            if observed is not None:
+                if isinstance(db,record_sources.Connection):db.example_revision_journal=observed
+                else:watch(db,observed,tables=('dictionary_examples',))
+            record_sources.bump_example_revisions(db,revisions,minimum=minimum)
+        for table,rows in actual.items():
+            if table=='independent_links' and typed_links:
+                independent_links.snapshots.delete_references(db,rows)
+            for start in long_tasks.steps(range(0,len(rows),800)):
+                batch=rows[start:start+800]
+                db.execute(f'DELETE FROM {table} WHERE rowid IN ('+','.join('?' for _ in batch)+')',[r[0] for r in batch])
+            if observed is not None:
+                if table=='independent_links':
+                    observed.update(((table,r[0]),(inserted[table][r[1]],None)) for r in rows)
+                else:
+                    observed.update(((table,r['rowid']),(dict(r),None)) for r in rows)
+    return True
+
+
+def apply(db, path, body, observed=None):
+    if not db.in_transaction:db.execute('BEGIN IMMEDIATE')
     current = state(db)
     db.execute('INSERT OR IGNORE INTO undo_scopes(language_id) VALUES(?)',(scope.get(),))
     if body.get('generation') != current['generation']:
@@ -199,35 +442,97 @@ def apply(db, path, body):
         step = current['redo' if redo else 'undo']
         if not step: raise ValueError('没有可以重做的操作' if redo else '没有可以撤销的操作')
         changes = decode_changes(db.execute('SELECT changes FROM undo_steps WHERE id=?',(step['id'],)).fetchone()[0])
+        binding_history=any(c.get('inheritance_complete') or c['table'] in gloss_inheritance.TABLES for c in changes)
+        import save_validation
+        display_only = restore_sentence_display(db,changes,redo,observed)
+        dictionary_before=isolated_dictionary_edit(db,changes,redo)
+        appended_only=not redo and step['label']==LABELS['/api/lexeme-auto-link'] and undo_appended_links(db,changes,observed)
+        from annotations import INDEPENDENT_INLINE_TABLES
+        sentence_edit=(step['label']==LABELS['/api/inline-save'] and save_validation.trusted(db) and changes and
+                       changes[0].get('inheritance_complete') and all(c['table'] in INDEPENDENT_INLINE_TABLES and
+                       (c['table']!='dictionary_examples' or (c['before'] and c['after'] and
+                        all(c['before'][key]==c['after'][key] for key in ('id','language_id','rowid')))) for c in changes))
+        if observed is not None and not (display_only or appended_only):
+            watched=INDEPENDENT_INLINE_TABLES if sentence_edit else TABLES
+            watch(db,observed,tables=('lexemes',) if dictionary_before is not None else watched)
+        isolated=save_validation.trusted(db) and (display_only or appended_only or dictionary_before is not None)
+        replay = () if display_only or appended_only else changes
         # Delete touched records first so unique keys can be restored safely.
         revisions = {};gloss_preimages={}
         track_colors = {}
         session_positions = {}
+        stable_rows=set()
+        corpus_replays=[]
+        def update_source(change,old):
+            table=change['table']
+            before,after=change['before'],change['after']
+            if table not in record_sources.TABLES or old is None or not before or not after:
+                return False
+            keys=('id','rowid','language_id','form','number') if table=='morphemes' else ('id','rowid')
+            return all(before[k]==after[k] for k in keys)
+        sentence_preimages={}
+        if record_sources.native(db):
+            for table in ('entries','dictionary_examples'):
+                keys=sorted((c['before'] or c['after'])['id'] for c in replay
+                            if c['table']==table and not c.get('revision_only'))
+                for start in range(0,len(keys),200):
+                    sentence_preimages[table]=sentence_preimages.get(table,{})
+                    sentence_preimages[table].update(record_sources.read_many(db,table,keys[start:start+200]))
         # Project-wide records may have been edited from a different language's history.
-        for c in changes:
+        for c in replay:
             if c['table'] not in timeline.hierarchy.CATALOGS:continue
             expected=c['before' if redo else 'after']
             current_row=db.execute('SELECT * FROM '+c['table']+' WHERE id=?',((c['before'] or c['after'])['id'],)).fetchone()
             clean=lambda r:{k:v for k,v in dict(r).items() if k not in ('rowid','revision')} if r else None
             if clean(current_row)!=clean(expected):raise ValueError('项目共用信息已在其他操作中更新，不能覆盖；请在管理中检查')
-        for c in changes:
-            if c['table']=='history': continue
-            row = c['before'] or c['after']
+        revision_ids={(c['before'] or c['after'])['id']:1 for c in replay if c.get('revision_only')}
+        if revision_ids:
+            if record_sources.native(db):
+                record_sources.bump_example_revisions(db,revision_ids,minimum=int(datetime.now(timezone.utc).timestamp()*1000000))
+            else:
+                for rid in revision_ids:
+                    updated=db.execute('UPDATE dictionary_examples SET revision=max(revision,?)+1 WHERE id=?',
+                        (int(datetime.now(timezone.utc).timestamp()*1000000),rid))
+                    if not updated.rowcount:raise ValueError('例句已不存在')
+        for c in replay:
+            if c['table']=='history' or c.get('revision_only'):continue
+            row = (c['before'] if redo else c['after']) or c['before'] or c['after']
             table = c['table']
             key='text_id' if table=='text_info' else 'id'
-            old = db.execute('SELECT * FROM '+table+' WHERE '+key+'=?',(row[key],)).fetchone()
+            fields=','.join(k for k in row if k not in ('rowid','body')) if table in record_sources.TABLES else '*'
+            old = db.execute('SELECT rowid,'+fields+' FROM '+table+' WHERE '+key+'=?',(row[key],)).fetchone()
             gloss_preimages[(table,row[key])]=dict(old) if old else None
+            if old is not None and table=='independent_links':
+                gloss_preimages[(table,row[key])]=independent_links.image(db,old)
+            if old is not None and table in record_sources.TABLES:
+                if table in sentence_preimages:
+                    source=sentence_preimages[table].get(row[key])
+                elif dictionary_before is not None:
+                    source=dictionary_before
+                elif binding_history and table in ('lexemes','morphemes') and update_source(c,old):
+                    source=None
+                else:
+                    source=record_sources.read(db,table,row[key])
+                gloss_preimages[(table,row[key])]['body']=source
             if table=='timeline_tracks' and old:track_colors[row[key]]=old['color']
             if table=='timeline_sessions' and old:session_positions[row[key]]=old['position']
             revisions[(table,row['rowid'])] = old['revision'] if old and 'revision' in old.keys() else 0
-            db.execute('DELETE FROM '+table+' WHERE '+key+'=?',(row[key],))
-        for c in changes:
-            if c['table']=='history': continue
+            if (table in ('corpus_units','unit_segments','gloss_bindings') and old and c['before'] and c['after']
+                    and c['before']['id']==c['after']['id']==row['id']
+                    and c['before']['rowid']==c['after']['rowid']==old['rowid']):
+                stable_rows.add((table,row['id']))
+            elif not update_source(c,old):
+                db.execute('DELETE FROM '+table+' WHERE '+key+'=?',(row[key],))
+        for c in replay:
+            if c['table']=='history' or c.get('revision_only'): continue
             row = c['after' if redo else 'before']
             if row is None: continue
             table = c['table']
             import storage_optimization
             row = storage_optimization.compatible_row(table,row)
+            if table in independent_links.TABLES:
+                independent_links.restore_row(db,table,row)
+                continue
             if table=='timeline_tracks' and 'color' not in row:
                 row['color']=None if row.get('parent_id') else track_colors.get(row['id']) or timeline_colors.fallback(row['id'])
             if table=='timeline_sessions' and 'position' not in row:
@@ -235,31 +540,69 @@ def apply(db, path, body):
             if 'revision' in row and table != 'history':
                 # A wall-clock revision prevents ABA conflicts after delete/restore too.
                 row['revision'] = max(row['revision'],revisions[(table,row['rowid'])],int(datetime.now(timezone.utc).timestamp()*1000000))+1
+            if table in record_sources.TABLES:
+                inplace=update_source(c,gloss_preimages.get((table,row['id'])))
+                columns={k:v for k,v in row.items() if k not in ('id','body','rowid')}
+                if not inplace and not db.execute('SELECT 1 FROM '+table+' WHERE rowid=?',(row['rowid'],)).fetchone():
+                    columns['rowid']=row['rowid']
+                source=record_sources.body(row,mutable=False)
+                prior=gloss_preimages[(table,row['id'])]
+                if (inplace and table=='entries' and c.get('units_complete') and
+                        record_sources.mode(db) in ('single','drop') and prior['body'] is not None and
+                        all(prior[name]==row[name] for name in ('text_id','position'))):
+                    corpus_replays.append((row['id'],prior['body'],source,row['revision']-1))
+                    continue
+                record_sources.write(db,table,row['id'],source,columns=columns,insert=not inplace,
+                                     previous=prior.get('body') if inplace else None)
+                continue
+            if (table,row.get('id')) in stable_rows:
+                columns=[key for key in row if key not in ('id','rowid')]
+                db.execute('UPDATE '+table+' SET '+','.join(key+'=?' for key in columns)+' WHERE id=?',
+                           [*(row[key] for key in columns),row['id']])
+                continue
             # Another language can have reused this SQLite rowid after a deletion.
             if db.execute('SELECT 1 FROM '+table+' WHERE rowid=?',(row['rowid'],)).fetchone():
                 row.pop('rowid')
             cols = list(row)
             db.execute('INSERT INTO '+table+' ('+','.join(cols)+') VALUES ('+','.join('?' for _ in cols)+')',[row[k] for k in cols])
+        if corpus_replays:
+            import sentence_rows
+            for start in range(0,len(corpus_replays),200):
+                sentence_rows.write_corpus_batch(db,corpus_replays[start:start+200])
         db.execute('UPDATE undo_steps SET applied=? WHERE id=?',(int(redo),step['id']))
         # Older history predates stable units; reconcile it conservatively too.
-        for c in changes:
+        for c in replay:
             if c['table']=='entries':
                 if c.get('units_complete'):continue
                 before,after=c['before'],c['after']
-                if before and after and (before['body']==after['body'] or json.loads(before['body'])['words']==json.loads(after['body'])['words']):continue
+                if before and after and (record_sources.same_body(before['body'],after['body']) or
+                    record_sources.body(before,mutable=False)['words']==record_sources.body(after,mutable=False)['words']):continue
                 lexicon.sync_entry(db,(before or after)['id'])
-        gloss_inheritance.after_legacy_undo(db,changes,gloss_preimages,redo)
+        if not (display_only or appended_only):
+            gloss_inheritance.after_legacy_undo(db,changes,gloss_preimages,redo)
         import grammaticality
-        grammaticality.validate(db,{(c['table'],i):(c['before'],c['after']) if redo else (c['after'],c['before']) for i,c in enumerate(changes)})
-        # Validate the applied direction: undoing an addition is a deletion and
-        # must not enter the additive-definition shortcut.
-        lexicon.validate_changes(db,{(c['table'],i):(c['before'],c['after']) if redo else (c['after'],c['before']) for i,c in enumerate(changes)})
-        timeline.hierarchy.validate(db)
-        grammar_survey.validate(db)
-        example_groups.validate(db)
-        fieldwork_notes.validate(db)
-        code_switching.after_undo(db,changes)
-        object_media.validate(db)
+        applied=observed if observed is not None else {(c['table'],i):(c['before'],c['after']) if redo else (c['after'],c['before']) for i,c in enumerate(changes)}
+        if not appended_only:
+            grammaticality.validate(db,applied)
+            # The general replay can introduce new definitions or references.
+            with save_validation.final_check(db):lexicon.validate_changes(db,applied)
+        if sentence_edit:
+            if observed is None or any(c['table'] in ('code_spans','code_time_links') for c in changes):
+                code_switching.after_undo(db,changes)
+            else:
+                code_switching.refresh_changed_sentences(db,applied)
+        elif not isolated and not all(c.get('revision_only') or c['table'] in independent_links.TABLES or
+                   (c['table']=='gloss_bindings' and (c['after'] or c['before'])['owner_kind']=='independent')
+                   for c in changes):
+            timeline.hierarchy.validate(db)
+            grammar_survey.validate(db)
+            example_groups.validate(db)
+            fieldwork_notes.validate(db)
+            code_switching.after_undo(db,changes)
+            if not object_media.validation_available(db):object_media.validate(db)
+        if (not appended_only and any(t in object_media.SOURCES for t, _ in applied)
+                and object_media.validation_available(db)):
+            object_media.validate_pending(db,full=not save_validation.trusted(db))
     db.execute('UPDATE undo_scopes SET generation=generation+1 WHERE language_id=?',(scope.get(),))
     trim(db)
     import analysis_workspace

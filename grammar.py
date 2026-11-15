@@ -5,7 +5,7 @@ import gloss_inheritance
 import re
 import uuid
 import segmentation
-from collections import Counter,OrderedDict
+from collections import Counter,OrderedDict,defaultdict
 import corpus
 import grammar_audit_cache
 import grammar_reference
@@ -31,6 +31,23 @@ def initialize(db):
 
 def listing(db,lid='all'):
     return [{**dict(r),'aliases':json.loads(r['aliases'])} for r in db.execute("SELECT * FROM grammar_tags WHERE ?='all' OR language_id=? ORDER BY symbol COLLATE NOCASE,id",(lid,lid))]
+
+def definition_page(db,lid,q):
+    term=q.get('tag_q','').lower()
+    where=[];args=[]
+    if lid!='all':where.append('language_id=?');args.append(lid)
+    if term:
+        db.create_function('grammar_lower',1,str.lower)
+        where.append("""instr(grammar_lower(symbol||' '||description||' '||category||COALESCE(
+            (SELECT ' '||group_concat(value,' ') FROM json_each(grammar_tags.aliases)),'')),?)>0""")
+        args.append(term)
+    source=' FROM grammar_tags'+(' WHERE '+' AND '.join(where) if where else '')
+    total=db.execute('SELECT count(*)'+source,args).fetchone()[0]
+    pages=max(1,(total+49)//50)
+    page=min(pages,max(1,int(q.get('tag_page',1))))
+    rows=db.execute('SELECT *'+source+' ORDER BY symbol COLLATE NOCASE,id LIMIT 50 OFFSET ?',[*args,(page-1)*50])
+    return dict(tags=[{**dict(r),'aliases':json.loads(r['aliases'])} for r in rows],tag_page=page,tag_pages=pages,tag_total=total)
+
 
 def index(rows):
     result={}
@@ -213,26 +230,78 @@ class AuditAnalysisCache:
     """Private read-only projections, never used for returned sentence cards."""
     def __init__(self,limit=8*1024**2,items=4096):
         self.values=OrderedDict();self.bytes=0;self.limit=limit;self.items=items
+        self.facts=OrderedDict();self.fact_bytes=0
 
-    def apply(self,word,position):
-        fields=('form','gloss','punctuation','punctuation_form','morph_groups','infix_confirmation')
-        key=(word['form'],word['gloss'],bool(word.get('punctuation')),word.get('punctuation_form'),
+    fields=('form','gloss','punctuation','punctuation_form','morph_groups','infix_confirmation','_legacy_tilde')
+
+    def key(self,word):
+        return (word['form'],word['gloss'],bool(word.get('punctuation')),word.get('punctuation_form'),
              json.dumps(word['morph_groups'],ensure_ascii=False,sort_keys=True) if 'morph_groups' in word else None,
-             json.dumps(word['infix_confirmation'],ensure_ascii=False,sort_keys=True) if 'infix_confirmation' in word else None)
+             json.dumps(word['infix_confirmation'],ensure_ascii=False,sort_keys=True) if 'infix_confirmation' in word else None,
+             bool(word.get('_legacy_tilde')))
+
+    def details(self,word,key):
         saved=self.values.get(key)
         if saved is None:
-            source={k:word[k] for k in fields if k in word}
+            source={k:word[k] for k in self.fields if k in word}
             fresh=corpus._analyze(dict(ipa='',translation='',words=[source]))
-            derived={k:v for k,v in source.items() if k not in fields or k=='punctuation'}
+            derived={k:v for k,v in source.items() if k not in self.fields or k=='punctuation'}
             warnings=tuple(fresh['warnings'])
-            cost=1024+16*len(json.dumps([key,derived,warnings],ensure_ascii=False))
+            # Derived units share their fragments. Charge for both lists
+            # without serializing an analysis just to budget the cache.
+            units=(*derived.get('segments',()),*derived.get('morphemes',()))
+            cost=2048+32*sum(len(v) for v in key if isinstance(v,str))+sum(4*len(w) for w in warnings)
+            cost+=sum(1536+512*(len(u.get('fragments',()))+len(u.get('gloss_fragments',()))) for u in units)
             saved=(derived,warnings,cost)
             if cost<=self.limit and self.items>0:
                 while self.values and (self.bytes+cost>self.limit or len(self.values)>=self.items):self.bytes-=self.values.popitem(last=False)[1][2]
                 self.values[key]=saved;self.bytes+=cost
         else:self.values.move_to_end(key)
+        return saved
+
+    def apply(self,word,position):
+        saved=self.details(word,self.key(word))
         word.update(saved[0])
         return [w.replace('第 1 ',f'第 {position+1} ',1) for w in saved[1]]
+
+    @staticmethod
+    def summarize(word):
+        if word['unit_type'] in ('phonological_boundary','punctuation'):
+            return None
+        labels=[]
+        for n,unit in enumerate(word['morphemes'] or [word]):
+            if n and n%64==0:long_tasks.checkpoint()
+            label=unit.get('display_gloss',unit['gloss'])
+            labels.append('<'+label+'>' if unit.get('kind')=='infix' else label)
+        return (corpus.is_word(word),bool(word['group_reviews'] or word['infix_ambiguous']),
+                not word['morphemes'],tuple(labels))
+
+    def fact(self,word):
+        key=self.key(word)
+        fact_key=(*key,word.get('display_gloss'),word.get('kind')=='infix')
+        saved=self.facts.get(fact_key)
+        if saved is not None:
+            self.facts.move_to_end(fact_key)
+            return saved[0]
+        value=self.summarize(word | self.details(word,key)[0])
+        cost=512+4*sum(len(v) for v in fact_key if isinstance(v,str))
+        if value is not None:cost+=sum(64+4*len(label) for label in value[3])
+        if cost<=self.limit:
+            while self.facts and (self.fact_bytes+cost>self.limit or len(self.facts)>=self.items):
+                self.fact_bytes-=self.facts.popitem(last=False)[1][1]
+            self.facts[fact_key]=(value,cost);self.fact_bytes+=cost
+        return value
+
+
+def audit_word_facts(body,cache):
+    """Only structured references and reduplication need a decorated sentence."""
+    decorated=(body.get('reduplications') or any('~' in word['form'] for word in body['words'])
+               or any(target.get('segmentation_ref') for target in body.get('targets',())))
+    if decorated:
+        analyze(body,cache=cache)
+        return map(cache.summarize,body['words'])
+    body.pop('reduplication_info',None)
+    return map(cache.fact,body['words'])
 
 
 def classify_audit(db,q,facts):
@@ -273,6 +342,15 @@ def classify_audit(db,q,facts):
 
 
 def audit(db,q):
+    if q.get('view')=='registry':
+        import grammar_usage
+        result=grammar_usage.library(db,q)
+        if 'tag_page' in q:
+            page=definition_page(db,q.get('language','all'),q)
+            uses={t['id']:t['uses'] for t in result['tags']}
+            for t in page['tags']:t['uses']=uses[t['id']]
+            result.update(page)
+        return result
     cached=grammar_audit_cache.load(db,q)
     if cached is not None:return audit_page(db,q,cached)
     facts=grammar_audit_cache.load_facts(db,q)
@@ -280,80 +358,122 @@ def audit(db,q):
         data=classify_audit(db,q,facts);grammar_audit_cache.remember(db,q,data)
         return audit_page(db,q,data)
     lid=q.get('language','all');source=q.get('source','all');sentences=0;bases=[];events=[]
+    import record_sources
+    import dictionary_rows
+    import sentence_rows
+    import independent_links
+    from dictionary_targets import IDENTITIES
+    native=record_sources.native(db)
+    identities={r[0] for r in db.execute('SELECT id FROM '+IDENTITIES)}
     analysis_cache=AuditAnalysisCache()
     target_cache=OrderedDict();target_bytes=0
     def target_body(xid):
         nonlocal target_bytes
         if xid in target_cache:
             target_cache.move_to_end(xid);return target_cache[xid][0]
-        row=db.execute('SELECT body FROM dictionary_targets WHERE id=?',(xid,)).fetchone()
-        value=json.loads(row['body']) if row else None;cost=512+(16*len(row['body']) if row else 0)
+        if native:
+            row=dictionary_rows.targets(db,[xid],prepare=False).get(xid)
+            value=row['body'] if row else None
+            cost=512+(16*len(repr(value)) if value else 0)
+        else:
+            row=db.execute('SELECT body FROM dictionary_targets WHERE id=?',(xid,)).fetchone()
+            value=json.loads(row['body']) if row else None
+            cost=512+(16*len(row['body']) if row else 0)
         if cost<=8*1024**2:
             while target_cache and (target_bytes+cost>8*1024**2 or len(target_cache)>=256):
                 _,(_,old)=target_cache.popitem(last=False);target_bytes-=old
             target_cache[xid]=(value,cost);target_bytes+=cost
         return value
-    def add(base,issue,message,**extra):events.append([1,{**base,'issue':issue,'message':message,**extra}])
+    def add(base,issue,message,*,into=None,**extra):
+        (events if into is None else into).append([1,{**base,'issue':issue,'message':message,**extra}])
     records={}
-    for kind,sql in long_tasks.steps([('corpus','SELECT e.id,e.body,e.position,e.text_id,t.title,t.language_id FROM texts t CROSS JOIN entries e ON t.id=e.text_id ORDER BY t.rowid,e.position'),('independent','SELECT id,body,language_id FROM dictionary_examples ORDER BY rowid')]):
+    if native:
+        db.execute('PRAGMA cache_size=-32768')
+    for kind,sql in long_tasks.steps([('corpus','SELECT e.id,e.position,e.text_id,t.title,t.language_id FROM texts t CROSS JOIN entries e ON t.id=e.text_id ORDER BY t.rowid,e.position'),('independent','SELECT id,language_id FROM dictionary_examples ORDER BY rowid')]):
         if source not in ('all',kind):continue
-        for row in long_tasks.steps(gloss_inheritance.iter_rows(db,db.execute(sql),kind,lightweight=True)):
+        def inputs():
+            if not native:
+                yield from enumerate(gloss_inheritance.iter_rows(db,db.execute(sql),kind,lightweight=True,relational=True,
+                                                                 independent_targets=True))
+                return
+            # Native source rows are clustered by stable ID. Read in that order
+            # and put audit results back in the public text/library order.
+            rows=sorted(enumerate(db.execute(sql)),key=lambda item:item[1]['id'])
+            for start in range(0,len(rows),400):
+                batch=rows[start:start+400]
+                ids=[row['id'] for _,row in batch]
+                bodies=sentence_rows.audit_inputs(db,kind,ids)
+                if kind=='independent':
+                    independent_links.source_bodies(db,bodies)
+                gloss_inheritance.prefetch(db,kind,ids,changed_only=True)
+                yield from ((i,dict(row,body=bodies[row['id']])) for i,row in batch)
+        ordered={}
+        for order,row in long_tasks.steps(inputs()):
             # Resolve all changed words fully, including independent references;
             # unchanged baseline bindings need no display metadata for the audit.
             b=gloss_inheritance.load(db,kind,row['id'],row['body'],metadata=False,changed_only=True);lang=b.get('language_id') or row['language_id']
             if lid!='all' and lang!=lid:continue
-            sentences+=1;analyze(b,cache=analysis_cache)
+            sentences+=1;word_facts=audit_word_facts(b,analysis_cache)
             base=dict(kind=kind,id=row['id'],language_id=lang,owner_language=row['language_id'],title=row['title'] if kind=='corpus' else b.get('source') or '独立例句',title_default=kind=='independent' and not bool(b.get('source')),text_id=row['text_id'] if kind=='corpus' else None,position=row['position'] if kind=='corpus' else None,lexeme_id=None if kind=='corpus' else (b['targets'][0]['lexeme_id'] if b.get('targets') else None))
             records[(kind,row['id'])]=base
-            bi=len(bases);bases.append(base)
-            if b.get('orphaned_morphology'):add(base,'pending','旧形态分析待核对')
+            local=[]
+            ordered[order]=(base,local)
+            if b.get('orphaned_morphology'):add(base,'pending','旧形态分析待核对',into=local)
             for relation in b.get('reduplication_info',{}).get('relations',[]):
                 if relation['review']:
-                    add(base,'pending','重叠关系待核对：'+relation['source']['form']+' → '+relation['base']['form'])
+                    add(base,'pending','重叠关系待核对：'+relation['source']['form']+' → '+relation['base']['form'],into=local)
             if kind=='independent':
                 import component_links,segmentation
                 for target in long_tasks.steps(b.get('targets',[])):
-                    x=target_body(target['lexeme_id'])
-                    if x is None or component_links.review(x,target.get('component_ref')):add(base,'pending','独立例句关联的词条组分已变化，待核对')
-                    if target.get('review_reason'):add(base,'pending',target['review_reason'])
-                    if target.get('segmentation_review'):add(base,'pending','独立例句的词或语素已变化，旧关联待核对')
-            numbers=corpus.word_numbers(b['words'])
-            for i,w in enumerate(b['words']):
+                    xid=target['lexeme_id'];ref=target.get('component_ref')
+                    if xid not in identities or ref and component_links.review(target_body(xid),ref):add(base,'pending','独立例句关联的词条组分已变化，待核对',into=local)
+                    if target.get('review_reason'):add(base,'pending',target['review_reason'],into=local)
+                    if target.get('segmentation_review'):add(base,'pending','独立例句的词或语素已变化，旧关联待核对',into=local)
+            number=0
+            for i,(w,fact) in enumerate(zip(b['words'],word_facts)):
                 if i%64==0:long_tasks.checkpoint()
-                if w.get('unit_type') in ('phonological_boundary','punctuation'): continue
-                detail=dict(word=i+1,word_number=numbers[i],form=w['form'],gloss=w['gloss'])
-                if w.get('group_reviews') or w.get('infix_ambiguous'):add(base,'pending','语素组合或中缀分析待核对',**detail)
-                if not w['morphemes']:add(base,'boundary','语素数量或连接符不一致',**detail)
-                labels=[]
-                for mi,m in enumerate(w['morphemes'] or [w]):
-                    if mi and mi%64==0:long_tasks.checkpoint()
-                    display=m.get('display_gloss',m['gloss']);labels.append('<'+display+'>' if m.get('kind')=='infix' else display)
-                events.append([0,bi,i+1,numbers[i],w['form'],w['gloss'],labels])
+                if fact is None:continue
+                lexical,review,boundary,labels=fact
+                number+=lexical
+                word_number=number if lexical else None
+                if review or boundary:
+                    detail=dict(word=i+1,word_number=word_number,form=w['form'],gloss=w['gloss'])
+                    if review:add(base,'pending','语素组合或中缀分析待核对',into=local,**detail)
+                    if boundary:add(base,'boundary','语素数量或连接符不一致',into=local,**detail)
+                local.append([0,0,i+1,word_number,w['form'],w['gloss'],labels])
+        for _,(base,local) in sorted(ordered.items()):
+            bi=len(bases);bases.append(base)
+            for event in local:
+                if event[0]==0:event[1]=bi
+            events.extend(local)
     for r in long_tasks.steps(db.execute('SELECT r.reason,u.entry_id,u.form,u.gloss FROM lexical_reviews r JOIN lexical_links l ON l.id=r.id JOIN corpus_units u ON u.id=l.unit_id')):
         base=records.get(('corpus',r['entry_id']))
         if base:add(base,'pending',r['reason'],form=r['form'],gloss=r['gloss'])
     import component_links
-    for r in long_tasks.steps(db.execute('SELECT c.body ref,x.body,l.lexeme_id,u.entry_id,u.form,u.gloss FROM component_links c JOIN lexical_links l ON l.id=c.id JOIN corpus_units u ON u.id=l.unit_id JOIN dictionary_targets x ON x.id=l.lexeme_id')):
+    for r in long_tasks.steps(db.execute('SELECT c.body ref,l.lexeme_id,u.entry_id,u.form,u.gloss FROM component_links c JOIN lexical_links l ON l.id=c.id JOIN corpus_units u ON u.id=l.unit_id')):
         base=records.get(('corpus',r['entry_id']))
-        if base and component_links.review(json.loads(r['body']),json.loads(r['ref'])):add(base,'pending','关联的词条形态组分已变化，待核对',form=r['form'],gloss=r['gloss'])
+        if base and r['lexeme_id'] in identities and component_links.review(target_body(r['lexeme_id']),json.loads(r['ref'])):add(base,'pending','关联的词条形态组分已变化，待核对',form=r['form'],gloss=r['gloss'])
     uncertain=set()
     import morpheme_registry
-    for r in long_tasks.steps(db.execute('SELECT c.*,m.body morpheme_body,x.body lexeme_body FROM morpheme_components c JOIN morphemes m ON m.id=c.morpheme_id JOIN dictionary_targets x ON x.id=c.lexeme_id')):
-        if morpheme_registry.current_component_ref(json.loads(r['lexeme_body']),json.loads(r['body']))[1]:uncertain.add(r['lexeme_id'])
+    for r in long_tasks.steps(db.execute('SELECT c.* FROM morpheme_components c JOIN morphemes m ON m.id=c.morpheme_id')):
+        if r['lexeme_id'] in identities and morpheme_registry.current_component_ref(target_body(r['lexeme_id']),json.loads(r['body']))[1]:uncertain.add(r['lexeme_id'])
     if uncertain:
         reported=set()
         for r in long_tasks.steps(db.execute('SELECT l.lexeme_id,u.entry_id FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id')):
             key=('corpus',r['entry_id']);base=records.get(key)
             if base and r['lexeme_id'] in uncertain and key not in reported:add(base,'pending','关联词条的原语素组分已删除');reported.add(key)
-        for r in long_tasks.steps(db.execute('SELECT id,body FROM dictionary_examples')):
-            base=records.get(('independent',r['id']))
-            if base and any(t['lexeme_id'] in uncertain for t in json.loads(r['body']).get('targets',[])):add(base,'pending','关联词条的原语素组分已删除')
+        import evidence_owners
+        for rid in evidence_owners.independent_ids(db,uncertain):
+            base=records.get(('independent',rid))
+            if base:add(base,'pending','关联词条的原语素组分已删除')
     cells=db.execute('SELECT c.*,l.language_id layer_language FROM annotation_cells c JOIN annotation_layers l ON l.id=c.layer_id')
     first=cells.fetchone()
     if first is not None:
         from itertools import chain
         live={r['id'] for r in db.execute("SELECT id FROM corpus_units WHERE active=1 AND kind='word'")}
-        independent={r['id']:{w.get('annotation_id') for w in json.loads(r['body']).get('words',[])} for r in db.execute('SELECT id,body FROM dictionary_examples')}
+        independent=defaultdict(set)
+        for row in db.execute('SELECT example_id,word_id FROM independent_words'):
+            independent[row['example_id']].add(row['word_id'])
         for c in long_tasks.steps(chain((first,),cells)):
             base=records.get((c['owner_kind'],c['record_id']))
             if base and (c['layer_language']!=base['language_id'] or c['unit_id']!='@sentence' and c['unit_id'] not in (live if c['owner_kind']=='corpus' else independent.get(c['record_id'],set()))):add(base,'annotation','附加标注的原词或所属语言已变化',form=c['value'])
@@ -373,10 +493,11 @@ def audit_page(db,q,data,analysis_cache=None):
     pages=max(1,(len(filtered)+19)//20);page=max(1,min(int(q.get('page',1)),pages))
     items=filtered[(page-1)*20:page*20]
     import annotations
+    import record_sources
     for item in long_tasks.steps(items):
         if 'body' in item:
             table='entries' if item['kind']=='corpus' else 'dictionary_examples'
-            row=db.execute('SELECT body FROM '+table+' WHERE id=?',(item['id'],)).fetchone()
-            item['body']=analyze(gloss_inheritance.load(db,item['kind'],item['id'],row['body']),cache=analysis_cache)
+            body=record_sources.read(db,table,item['id'])
+            item['body']=analyze(gloss_inheritance.load(db,item['kind'],item['id'],body),cache=analysis_cache)
             annotations.enrich(db,item['body'],item['kind'],item['id'])
     return {k:data[k] for k in ('tags','unknown','ignored','counts','sentences')}|dict(total=len(filtered),page=page,pages=pages,items=items)

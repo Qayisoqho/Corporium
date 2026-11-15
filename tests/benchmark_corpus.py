@@ -20,7 +20,7 @@ class Bench:
     def __init__(self,out):self.out=out;self.results=[]
     def call(self,path,body=None):
         h=object.__new__(server.Handler);h.path=path;payload=encode(body).encode();h.headers={'Content-Type':'application/json','Content-Length':str(len(payload)),'Host':'127.0.0.1:8765'};h.rfile=io.BytesIO(payload);result=[]
-        def send(data,code=200,mime='application/json'):
+        def send(data,code=200,mime='application/json',**kwargs):
             wire=encode(data).encode() if mime.startswith('application/json') else data
             result.append((code,data,len(wire)))
         h.send=send
@@ -58,7 +58,8 @@ def create(path,n):
         lexemes=[]
         for i in range(max(100,n//10)):
             xid=uid();b=lexicon.normalize(dict(notes=f'合成词条备注 {i}',usages=[dict(pos='N',senses=[dict(short_gloss='家',definition='合成解释')])],variants=[dict(form=f'lemma{i}-n')]))
-            lexemes.append((xid,b));db.execute('INSERT INTO lexemes VALUES(?,?,?,?,1)',(xid,'ordos',f'lemma{i}',encode(b)))
+            from record_sources import write
+            lexemes.append((xid,b));write(db,'lexemes',xid,b,columns=dict(language_id='ordos',headword=f'lemma{i}'),insert=True)
         layer=uid();sentence_layer=uid()
         db.execute("INSERT INTO annotation_layers(id,language_id,name,font,style,position,visible,searchable,revision,size,anchor) VALUES(?,'ordos','词类','Junicode','normal',0,1,1,1,100,'word')",(layer,))
         db.execute("INSERT INTO annotation_layers(id,language_id,name,font,style,position,visible,searchable,revision,size,anchor) VALUES(?,'ordos','译注','Junicode','normal',1,1,1,1,100,'translation')",(sentence_layer,))
@@ -74,7 +75,7 @@ def create(path,n):
             elif i%10==1:words[4].update(form='so<l>ma',gloss='home<PL>')
             words[-1].update(punctuation=True,punctuation_form='。')
             body=dict(function='pass',ipa=f'bi ger sain morin yabu-na {i}',translation=f'这是第 {i+1} 条合成语料。'+('旧术语' if marker else '普通句子'),notes=f'合成调查笔记 编号{i:05d}',words=words,edited=True)
-            eid=uid();first=first or eid;db.execute('INSERT INTO entries VALUES(?,?,?,?,1)',(eid,tid,i%500+1,encode(body)))
+            eid=uid();first=first or eid;write(db,'entries',eid,body,columns=dict(text_id=tid,position=i%500+1),insert=True)
             analyzed=corpus.analyze(copy.deepcopy(body));unit_rows=[];segments=[];links=[];analyses=[];cells=[]
             for j,w in enumerate(analyzed['words']):
                 wid=uid();unit_rows.append((wid,eid,'word',None,j,w['form'],w['gloss'],1,1))
@@ -128,7 +129,8 @@ def run(out,sizes,source=None):
         with server.connect() as db:
             assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
             for table,count in counts.items():assert db.execute('SELECT COUNT(*) FROM '+table).fetchone()[0]==count
-            assert 'benchold' in json.loads(db.execute('SELECT body FROM entries WHERE id=?',(eid,)).fetchone()[0])['words'][0]['form']
+            from record_sources import read
+            assert 'benchold' in read(db,'entries',eid)['words'][0]['form']
         if n==1000:
             request=dict(field='form',find='benchold',replacement='benchnew',text_id='',_language='ordos');p=b.call('/api/text-replace-preview',request)[0]
             profile=cProfile.Profile();profile.enable();b.call('/api/text-replace-apply',{**request,'token':p['token'],'keys':[c['key'] for c in p['changes']]});profile.disable();profile.dump_stats(str(out/'replace-1000.prof'))

@@ -25,7 +25,7 @@ class SenseFeaturesTests(unittest.TestCase):
         bundle=self.call('/api/export-language?language=ordos')[1]
         with server.connect() as db:
             server.languages.import_bundle(db,bundle,other)
-            imported=db.execute('SELECT body FROM lexemes WHERE language_id=?',(other,)).fetchone();feature=json.loads(imported[0])['usages'][0]['senses'][0]['features'][0]
+            imported=db.execute('SELECT body FROM lexemes_documents WHERE language_id=?',(other,)).fetchone();feature=json.loads(imported[0])['usages'][0]['senses'][0]['features'][0]
             self.assertNotEqual(feature,tag);self.assertEqual(db.execute('SELECT language_id FROM grammar_tags WHERE id=?',(feature,)).fetchone()[0],other)
 
 if __name__=='__main__':unittest.main()

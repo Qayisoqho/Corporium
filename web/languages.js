@@ -52,7 +52,8 @@ let editingLanguage=null,languageSwitchBusy=false;
 function languageOptions(includeAll=false){return (includeAll?(globalThis.CorporiumI18n?.f("2effca24d3fa76",()=>[])??'<option value="all">全部语言</option>'):'')+languageList.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join('')}
 function projectStorageKey(key){return typeof desktopProjectKey==='string'?key+':project:'+desktopProjectKey:key;}
 async function loadLanguages(){
-  languageList=await api('languages');
+  if(initialLanguageCatalog){languageList=initialLanguageCatalog;initialLanguageCatalog=null;}
+  else languageList=await api('languages');
   if(typeof refreshGlossAdditionCatalogs==='function')await refreshGlossAdditionCatalogs();
   if(activeLanguage!=='all'&&!languageList.some(l=>l.id===activeLanguage))activeLanguage=languageList.find(l=>l.id==='ordos')?.id||languageList[0]?.id||'all';
   try{localStorage.setItem(projectStorageKey('corpus-language'),activeLanguage);}catch{}
@@ -72,7 +73,7 @@ function renderLanguage(){
   const ipaFont=languageTypographySettings(m).ipa_font;
   $('brand-native').style.fontFamily=rowFontCSS(ipaFont);
   document.title='Corporium · '+(lang?.name||(globalThis.CorporiumI18n?.f("e822013a30e77d",()=>[])??'全部语言'));
-  $('edit-language').disabled=!lang;$('export-language').disabled=!lang;$('new-folder').disabled=!lang;
+  $('new-folder').disabled=!lang;
   $('all').textContent=lang?(globalThis.CorporiumI18n?.f("9e3243c7cd08c3",()=>[])??'本语言全部文本'):(globalThis.CorporiumI18n?.f("a452ccb9974220",()=>[])??'所有语言的文本');
   languageDetails.hidden=!lang;
   if(lang){
@@ -87,13 +88,16 @@ async function switchLanguage(lid){
   if(infoDirty&&!await corporiumConfirm((globalThis.CorporiumI18n?.f("987f108ed6ec02",()=>[])??'元信息尚未保存，是否放弃修改并切换语言？'))){$('language-select').value=activeLanguage;return;}
   languageSwitchBusy=true;
   try{
+    if(lid!==activeLanguage)window.corporiumResetDictionaryLanguage?.();
     activeLanguage=lid;infoDirty=false;selected='';page=1;request++;chosen.clear();clearFilters();$('sentence-language').value='';
     try{localStorage.setItem(projectStorageKey('corpus-language'),lid)}catch{}
-    await loadLanguages();await selectText('');await refreshUndo();
+    await loadLanguages();
+    await window.corporiumRefreshUndoState({reloadLanguages:false});
+    await selectText('',{readResults:workspace==='corpus'});
   }finally{languageSwitchBusy=false;}
 }
 $('language-select').onchange=safe(()=>switchLanguage($('language-select').value));
-function openLanguage(lang=null){
+function fillLanguageForm(lang){
   editingLanguage=lang;const m=lang?JSON.parse(lang.metadata):{};
   $('language-heading').textContent=lang?(globalThis.CorporiumI18n?.f("134292673fd129",()=>[])??'编辑语言信息'):(globalThis.CorporiumI18n?.f("f0e167b226d0a7",()=>[])??'添加语言');$('language-name').value=lang?.name||'';
   for(const [k] of languageFields)$('language-'+k).value=m[k]||'';
@@ -102,30 +106,68 @@ function openLanguage(lang=null){
   $('language-boundaries').value=Object.entries(m.phonological_boundaries||{}).map(([k,v])=>k+' = '+v).join('\n');
   $('language-glossary').value=Object.entries(m.glossary||{}).map(([k,v])=>k+' = '+v).join('\n');
   for(const [k,,def] of checkFields)$('language-'+k).checked=m[k]??def;
-  refreshLanguageIPA();refreshLanguageFontPreview();$('language-error').textContent='';$('language-dialog').showModal();
+  refreshLanguageIPA();refreshLanguageFontPreview();$('language-error').textContent='';
 }
+function openLanguage(lang=null){fillLanguageForm(lang);showSettingsEditor('language-dialog');}
 $('add-language').onclick=()=>openLanguage();
 $('edit-language').onclick=()=>openLanguage(languageList.find(l=>l.id===activeLanguage));
-$('language-form').onsubmit=async event=>{
-  event.preventDefault();$('save-language').disabled=true;
-  try{
-    const m=editingLanguage?JSON.parse(editingLanguage.metadata):{};
+function readLanguageForm(owner,group){
+  const m=owner?JSON.parse(owner.metadata):{};
+  if(group==='all'||group==='information'){
     for(const [k] of languageFields)m[k]=$('language-'+k).value;
+  }
+  if(group==='all'||group==='display'){
     for(const [row,font] of languageTypographyRows){m[font+'_font']=$('language-'+font+'-font').value;m[row+'_variant']=$('language-'+row+'-variant').value;m[row+'_scale']=Number($('language-'+row+'-scale').value);}
+  }
+  if(group==='all'||group==='annotation'){
     m.glossary={};
     for(const line of $('language-glossary').value.split('\n').filter(x=>x.trim())){
       const at=line.indexOf('=');if(at<1)throw Error((globalThis.CorporiumI18n?.f("be113807dbbc0d",()=>[])??'缩写表请按“GEN = 属格”的格式逐行填写'));
       const key=line.slice(0,at).trim();if(!key||Object.keys(m.glossary).some(k=>k.toLowerCase()===key.toLowerCase()))throw Error((globalThis.CorporiumI18n?.f("b9aa18216a1914",()=>[])??'缩写不能为空或重复'));
       m.glossary[key]=line.slice(at+1).trim();
     }
+    for(const [k] of checkFields)m[k]=$('language-'+k).checked;
+  }
+  if(group==='all'||group==='boundaries'){
     m.phonological_boundaries={};
     for(const line of $('language-boundaries').value.split('\n').filter(x=>x.trim())){const match=line.match(/^\s*(#+)\s*=\s*(.+?)\s*$/);if(!match||m.phonological_boundaries[match[1]])throw Error((globalThis.CorporiumI18n?.f("fceaf0a055cf29",()=>[])??'边界请按“# = 音系词边界”填写，井号数量不能重复、名称不能为空'));m.phonological_boundaries[match[1]]=match[2];}
-    for(const [k] of checkFields)m[k]=$('language-'+k).checked;
-    const result=await api('save-language',{id:editingLanguage?.id,revision:editingLanguage?.revision,name:$('language-name').value,metadata:m,_language:editingLanguage?.id||activeLanguage});
-    $('language-dialog').close();await switchLanguage(result.id);
-  }catch(e){$('language-error').textContent=e.message}finally{$('save-language').disabled=false;}
+  }
+  return m;
+}
+$('language-form').onsubmit=event=>{
+  event.preventDefault();
+  return runSettingsEditorAction('language-dialog',async()=>{
+    const button=$('save-language'),dialog=$('language-dialog');
+    const owner=editingLanguage,group=dialog.dataset.languageFields||'all';
+    if(button.disabled)return;
+    button.disabled=true;
+    $('language-error').textContent='';
+    try{
+      const name=group==='all'||group==='information'?$('language-name').value:owner.name;
+      const metadata=readLanguageForm(owner,owner?group:'all');
+      const result=await api('save-language',{id:owner?.id,revision:owner?.revision,name,metadata,_language:owner?.id||activeLanguage});
+      if(group==='all'){
+        dialog.close();
+        await switchLanguage(result.id);
+        return;
+      }
+      const revision=(owner?.revision||0)+1;
+      let saved=languageList.find(row=>row.id===result.id&&row.revision>=revision);
+      if(!saved){
+        saved={id:result.id,name:name.trim(),metadata:JSON.stringify(metadata),revision};
+        languageList=[...languageList.filter(row=>row.id!==result.id),saved];
+        renderLanguage();
+      }
+      fillLanguageForm(saved);
+      await window.CorporiumManagement.languageSaved(saved.id);
+      if((activeLanguage===saved.id||activeLanguage==='all')&&!infoDirty&&!inlineDrafts.size&&
+         !document.querySelector('#lexeme-editor[open],#morpheme-editor[open],#lexeme-quick-editor[open]')){
+        await refreshExampleViews();
+      }
+    }catch(error){$('language-error').textContent=error.message;}
+    finally{button.disabled=false;}
+  });
 };
-$('export-language').onclick=safe(async()=>{const data=await api('export-language');download((languageList.find(l=>l.id===activeLanguage)?.name||'language').replace(/[\\/:*?"<>|]/g,'-')+'.json',JSON.stringify(data,null,2),'application/json');});
 $('import').onclick=()=>{$('import-language').innerHTML=languageOptions();$('import-language').value=activeLanguage==='all'?(languageList[0]?.id||''):activeLanguage;$('import-dialog').showModal();};
 $('import-submit').onclick=async()=>{
   $('import-submit').disabled=true;
@@ -134,7 +176,7 @@ $('import-submit').onclick=async()=>{
     const lid=$('import-language').value;
     const content=$('import-content').value;
     let r;
-    if(content.trim().startsWith('{'))throw Error((globalThis.CorporiumI18n?.f("23c71163f1a37c",()=>[])??'这里仅导入 Typst 文本。语言 JSON 请在左侧“语言选项 → 导入语言数据包”中导入。'));
+    if(content.trim().startsWith('{'))throw Error(globalThis.CorporiumI18n?.ui('此处接收 Typst 文本。语言 JSON 可在「管理 → 语言 → 导入语言」中导入。','This importer accepts Typst text. Import language JSON in Manage → Languages → Import language.')??'语言 JSON 可在「管理 → 语言 → 导入语言」中导入。');
     else{if(!title)throw Error((globalThis.CorporiumI18n?.f("988c2a41f92b05",()=>[])??'请填写文本标题'));r=await api('import',{title,source:$('source').value,content,_language:lid});}
     $('import-dialog').close();await switchLanguage(lid);await selectText(r.id||'');
     if(r.duplicate)corporiumStatus((globalThis.CorporiumI18n?.f("7dca9c99b8d4a8",()=>[])??'这份源文件已在本语言中导入，已打开已有文本。'));
@@ -202,7 +244,19 @@ selectText=async function(id,...options){
   await languageSelectText(id,...options);renderLanguage();
 };
 try{activeLanguage=localStorage.getItem(projectStorageKey('corpus-language'))||'ordos'}catch{}
-const corpusReady=(async()=>{await loadLanguages();await selectText('');await refreshUndo();})().catch(e=>{$('notice').textContent=e.message;});
+// Fast local responses must not render before later scripts have installed
+// typography, word/annotation renderers, draft guards and history wrappers.
+let initialLanguageCatalog=null;
+const initialLanguageReady=api('languages').then(rows=>{
+  initialLanguageCatalog=rows;languageList=rows;
+  if(activeLanguage!=='all'&&!rows.some(l=>l.id===activeLanguage))activeLanguage=rows.find(l=>l.id==='ordos')?.id||rows[0]?.id||'all';
+});
+void initialLanguageReady.catch(()=>{});
+const corpusUiReady=document.readyState==='loading'?new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true})):Promise.resolve();
+const corpusReady=(async()=>{
+  await initialLanguageReady;await corpusUiReady;
+  await loadLanguages();await selectText('');await refreshUndo();
+})().catch(e=>{$('notice').textContent=e.message;});
 
 function refreshLanguageIPA(){const v=variantStyle($('language-ipa-variant').value);Object.assign($('language-native_name').style,{fontFamily:rowFontCSS($('language-ipa-font').value),fontStyle:v.style,fontWeight:v.weight});}
 $('language-ipa-font').addEventListener('change',refreshLanguageIPA);

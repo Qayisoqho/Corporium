@@ -68,7 +68,7 @@ class DictionaryLayerTests(unittest.TestCase):
         self.assertEqual(self.projected(src,layer)[1]['font'],'serif')
         d=self.api('annotations?kind=corpus&id='+src['id']);self.assertEqual(d['cells'],[])
         with server.connect(audit=False) as db:
-            body=json.loads(db.execute('SELECT body FROM entries WHERE id=?',(src['id'],)).fetchone()[0])
+            body=json.loads(db.execute('SELECT body FROM entries_documents WHERE id=?',(src['id'],)).fetchone()[0])
             self.assertFalse(any(l.get('derived') for w in body['words'] for l in w.get('extra_layers',[])))
 
     def test_both_sources_selected_usage_sense_types_and_live_update_without_cells(self):

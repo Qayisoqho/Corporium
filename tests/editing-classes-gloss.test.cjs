@@ -21,13 +21,18 @@ test('class edits accept only the revision they changed and retain unrelated dra
  c.acceptClassChange({editor_before_revision:2,editor_target:{id:'x',revision:8}});assert.equal(c.editingLexeme.revision,3);
  c.acceptClassChange({editor_before_revision:3,editor_target:{id:'x',revision:4,body:{updated:true}}});assert.equal(c.editingLexeme.revision,4);assert.equal(c.editingLexeme.headword,'a');
 });
-test('new sentence card replaces only its own draft and retains current list and filters',async()=>{
- const calls=[],card={getBoundingClientRect:()=>({top:80}),querySelector:()=>({})},host={getBoundingClientRect:()=>({top:80}),replaceWith:el=>{assert.equal(el,card);calls.push('replace');}},items=[{id:'existing'}];
- const c=vm.createContext({api:async path=>{calls.push(path);return {body:{ipa:'new',words:[]},owner_language:'ordos',revision:1};},texts:[{id:'t',title:'Text'}],document:{createElement:()=>({firstElementChild:card})},corpusEntryCard:()=>'<article>',items,safe:f=>f,edit(){},loadTexts:async()=>calls.push('counts'),window:{scrollBy:()=>calls.push('anchor')}});
+test('new sentence reloads its actual page before revealing the saved identity',async()=>{
+ const calls=[],card={},host={remove:()=>calls.push('remove')};
+ const c=vm.createContext({workspace:'corpus',activeLanguage:'ordos',selected:'t',URLSearchParams,pageSize:()=>20,
+  api:async path=>{calls.push(path);return {page:3};},clearFilters:()=>calls.push('filters'),loadTexts:async()=>calls.push('counts'),
+  search:async()=>{assert.equal(c.page,3);calls.push('search');},$:id=>{assert.equal(id,'entry-new');return card;},revealCreatedRecord:async node=>{assert.equal(node,card);calls.push('reveal');}});
  const s=source('sentence-create');vm.runInContext(s.slice(s.indexOf('async function saveNewCorpusInPlace('),s.indexOf('(()=>{')),c);
- assert.equal(await c.saveNewCorpusInPlace({id:'new',text_id:'t',position:28},{host}),true);
- assert.equal(items[0].id,'existing');assert.equal(items[1].id,'new');assert.deepEqual(calls,['annotations?kind=corpus&id=new','replace','counts','anchor']);
+ const draft={workspace:'corpus',language_id:'ordos',text_id:'t',host};
+ assert.equal(await c.saveNewCorpusInPlace({id:'new'},draft),true);
+ assert.deepEqual(calls,['entry-page?id=new&page_size=20','remove','filters','counts','search','reveal']);
+ calls.length=0;c.selected='other';await c.saveNewCorpusInPlace({id:'new'},draft);assert.deepEqual(calls,[]);
 });
+
 test('dragging orders sibling classes only and carries their stable revisions',async()=>{
  const rows=[{id:'a',parent_id:null,revision:2},{id:'b',parent_id:null,revision:5},{id:'c',parent_id:'a',revision:1}],nodes=rows.map(r=>({dataset:{classRow:r.id},classList:{add(){},remove(){}},prepend(b){this.handle=b;}})),calls=[];
  const host={querySelectorAll:s=>s==='[data-class-row]'?nodes:s==='button'?nodes.map(n=>n.handle):[]},c=vm.createContext({window:{},document:{createElement:()=>({setAttribute(){}})},corporiumAlert:async m=>{throw Error(m);}});

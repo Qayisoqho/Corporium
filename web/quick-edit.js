@@ -7,7 +7,29 @@
  let formHome=null,saveHome=null,typeHome=null,expanded=false,sequence=0,columns=[],opening=false;
  const notify=phase=>editor.dispatchEvent(new CustomEvent('corporium-quick-edit',{detail:{phase}}));
  const typeField=$('morph-entry-type').closest('label'),identity=form.querySelector(':scope>.metadata-grid');
- const rows=createQuickEditRows(()=>dialog.open,()=>columns);
+ const rows=createQuickEditRows(()=>dialog.open||!!window.CorporiumChineseMode?.tableActive(),()=>columns,{
+  analyses:()=>window.CorporiumChineseMode?.tableAnalyses()||[...$('ws-analyses').children],
+  omitGloss:()=>!!window.CorporiumChineseMode?.generated(),
+  gridNavigation:()=>!!window.CorporiumChineseMode?.generated(),
+  componentsOnly:()=>!dialog.open,
+  changed:()=>window.CorporiumChineseMode?.refresh(false)
+ });
+ let settingsRequest=null,settingsLanguage='';
+ function editorSettings(lid){
+  if(settingsLanguage!==lid||!settingsRequest){
+   settingsLanguage=lid;
+   const pending=api('quick-edit-settings?'+new URLSearchParams({language:lid}));
+   settingsRequest=pending;
+   pending.catch(()=>{if(settingsRequest===pending)settingsRequest=null;});
+  }
+  return settingsRequest;
+ }
+ editor.addEventListener('corporium-lexeme-opened',()=>{settingsRequest=null;});
+ window.CorporiumQuickEdit={
+  refresh:()=>rows.refresh(),clear:()=>rows.clear(),
+  async settings(lid){const data=await editorSettings(lid);if($('lexeme-language').value===lid)columns=data.selected;return data;},
+  invalidateSettings:()=>{settingsRequest=null;}
+ };
  $('add-orthography').addEventListener('click',()=>rows.refresh());
  function componentColumns(row){
   if(row.registryRecord)return;
@@ -33,7 +55,7 @@
   const request=++sequence,lid=$('lexeme-language').value;
   opening=true;button.disabled=true;button.setAttribute('aria-busy','true');
   try{
-   const settings=await api('quick-edit-settings?'+new URLSearchParams({language:lid}));
+   const settings=await editorSettings(lid);
    if(request!==sequence||!editor.open||$('lexeme-language').value!==lid)return;
    notify('prepare');
    columns=settings.selected;
@@ -76,19 +98,49 @@
   }
  },true);
 
- const manage=document.createElement('button');manage.id='quick-edit-manager-open';manage.textContent=(globalThis.CorporiumI18n?.f("827f3c551899e6",()=>[])??'词条快捷编辑管理');$('management-entries').append(manage);
  makeDialog('quick-edit-manager',(globalThis.CorporiumI18n?.f("c08473fd6215d3",()=>[])??'<h2>词条快捷编辑管理</h2><label>语言<select id="quick-edit-language"></select></label><p>选择打开快捷编辑时始终显示的书写形式。</p><form id="quick-edit-settings-form"><div id="quick-edit-writing-types"></div><p id="quick-edit-settings-error" role="alert"></p><button class="primary" type="submit">保存设置</button></form>'));
+ const ui=(zh,en)=>globalThis.CorporiumI18n?.ui(zh,en)??zh;
+ const manager=$('quick-edit-manager');
+ manager.querySelector('h2').textContent=ui('词典录入','Lexicon entry');
+ const writingHeading=document.createElement('h3');
+ writingHeading.className='ui-heading';
+ writingHeading.textContent=ui('默认书写列','Default writing columns');
+ const settingsHelp=manager.querySelector('p');
+ settingsHelp.classList.add('ui-help');
+ settingsHelp.textContent=ui('用于词条快捷编辑和汉语模式语素表。','Shown in quick edit and in the Chinese mode morpheme table.');
+ $('quick-edit-writing-types').before(writingHeading,settingsHelp);
  let settings=null,settingsSequence=0;
  async function load(){
   const request=++settingsSequence,lid=$('quick-edit-language').value;settings=null;$('quick-edit-settings-error').textContent='';$('quick-edit-writing-types').replaceChildren();
-  try{const data=await api('quick-edit-settings?'+new URLSearchParams({language:lid}));if(request!==settingsSequence)return;settings=data;
-   $('quick-edit-writing-types').innerHTML=data.writing_types.map(t=>`<label><input type="checkbox" value="${esc(t.id)}" ${data.selected.includes(t.id)?'checked':''}> ${esc(t.name)}</label>`).join('')||(globalThis.CorporiumI18n?.f("e5558898f26c4a",()=>[])??'<small>此语言尚无书写类型，可先在书写类型管理中添加。</small>');
-  }catch(e){if(request===settingsSequence)$('quick-edit-settings-error').textContent=e.message;}
+  const data=await api('quick-edit-settings?'+new URLSearchParams({language:lid}));
+  if(request!==settingsSequence)return;
+  settings=data;
+  $('language-chinese-mode').checked=data.chinese_mode;
+  $('quick-edit-writing-types').innerHTML=data.writing_types.map(t=>`<label class="ui-label"><input type="checkbox" value="${esc(t.id)}" ${data.selected.includes(t.id)?'checked':''}> ${esc(t.name)}</label>`).join('')||(globalThis.CorporiumI18n?.f("e5558898f26c4a",()=>[])??'<small>此语言尚无书写类型，可先在书写类型管理中添加。</small>');
  }
- manage.onclick=async()=>{$('management-dialog').close();$('quick-edit-language').innerHTML=languageOptions();$('quick-edit-language').value=activeLanguage==='all'?'ordos':activeLanguage;$('quick-edit-manager').showModal();await load();};
- $('quick-edit-language').onchange=load;
- $('quick-edit-settings-form').onsubmit=async event=>{event.preventDefault();if(!settings)return;const submit=event.submitter||$('quick-edit-manager').querySelector('[type="submit"]');submit.disabled=true;$('quick-edit-language').disabled=true;
-  try{await api('quick-edit-settings',{_language:$('quick-edit-language').value,revision:settings.revision,writing_types:[...$('quick-edit-writing-types').querySelectorAll('input:checked')].map(e=>e.value)});$('quick-edit-manager').close();}
-  catch(e){$('quick-edit-settings-error').textContent=e.message;}finally{submit.disabled=false;$('quick-edit-language').disabled=false;}
+ window.CorporiumQuickEdit.openSettings=async lid=>{
+  $('quick-edit-language').innerHTML=languageOptions();
+  $('quick-edit-language').value=lid;
+  await load();
+  showSettingsEditor(manager.id);
+ };
+ $('quick-edit-settings-form').onsubmit=event=>{
+  event.preventDefault();
+  if(!settings)return;
+  return runSettingsEditorAction(manager.id,async()=>{
+   const submit=event.submitter||manager.querySelector('[type="submit"]');
+   submit.disabled=true;
+   $('quick-edit-settings-error').textContent='';
+   try{
+    settings=await api('quick-edit-settings',{
+     _language:$('quick-edit-language').value,revision:settings.revision,
+     chinese_mode:$('language-chinese-mode').checked,
+     writing_types:[...$('quick-edit-writing-types').querySelectorAll('input:checked')].map(input=>input.value)
+    });
+    window.CorporiumQuickEdit.invalidateSettings();
+    window.CorporiumManagement.saved(manager.id);
+   }catch(error){$('quick-edit-settings-error').textContent=error.message;}
+   finally{submit.disabled=false;}
+  });
  };
 })();

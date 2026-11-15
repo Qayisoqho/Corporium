@@ -1,3 +1,4 @@
+import source_fixtures
 import unittest
 import json
 from pathlib import Path
@@ -68,8 +69,8 @@ class HomonymTests(unittest.TestCase):
         a=self.create();b=self.create()
         with server.connect() as db:
             for x in (a,b):
-                body=json.loads(db.execute('SELECT body FROM lexemes WHERE id=?',(x['id'],)).fetchone()[0]);body.pop('homonym_number',None)
-                db.execute('UPDATE lexemes SET body=? WHERE id=?',(json.dumps(body),x['id']))
+                body=json.loads(db.execute('SELECT body FROM lexemes_documents WHERE id=?',(x['id'],)).fetchone()[0]);body.pop('homonym_number',None)
+                source_fixtures.replace(db,'lexemes',x['id'],json.dumps(body))
         a=self.get(a);b=self.get(b)
         self.assertEqual(b['body']['homonym_number'],2)
         self.assertEqual(self.call('/api/lexeme-delete',dict(id=a['id'],revision=a['revision'],confirmed=True))[0],200)

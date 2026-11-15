@@ -1,3 +1,4 @@
+import source_fixtures
 import unittest
 import test_segmentation
 import corpus
@@ -30,7 +31,7 @@ class MorphemeColorTests(unittest.TestCase):
         u=self.api('unit-dictionary?id='+e['words'][0]['unit_id'])
         self.api('lexeme-link',dict(unit_id=u['id'],unit_revision=u['revision'],entry_revision=u['entry_revision'],revision=0,lexeme_id=x['id'],lexeme_revision=x['revision']))
         with server.connect(audit=False) as db:
-            db.executemany('INSERT INTO morphemes VALUES(?,?,?,?,?,1)',[(f'm{i}','ordos',f'unused{i}',1,'{"gloss":"unused"}') for i in range(50)])
+            source_fixtures.seed_many(db,'morphemes',('id', 'language_id', 'form', 'number', 'body', 'revision'),((row[0], row[1], row[2], row[3], row[4], 1) for row in [(f'm{i}','ordos',f'unused{i}',1,'{"gloss":"unused"}') for i in range(50)]))
             def unexpected(*args):raise AssertionError('unrelated native morphemes must not be projected')
             db.create_function('json_set',-1,unexpected)
             body=corpus.analyze(dict(ipa='',translation='',words=[dict(form='word',gloss='note')]))
@@ -159,7 +160,7 @@ class MorphemeColorTests(unittest.TestCase):
         source=server.DB.parent/'types-backup.json';dest=server.DB.parent/'restored-types.sqlite3'
         source.write_text(json.dumps(self.api('backup')),encoding='utf-8');restore(source,dest)
         with closing(sqlite3.connect(dest)) as db:
-            self.assertEqual({json.loads(r[0])['entry_type'] for r in db.execute("SELECT body FROM lexemes WHERE language_id='ordos'")},set(labels))
+            self.assertEqual({r[0] for r in db.execute("SELECT d.value FROM dictionary_value_rows d JOIN lexemes x ON x.id=d.target_id WHERE d.target_kind='lexeme' AND d.parent=0 AND d.slot='entry_type' AND x.language_id='ordos'")},set(labels))
 
 
 if __name__=='__main__':unittest.main()

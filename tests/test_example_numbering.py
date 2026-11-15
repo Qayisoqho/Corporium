@@ -44,11 +44,11 @@ class ExampleNumberingTests(unittest.TestCase):
     def test_upgrade_backfills_in_original_order_without_changing_sentences_or_references(self):
         ids=[self.example(str(i))['id'] for i in range(3)]
         with server.connect() as db:
-            before=[tuple(r) for r in db.execute('SELECT rowid,* FROM dictionary_examples ORDER BY rowid')]
+            before=[tuple(r) for r in db.execute('SELECT rowid,* FROM dictionary_examples_documents ORDER BY rowid')]
             db.execute('DROP TABLE example_numbers');db.execute('DROP TABLE example_number_counters')
         server.init()
         with server.connect() as db:
-            self.assertEqual(before,[tuple(r) for r in db.execute('SELECT rowid,* FROM dictionary_examples ORDER BY rowid')])
+            self.assertEqual(before,[tuple(r) for r in db.execute('SELECT rowid,* FROM dictionary_examples_documents ORDER BY rowid')])
         self.assertEqual([self.record(e)['library_number'] for e in ids],[1,2,3])
         snapshots=list((server.DB.parent/'backups').glob('*.sqlite3'));self.assertTrue(snapshots)
         with closing(sqlite3.connect(snapshots[-1])) as old:

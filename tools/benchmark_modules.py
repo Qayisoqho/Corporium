@@ -1,4 +1,4 @@
-"""Cross-module synthetic performance lab. Output confined to build/; generated media only."""
+"""Cross-module synthetic performance lab. Output confined to build/; media linked only."""
 import sys,os,json,time,sqlite3,statistics,subprocess,ctypes,threading,platform,traceback,argparse,copy
 from pathlib import Path
 from urllib.parse import urlencode
@@ -20,40 +20,38 @@ def memory():
  return dict(rss_mib=c.rss/1048576,peak_mib=c.peak/1048576)
 def size(p):return sum(f.stat().st_size for f in p.rglob('*') if f.is_file())
 def fixture(out,n):
+ import record_sources
  path=out/f'synthetic-{n}.sqlite3';eid,texts,counts=create(path,n)
  with server.connect(audit=False) as db:
-  lex=list(db.execute('SELECT * FROM lexemes'));entries=list(db.execute('SELECT id,body FROM entries'));mids=[]
+  lex=list(record_sources.with_bodies(db,'lexemes',db.execute('SELECT id FROM lexemes')))
+  entries=list(record_sources.with_bodies(db,'entries',db.execute('SELECT id FROM entries')));mids=[]
   for i,r in enumerate(lex):
-   body=json.loads(r['body']);form='m'+str(i);reading=('m','p','t','k')[i%4]+('a','i','u','ai')[i//4%4]+('55','21','35','51')[i//16%4]
+   body=r['body'];form='m'+str(i);reading=('m','p','t','k')[i%4]+('a','i','u','ai')[i//4%4]+('55','21','35','51')[i//16%4]
    body['word_structure']={'analyses':[{'id':'a','title':'合成共时分析','components':[{'id':'c','form':form,'gloss':'合成义'+str(i%30),'readings':[reading]}]}]}
-   body=lexicon.normalize(body);db.execute('UPDATE lexemes SET body=? WHERE id=?',(encode(body),r['id']))
+   body=lexicon.normalize(body);record_sources.write(db,'lexemes',r['id'],body,bump=False)
    mid=uid();mids.append(mid);mb=dict(gloss='合成义'+str(i%30),readings=[reading],writings=[],features=[],senses=[],notes='性能测试语素')
-   db.execute('INSERT INTO morphemes VALUES(?,?,?,?,?,1)',(mid,'ordos',form,1,encode(mb)))
+   record_sources.write(db,'morphemes',mid,mb,columns=dict(language_id='ordos',form=form,number=1,revision=1),insert=True)
    ref=component_links.choose(body,dict(analysis_id='a',component_id='c'))
    db.execute('INSERT INTO morpheme_components VALUES(?,?,?,?,?,?,1)',(uid(),r['id'],'a','c',mid,encode(ref)))
    if i and i%2:
     synonyms.mutate(db,'ordos',dict(source=dict(kind='morpheme',id=mids[-2],sense='@main'),target=dict(kind='morpheme',id=mid,sense='@main')))
   for i in range(max(100,n//10)):
-   body=json.loads(entries[i%len(entries)]['body']);body.update(language_id='ordos',targets=[],source='合成独立例句')
-   db.execute('INSERT INTO dictionary_examples(id,language_id,body,revision) VALUES(?,?,?,1)',(uid(),'ordos',encode(body)))
+   body=dict(entries[i%len(entries)]['body'],language_id='ordos',targets=[],source='合成独立例句')
+   record_sources.write(db,'dictionary_examples',uid(),body,columns=dict(language_id='ordos'),insert=True)
   survey=[]
   for i in range(max(100,n//25)):
    parent=None if i%20==0 else survey[i-i%20];kind='section' if i%20==0 else 'question'
    node=grammar_survey.insert_node(db,'ordos',parent,kind,'合成调查 '+str(i),grammar_survey.clean_body(db,{},'ordos'));survey.append(node)
    if kind=='question':
     db.execute('INSERT INTO survey_evidence VALUES(?,?,?,?,?,?,?,1)',(uid(),'ordos',node,'corpus',entries[i%len(entries)]['id'],0,encode(grammar_survey.clean_body(db,{},'ordos',True))))
-  # A deterministic generated waveform replaces all private recordings.
-  import wave,struct,math
-  media=ROOT/'build/test-materials-runs/media';media.mkdir(parents=True,exist_ok=True)
-  file=media/'synthetic-tone.wav'
-  if not file.exists():
-   with wave.open(str(file),'wb') as wav:
-    wav.setnchannels(1);wav.setsampwidth(2);wav.setframerate(8000)
-    wav.writeframes(b''.join(struct.pack('<h',int(1000*math.sin(2*math.pi*220*i/8000))) for i in range(32000)))
-  meta=media_engine.probe(file)
-  asset=dict(name=file.name,path=str(file.resolve()),storage='link',metadata=meta)
-  sid=timeline.mutate(db,'ordos','create',{'name':'合成音频会话'},asset)['id']
-  assets=[dict(session=sid,**asset)]
+  # Sessions reference real files by absolute path, never copies or proxies.
+  assets=[]
+  for file in sorted((ROOT/'test_media').iterdir()):
+   if file.suffix.lower() not in media_engine.EXTENSIONS:continue
+   try:meta=media_engine.probe(file)
+   except Exception:continue
+   asset=dict(name=file.name,path=str(file.resolve()),storage='link',metadata=meta)
+   sid=timeline.mutate(db,'ordos','create',{'name':'性能测试 '+file.name},asset)['id'];assets.append(dict(session=sid,**asset))
   sid=assets[0]['session'];tracks=[db.execute('SELECT id FROM timeline_tracks WHERE session_id=?',(sid,)).fetchone()[0]]
   for i in range(1,8):
    tid=uid();tracks.append(tid);db.execute('INSERT INTO timeline_tracks(id,session_id,name,kind,position) VALUES(?,?,?,?,?)',(tid,sid,'合成轨道'+str(i),'sentence',i))
@@ -91,7 +89,8 @@ def operation(out,n,name):
    api('/api/save',{**e,'notes':original+' 性能协作编辑','_language':'ordos'})
    api(url('/api/segmentation',kind='corpus',id=e['id']));api(url('/api/lexeme-examples',id=f['lexeme']));api(url('/api/survey-detail',id=f['survey']));api(routes['timeline'])
    st=api(url('/api/undo-state'));api('/api/undo',{'generation':st['generation'],'_language':'ordos'})
-   with server.connect(audit=False) as db:assert json.loads(db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0])['notes']==original
+   from record_sources import read
+   with server.connect(audit=False) as db:assert read(db,'entries',e['id'])['notes']==original
    return {'verified':'edit, segmentation, dictionary, survey, timeline, undo'}
   if name=='replace_undo':
    req=dict(field='translation',find='旧术语',replacement='新术语',text_id=f['texts'][0],_language='ordos');p=api('/api/text-replace-preview',req)
@@ -111,7 +110,7 @@ def operation(out,n,name):
  dump(out/f'{n}-{name}.json',row)
 
 def run(out,sizes):
- out.mkdir(parents=True,exist_ok=True);dump(out/'environment.json',dict(platform=platform.platform(),python=sys.version,cpu_count=os.cpu_count(),sizes=sizes,method='Fresh process per operation, first application-cold (OS file cache NOT flushed), then 2 warm repetitions. In-process real HTTP handler, includes JSON serialization but excludes socket/render latency.',media_policy='generated synthetic waveform only; no private recordings'))
+ out.mkdir(parents=True,exist_ok=True);dump(out/'environment.json',dict(platform=platform.platform(),python=sys.version,cpu_count=os.cpu_count(),sizes=sizes,method='Fresh process per operation, first application-cold (OS file cache NOT flushed), then 2 warm repetitions. In-process real HTTP handler, includes JSON serialization but excludes socket/render latency.',media_policy='link only; no source copies, no video proxies'))
  results=[]
  def child(n,op,timeout):
   log=out/f'{n}-{op}.log';start=time.perf_counter()

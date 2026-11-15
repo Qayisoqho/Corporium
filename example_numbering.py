@@ -16,7 +16,20 @@ def initialize(db):
     CREATE TABLE IF NOT EXISTS example_numbers(
       ordering INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT NOT NULL,language_id TEXT NOT NULL,
       number INTEGER NOT NULL CHECK(number>0),UNIQUE(language_id,id),UNIQUE(language_id,number));''')
+    db.execute('CREATE TABLE IF NOT EXISTS example_number_pending(id TEXT PRIMARY KEY) WITHOUT ROWID')
+    for table,event,ref in (('dictionary_examples','INSERT','NEW'),('dictionary_examples','UPDATE OF id,language_id','NEW'),
+                            ('example_numbers','DELETE','OLD'),('example_numbers','UPDATE OF id,language_id','OLD')):
+        verb=event.split()[0]
+        db.execute(f"""CREATE TRIGGER IF NOT EXISTS number_pending_{table}_{verb} AFTER {event} ON {table}
+            BEGIN INSERT INTO example_number_pending SELECT {ref}.id
+            WHERE NOT EXISTS(SELECT 1 FROM example_number_pending WHERE id={ref}.id); END""")
     reconcile(db)
+
+
+def drop_queue(db):
+    for table,event in (('dictionary_examples','INSERT'),('dictionary_examples','UPDATE'),('example_numbers','DELETE'),('example_numbers','UPDATE')):
+        db.execute(f'DROP TRIGGER IF EXISTS number_pending_{table}_{event}')
+    db.execute('DROP TABLE IF EXISTS example_number_pending')
 
 
 def assign(db, lid, eid):
@@ -34,11 +47,15 @@ def assign(db, lid, eid):
     return number
 
 
-def assign_missing(db):
-    rows = db.execute('''SELECT d.id,d.language_id FROM dictionary_examples d
-      LEFT JOIN example_numbers n ON n.id=d.id AND n.language_id=d.language_id
-      WHERE n.id IS NULL ORDER BY d.rowid''').fetchall()
-    for row in rows: assign(db, row['language_id'], row['id'])
+def assign_missing(db,*,all_rows=False):
+    queued=db.execute("SELECT 1 FROM sqlite_master WHERE name='example_number_pending'").fetchone()
+    if queued and not all_rows and not db.execute('SELECT 1 FROM example_number_pending LIMIT 1').fetchone():return
+    source='dictionary_examples d' if all_rows or not queued else 'example_number_pending p CROSS JOIN dictionary_examples d ON d.id=p.id'
+    rows=db.execute('SELECT d.id,d.language_id FROM '+source+''' LEFT JOIN example_numbers n ON n.id=d.id AND n.language_id=d.language_id
+                      WHERE n.id IS NULL ORDER BY d.rowid''').fetchall()
+    for row in rows:assign(db,row['language_id'],row['id'])
+    if queued and db.execute('SELECT 1 FROM example_number_pending LIMIT 1').fetchone():
+        db.execute('DELETE FROM example_number_pending')
 
 
 def reconcile(db):
@@ -46,7 +63,7 @@ def reconcile(db):
     # beyond the last live sentence. Never lower their high-water marks.
     for row in db.execute('SELECT language_id,MAX(number)+1 next_number FROM example_numbers GROUP BY language_id').fetchall():
         advance(db, row['language_id'], row['next_number'])
-    assign_missing(db)
+    assign_missing(db,all_rows=True)
 
 
 def advance(db, lid, next_number):

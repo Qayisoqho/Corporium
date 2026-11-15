@@ -20,9 +20,28 @@ class CandidateTests(unittest.TestCase):
         code,r=self.call('/api/example-save',dict(body=dict(words=[dict(form='dog-x',gloss='dog-PL'),dict(form='other',gloss='house')],targets=[])))
         self.assertEqual(code,200,r);return r
 
+    def test_registry_counts_follow_candidate_and_description_edits(self):
+        self.sources()
+        tag=self.tag('PL',aliases=['plural'])
+        def compare():
+            for source in ('all','corpus','independent'):
+                for lower in ('true','false'):
+                    query=f'language=ordos&source={source}&lower={lower}'
+                    code,registry=self.call('/api/grammar-audit?view=registry&'+query)
+                    self.assertEqual(code,200,registry)
+                    code,audit=self.call('/api/grammar-audit?'+query)
+                    self.assertEqual(code,200,audit)
+                    self.assertEqual(registry,{k:audit[k] for k in registry})
+        compare()
+        self.assertEqual(self.call('/api/grammar-save',{**tag,'description':'changed','aliases':['plural','CUSTOM']})[0],200)
+        compare()
+        self.undo()
+        compare()
+
     def bodies(self):
         with server.connect(audit=False) as db:
-            return {t:[tuple(r) for r in db.execute('SELECT id,body FROM '+t+' ORDER BY id')] for t in ('entries','dictionary_examples')}
+            from record_sources import with_bodies
+            return {t:list(with_bodies(db,t,db.execute('SELECT id FROM '+t+' ORDER BY id'))) for t in ('entries','dictionary_examples')}
 
     def test_reference_never_registers_or_counts_and_default_excludes_english(self):
         self.sources();before=self.bodies()
@@ -92,12 +111,12 @@ class CandidateTests(unittest.TestCase):
         self.assertFalse(any('house' in w or 'CUSTOM' in w or 'come' in w for w in warnings))
         with server.connect(audit=False) as db:
             import annotations
-            body=annotations.enrich(db,json.loads(db.execute('SELECT body FROM dictionary_examples WHERE id=?',(example['id'],)).fetchone()[0]),'independent',example['id'])
+            body=annotations.enrich(db,json.loads(db.execute('SELECT body FROM dictionary_examples_documents WHERE id=?',(example['id'],)).fetchone()[0]),'independent',example['id'])
         self.assertTrue(any('PL' in w for w in body['warnings']))
         self.write('grammar-ignore',[dict(symbol='PL')])
         self.assertFalse(any('PL' in w for w in self.entries()[0]['warnings']))
         with server.connect(audit=False) as db:
-            body=annotations.enrich(db,json.loads(db.execute('SELECT body FROM dictionary_examples WHERE id=?',(example['id'],)).fetchone()[0]),'independent',example['id'])
+            body=annotations.enrich(db,json.loads(db.execute('SELECT body FROM dictionary_examples_documents WHERE id=?',(example['id'],)).fetchone()[0]),'independent',example['id'])
         self.assertEqual(body['warnings'],[])
 
     def test_formal_only_script_alias_composition_and_reference_matching(self):

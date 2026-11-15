@@ -7,8 +7,20 @@ function createHomophonePhonology(panel,rerun){
  const pending=document.createElement('details');pending.id='hp-pending';pending.open=true;pending.innerHTML=(globalThis.CorporiumI18n?.f("b9de5f5eba87a6",()=>[])??'<summary>待归类读音</summary><div class="homophone-links"><button type="button" id="hp-select-unique">勾选本页唯一匹配</button><button type="button" id="hp-confirm-selected">确认勾选项</button><button type="button" id="hp-confirm-all">确认本语言全部唯一匹配</button></div><nav id="hp-pending-pages"></nav><div id="hp-pending-list"></div>');$('homophone-review').before(pending);pending.hidden=true;
  const side=document.createElement('aside');side.id='hp-inspector';side.hidden=true;side.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("0a68794e7ecc91",()=>[])??'语素与所见词条'));side.innerHTML=(globalThis.CorporiumI18n?.f("c6e072f6ea830a",()=>[])??'<div class="hp-resize" role="separator" tabindex="0" aria-label="调整语素面板宽度" aria-orientation="vertical" aria-valuemin="280" aria-valuemax="620"></div><header><h2>语素与所见词条</h2><button type="button" aria-label="关闭语素面板">×</button></header><div id="hp-inspector-content"></div>');document.body.append(side);
  let config=null,entries=[],pendingPage=1,sideSeq=0,editingReading='',editingLanguage=null;
+ let inventoryConfig=null,inventoryLanguage=null;
  $('hp-select-unique').onclick=()=>panel.querySelectorAll('[data-hp-unique]').forEach(e=>e.checked=true);
- async function bulk(all){if(all&&!await corporiumConfirm((globalThis.CorporiumI18n?.f("0dfbe10d18726f",()=>[])??'确认当前语言全部唯一匹配的读音？包含按修改后音系重新匹配的唯一候选；歧义、无法匹配及临时代用形式不会纳入。可撤销。')))return;await api('homophone-phonology-save',{action:'confirm_unique',token:config.token,all,readings:[...panel.querySelectorAll('[data-hp-unique]:checked')].map(e=>e.dataset.hpUnique)});await loadLanguages();await rerun();}
+ async function saveConfiguration(body,language=activeLanguage,token=config.token){
+  const data=await api('homophone-phonology-save',{...body,_language:language,_language_update:true,token});
+  const change=data._language_update;delete data._language_update;
+  const row=languageList.find(r=>r.id===language);
+  if(change&&row&&change.id===language&&row.revision===change.before){
+   const meta=JSON.parse(row.metadata);
+   meta.homophone_phonology={initials:data.initials,finals:data.finals,tones:data.tones,assignments:data.assignments};
+   row.metadata=JSON.stringify(meta);row.revision=change.revision;
+  }else{await loadLanguages();}
+  return data;
+ }
+ async function bulk(all){if(all&&!await corporiumConfirm((globalThis.CorporiumI18n?.f("0dfbe10d18726f",()=>[])??'确认当前语言全部唯一匹配的读音？包含按修改后音系重新匹配的唯一候选；歧义、无法匹配及临时代用形式不会纳入。可撤销。')))return;config=await saveConfiguration({action:'confirm_unique',all,readings:[...panel.querySelectorAll('[data-hp-unique]:checked')].map(e=>e.dataset.hpUnique)});await rerun();}
  $('hp-confirm-selected').onclick=safe(()=>bulk(false));$('hp-confirm-all').onclick=safe(()=>bulk(true));
  const close=()=>{sideSeq++;side.hidden=true;document.documentElement.classList.remove('hp-inspecting');};side.querySelector('header button').onclick=close;
  const resize=side.querySelector('.hp-resize');let width=360;
@@ -32,9 +44,45 @@ function createHomophonePhonology(panel,rerun){
  function readInventory(){return Object.fromEntries(axes.map(axis=>[axis,[...$('hp-inventories').querySelector(`[data-axis="${axis}"]`).children].map(readRow)]));}
  $('hp-copy-out').onclick=()=>{$('hp-copy').value=JSON.stringify(readInventory(),null,2);$('hp-copy').select();};
  $('hp-copy-in').onclick=()=>{try{const data=JSON.parse($('hp-copy').value);for(const axis of axes)if(!Array.isArray(data[axis])||data[axis].some(r=>typeof r.label!=='string'||!Array.isArray(r.matches)||r.matches.some(v=>typeof v!=='string')))throw Error((globalThis.CorporiumI18n?.f("22ef7bcaece075",()=>[])??'清单格式无效'));inventories(Object.fromEntries(axes.map(a=>[a,data[a].map(r=>({...r,id:crypto.randomUUID()}))])));$('hp-settings-error').textContent='';}catch(e){$('hp-settings-error').textContent=e.message;}};
- $('hp-settings').onclick=safe(async()=>{if(activeLanguage==='all')throw Error((globalThis.CorporiumI18n?.f("2026168d0178a9",()=>[])??'请先选择一种语言'));const lid=activeLanguage;const loaded=await api('homophone-phonology');if(lid!==activeLanguage)return;config=loaded;editingLanguage=lid;inventories(config);$('hp-copy').value='';$('hp-settings-error').textContent='';$('hp-settings-dialog').showModal();});
- async function save(body,error,dialog){const button=dialog==='hp-settings-dialog'?$('hp-settings-save'):$('hp-confirm');button.disabled=true;try{if(activeLanguage!==editingLanguage)throw Error((globalThis.CorporiumI18n?.f("2f24b7f8f2b473",()=>[])??'语言已切换，请重新打开'));config=await api('homophone-phonology-save',{...body,token:config.token});await loadLanguages();$(dialog).close();close();await rerun();}catch(e){$(error).textContent=e.message;}finally{button.disabled=false;}}
- $('hp-settings-save').onclick=()=>save({action:'settings',...readInventory()},'hp-settings-error','hp-settings-dialog');
+ async function openSettings(lid=activeLanguage){
+  if(lid==='all')throw Error(globalThis.CorporiumI18n?.f("2026168d0178a9",()=>[])??'请先选择一种语言');
+  const inline=window.CorporiumManagement?.owns('hp-settings-dialog');
+  const loaded=await api('homophone-phonology?'+new URLSearchParams({language:lid}));
+  if(!inline&&lid!==activeLanguage)return;
+  inventoryConfig=loaded;
+  inventoryLanguage=lid;
+  inventories(loaded);
+  $('hp-copy').value='';
+  $('hp-settings-error').textContent='';
+  showSettingsEditor('hp-settings-dialog');
+ }
+ $('hp-settings').onclick=safe(()=>openSettings());
+ async function save(body,error,dialog){
+  const inventory=dialog==='hp-settings-dialog';
+  const inline=inventory&&window.CorporiumManagement?.owns(dialog);
+  const language=inventory?inventoryLanguage:editingLanguage;
+  const button=inventory?$('hp-settings-save'):$('hp-confirm');
+  if(button.disabled)return;
+  button.disabled=true;
+  $(error).textContent='';
+  try{
+   if(!inline&&activeLanguage!==language)throw Error(globalThis.CorporiumI18n?.f("2f24b7f8f2b473",()=>[])??'语言已切换，请重新打开');
+   const updated=await saveConfiguration(body,language,inventory?inventoryConfig.token:config.token);
+   if(inventory)inventoryConfig=updated;
+   if(language===activeLanguage)config=updated;
+   if(inline){
+    inventories(updated);
+    window.CorporiumManagement.saved(dialog);
+    if(language===activeLanguage&&workspace==='analysis'&&window.corporiumHomophonesReady?.())await rerun();
+   }else{
+    $(dialog).close();
+    close();
+    await rerun();
+   }
+  }catch(e){$(error).textContent=e.message;}
+  finally{button.disabled=false;}
+ }
+ $('hp-settings-save').onclick=()=>runSettingsEditorAction('hp-settings-dialog',()=>save({action:'settings',...readInventory()},'hp-settings-error','hp-settings-dialog'));
  function choiceLabel(choice){return axes.map((a,i)=>names[i]+'：'+(config[a].find(r=>r.id===choice?.[a])?.label||(globalThis.CorporiumI18n?.f("b672a71c80749b",()=>[])??'未选或已删除'))).join(' · ');}
  function classify(reading){editingReading=reading;editingLanguage=activeLanguage;const group=entries.find(e=>e.reading===reading),c=group?.classification;const chosen=c?.choice||c?.previous_choice||{};$('hp-reading').textContent=reading;$('hp-classify-error').textContent='';$('hp-classify-note').textContent=c?.reason||'';$('hp-choice').innerHTML=axes.map((axis,i)=>(globalThis.CorporiumI18n?.f("0b9ec1ad3e0faf",()=>[names[i],axis,config[axis].map(r=>`<option value="${esc(r.id)}" ${r.id===chosen[axis]?'selected':''}>${esc(r.label)}</option>`).join('')])??`<label>${names[i]}<select data-choice="${axis}"><option value="">请选择</option>${config[axis].map(r=>`<option value="${esc(r.id)}" ${r.id===chosen[axis]?'selected':''}>${esc(r.label)}</option>`).join('')}</select></label>`)).join('');$('hp-candidates').innerHTML=(c?.candidates||[]).map((v,i)=>`<button type="button" data-candidate="${i}">${esc(choiceLabel(v))}</button>`).join('');$('hp-candidates').onclick=e=>{const b=e.target.closest('[data-candidate]');if(b)for(const axis of axes)$('hp-choice').querySelector(`[data-choice="${axis}"]`).value=c.candidates[+b.dataset.candidate][axis];};$('hp-classify-dialog').showModal();}
  $('hp-confirm').onclick=()=>save({action:'classify',reading:editingReading,...Object.fromEntries(axes.map(a=>[a,$('hp-choice').querySelector(`[data-choice="${a}"]`).value]))},'hp-classify-error','hp-classify-dialog');
@@ -55,7 +103,7 @@ function createHomophonePhonology(panel,rerun){
  async function actions(e){const item=e.target.closest('[data-hp-item]'),c=e.target.closest('[data-hp-classify]'),w=e.target.closest('[data-hp-word]');if(item)await inspect(+item.dataset.hpItem);if(c)classify(c.dataset.hpClassify);if(w){close();await openDictionaryLexeme(w.dataset.hpWord);}}
  panel.addEventListener('click',safe(actions));side.addEventListener('click',safe(actions));
  $('hp-view').onchange=()=>{pendingPage=1;close();void rerun();};$('hp-empty').onchange=()=>{pendingPage=1;void rerun();};
- return {query:()=>({view:$('hp-view').value,empty:$('hp-empty').checked,pending_page:pendingPage}),close,firstPage(){pendingPage=1;},reset(){close();pending.hidden=true;pendingPage=1;entries=[];config=null;},render(data){config=data.phonology;entries=[];close();const structured=$('hp-view').value==='phonology';pending.hidden=!structured;
+ return {openSettings,inventoryDraft:()=>JSON.stringify(readInventory()),query:()=>({view:$('hp-view').value,empty:$('hp-empty').checked,pending_page:pendingPage}),close,firstPage(){pendingPage=1;},reset(){close();pending.hidden=true;pendingPage=1;entries=[];config=null;},render(data){config=data.phonology;entries=[];close();const structured=$('hp-view').value==='phonology';pending.hidden=!structured;
   if(!structured)return false;
   $('homophone-results').innerHTML=data.blocks.map(block=>`<details class="hp-final" open><summary class="ipa">${esc(block.final.label)}</summary>${block.rows.map(row=>`<div class="hp-initial"><h3 class="ipa">${esc(row.initial.label)}</h3><div class="hp-tone-cells">${row.cells.map(cell=>tone(cell,data.writing_types)).join('')}</div></div>`).join('')}</details>`).join('')||(globalThis.CorporiumI18n?.f("8835a058bdceee",()=>[])??'<p>尚无已确认的归类。请先设置音系清单，再在下方确认读音归类。</p>');
   pending.open=data.pending_total>0;$('hp-pending-pages').hidden=data.pending_pages<=1;pending.querySelector('summary').textContent=(globalThis.CorporiumI18n?.f("2a838370603f97",()=>[data.pending_total])??'待归类读音 · '+data.pending_total);$('hp-pending-list').innerHTML=data.pending.map(g=>{entries.push(g);return `<article class="hp-pending-row">${g.classification.state==='candidate'&&!g.items.some(r=>r.provisional)?(globalThis.CorporiumI18n?.f("88099d3eff33bd",()=>[esc(g.reading),esc(g.reading)])??`<input type="checkbox" data-hp-unique="${esc(g.reading)}" aria-label="选择 ${esc(g.reading)}">`):''}<button type="button" class="ipa" data-hp-classify="${esc(g.reading)}">${esc(g.reading)} · ${g.classification.state==='candidate'?(globalThis.CorporiumI18n?.f("f3b7b64bcfd4e6",()=>[])??'确认候选'):(globalThis.CorporiumI18n?.f("73b019de1c9de0",()=>[])??'归类')}</button><span>${esc(g.classification.reason)}</span>${g.classification.choice?'<small class="hp-sound-choice">'+esc(choiceLabel(g.classification.choice))+'</small>':''}<div class="homophone-links">${g.items.map(r=>item(r,g,data.writing_types)).join('')}</div></article>`;}).join('')||(globalThis.CorporiumI18n?.f("bec623aaca9fc3",()=>[])??'<p>当前结果没有待归类读音。</p>');pendingPage=data.pending_page;topPagination($('hp-pending-pages'),pendingPage,data.pending_pages,async p=>{pendingPage=p;await rerun();});return true;

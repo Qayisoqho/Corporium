@@ -1,6 +1,8 @@
 """Materialize meaning edits only at active, explicitly sense-bound occurrences."""
 import copy
 import json
+import record_sources
+import sentence_rows
 import re
 from collections import defaultdict,OrderedDict
 
@@ -31,7 +33,7 @@ class SyncCache:
 
 
 def meanings(row, kind):
-    body=json.loads(row['body'])
+    body=record_sources.body(row,mutable=False)
     if kind=='morphemes' and body.get('usages') is None:
         import sense_gloss
         return {('@morpheme','@main'):sense_gloss.effective(body,'gloss'),
@@ -44,7 +46,7 @@ def meanings(row, kind):
 def changes_for(changes):
     changed={}
     for (table,_),(before,after) in list(changes.items()):
-        if table not in ('lexemes','morphemes') or not before or not after or before['body']==after['body']:continue
+        if table not in ('lexemes','morphemes') or not before or not after or record_sources.same_body(before['body'],after['body']):continue
         a,z=meanings(before,table),meanings(after,table)
         delta={key:(value,z[key]) for key,value in a.items() if key in z and value!=z[key]}
         if delta:changed[after['id']]=delta
@@ -131,10 +133,14 @@ def transform(word,rules):
 
 
 def apply_record(db,kind,row,rules,transformer=transform,analyzed=None,cache=None,unit_state=None):
-    old=analyzed if analyzed is not None else corpus.analyze(json.loads(row['body']))
+    old=analyzed if analyzed is not None else corpus.analyze(record_sources.body(row))
     # Copy the stored data, rather than deep-copying all derived analyses for
     # unchanged words. The selected word transformer owns its own copies.
-    body=json.loads(row['body']);original_words=body['words'][:];changed=[]
+    body=record_sources.body(row)
+    if kind=='independent':
+        import independent_links
+        independent_links.source_body(db,row['id'],body)
+    original_words=body['words'][:];changed=[]
     for index,word_rules in rules.items():
         if not 0<=index<len(body['words']):continue
         new=cache.transform(old['words'][index],word_rules,transformer) if cache is not None else transformer(old['words'][index],word_rules)
@@ -145,14 +151,14 @@ def apply_record(db,kind,row,rules,transformer=transform,analyzed=None,cache=Non
         from text_replace import preserve_independent_refs
         preserve_independent_refs(old,body,changed,set(),analyzed=True)
         body['words']=[word if i in changed else original_words[i] for i,word in enumerate(body['words'])]
-        db.execute('UPDATE dictionary_examples SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body,ensure_ascii=False),row['id']))
+        independent_links.write_body(db,row['id'],body)
     else:
         import lexicon
         body['edited']=True
         body['words']=[word if i in changed else original_words[i] for i,word in enumerate(body['words'])]
-        encoded=json.dumps(body,ensure_ascii=False)
-        db.execute('UPDATE entries SET body=?,revision=revision+1 WHERE id=?',(encoded,row['id']))
-        lexicon.sync_entry(db,row['id'],preserve_complex=True,analyzed_body=body,preserve_slots=True,word_positions=set(changed),stored_body=encoded,unit_state=unit_state)
+        saved=sentence_rows.write(db,'corpus',row['id'],body,previous=record_sources.body(row,mutable=False))
+        lexicon.sync_entry(db,row['id'],preserve_complex=True,analyzed_body=body,preserve_slots=True,
+                           word_positions=set(changed),stored_body=body,unit_state=unit_state,source=saved)
 
 
 def sync_progress(index,total,label):
@@ -166,13 +172,15 @@ def source_records(db,records,kind='corpus'):
     for start in range(0,len(ids),64):
         batch=ids[start:start+64];marks=','.join('?' for _ in batch)
         if kind=='corpus':
-            rows={r['id']:r for r in db.execute('SELECT e.*,t.language_id owner_language FROM entries e JOIN texts t ON t.id=e.text_id WHERE e.id IN ('+marks+')',batch)}
+            rows={r['id']:dict(r) for r in db.execute('SELECT e.id,t.language_id owner_language FROM entries e JOIN texts t ON t.id=e.text_id WHERE e.id IN ('+marks+')',batch)}
             positions={eid:{link['word_position'] for link in records[eid]} for eid in batch}
             states=lexicon.prepare_sync(db,batch,positions)
         else:
-            rows={r['id']:r for r in db.execute('SELECT * FROM dictionary_examples WHERE id IN ('+marks+')',batch)};states={}
+            rows={r['id']:dict(r) for r in db.execute('SELECT id FROM dictionary_examples WHERE id IN ('+marks+')',batch)};states={}
+        bodies=sentence_rows.read(db,kind,batch)
         for eid in long_tasks.steps(batch):
-            if eid in rows:yield eid,rows[eid],states.get(eid)
+            if eid in rows and eid in bodies:
+                yield eid,{**rows[eid],'body':bodies[eid]},states.get(eid)
 
 
 def sync(db,changes):
@@ -187,12 +195,12 @@ def sync(db,changes):
             LEFT JOIN corpus_units p ON p.id=u.parent_id JOIN '''+dictionary_targets.IDENTITIES+''' x ON x.id=l.lexeme_id
             WHERE u.active=1 AND (p.id IS NULL OR p.active=1) AND l.lexeme_id IN ('''+marks+')',batch):
             if (r['usage_id'],r['sense_id']) in changed[r['lexeme_id']]:records[r['entry_id']].append(dict(r))
-        independent.update(r[0] for r in db.execute("SELECT DISTINCT e.id FROM dictionary_examples e,json_each(e.body,'$.targets') t WHERE json_extract(t.value,'$.lexeme_id') IN ("+marks+')',batch))
+        independent.update(r[0] for r in db.execute('SELECT DISTINCT example_id FROM independent_links WHERE lexeme_id IN ('+marks+')',batch))
     total=len(records)+len(independent);cache=SyncCache()
     for index,(eid,row,unit_state) in enumerate(source_records(db,records)):
         sync_progress(index,total,'标注')
         links=records[eid]
-        body=corpus.analyze(json.loads(row['body']),cache=cache.analysis);rules=defaultdict(dict)
+        body=corpus.analyze(record_sources.body(row),cache=cache.analysis);rules=defaultdict(dict)
         for link in links:
             if (body.get('language_id') or row['owner_language'])!=link['language_id']:continue
             i=link['word_position']
@@ -206,7 +214,8 @@ def sync(db,changes):
         apply_record(db,'corpus',row,rules,analyzed=body,cache=cache,unit_state=unit_state)
     for index,(eid,row,_) in enumerate(source_records(db,independent,'independent'),len(records)):
         sync_progress(index,total,'标注')
-        body=corpus.analyze(json.loads(row['body']),cache=cache.analysis);rules=defaultdict(dict)
+        from independent_links import source_body
+        body=corpus.analyze(source_body(db,eid,record_sources.body(row)),cache=cache.analysis);rules=defaultdict(dict)
         for target in body.get('targets',[]):
             delta=changed.get(target['lexeme_id'],{}).get((target.get('usage_id'),target.get('sense_id')))
             ref=target.get('segmentation_ref')

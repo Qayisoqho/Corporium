@@ -154,8 +154,9 @@ def script_spelling(text):
 
 
 def plain(text):
-    text = re.sub(r'#(?:sub|sup|super)\[([^\[\]]*)\]', r'\1', text)
-    return re.sub(r'\\([\\"\[\]#~?])', r'\1', text)
+    if '#' in text:
+        text = re.sub(r'#(?:sub|sup|super)\[([^\[\]]*)\]', r'\1', text)
+    return re.sub(r'\\([\\"\[\]#~?])', r'\1', text) if '\\' in text else text
 
 
 def clean(text):
@@ -215,6 +216,8 @@ def gloss_chunks(text):
 
 def gloss_relations(gloss):
     """Keep the ordered sides of > within each morpheme, without splitting words."""
+    if '>' not in gloss:
+        return []
     result = []
     for index, part in enumerate(split_gloss_morphemes(plain(gloss))[0]):
         try:
@@ -230,31 +233,38 @@ def gloss_relations(gloss):
 
 class WordAnalysisCache:
     """Operation-local, byte-bounded reuse; every hit gets independent data."""
+    inputs=('form','gloss','punctuation','punctuation_form','morph_groups','infix_confirmation','_legacy_tilde')
+
     def __init__(self,limit=8*1024**2,items=512):
         self.limit=limit;self.items=items;self.bytes=0;self.values=OrderedDict()
 
     def apply(self,word,position):
         # Analysis reads these source fields only. Occurrence IDs and previously
         # derived segments do not change the result and must not multiply work.
-        inputs=('form','gloss','punctuation','punctuation_form','morph_groups','infix_confirmation')
-        source={k:word[k] for k in inputs if k in word}
-        key=json.dumps(source,ensure_ascii=False,sort_keys=True).encode('utf-8')
+        inputs=self.inputs
+        key=tuple((name,json.dumps(value,ensure_ascii=False,sort_keys=True) if isinstance(value,(list,dict)) else value)
+                  for name in inputs if name in word for value in (word[name],))
         saved=self.values.get(key)
         if saved is None:
+            source={k:word[k] for k in inputs if k in word}
             result=_analyze(dict(ipa='',translation='',words=[source]))
             warnings=result['warnings']
             derived={k:v for k,v in source.items() if k not in inputs or k=='punctuation'}
             saved=json.dumps([derived,warnings],ensure_ascii=False).encode('utf-8')
-            size=len(key)+len(saved)
+            size=self.size(key,saved)
             if size<=self.limit and self.items>0:
                 while self.values and (self.bytes+size>self.limit or len(self.values)>=self.items):
-                    old,value=self.values.popitem(last=False);self.bytes-=len(old)+len(value)
+                    old,value=self.values.popitem(last=False);self.bytes-=self.size(old,value)
                 self.values[key]=saved;self.bytes+=size
         else:self.values.move_to_end(key)
         # Only derived values are overlaid. Keep identity, notes and even legacy
         # analysis_form on failed parsing, exactly as the full analyzer does.
         analyzed,warnings=json.loads(saved);word.update(analyzed)
         return [w.replace('第 1 ',f'第 {position+1} ',1) for w in warnings]
+
+    @staticmethod
+    def size(key,saved):
+        return len(saved)+128+sum(96+(4*len(value) if isinstance(value,str) else 0) for _,value in key)
 
 
 def analyze(entry,*,cache=None):

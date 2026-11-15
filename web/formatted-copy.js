@@ -8,7 +8,15 @@
   const key='formatted-'+(++sequence);records.set(key,{body,kind,id,label});
   return html.replace(/<(section|article)\b/,'<$1 data-formatted-source="'+key+'"');
  }
- window.CorporiumFormattedCopy={stamp,updateDictionaryLayers(item){
+ window.CorporiumFormattedCopy={stamp,refreshSource(card,fresh){
+  const source=records.get(fresh.dataset.formattedSource);
+  if(!source||!records.has(card.dataset.formattedSource))return;
+  records.set(card.dataset.formattedSource,source);
+  records.delete(fresh.dataset.formattedSource);
+ },updateSource(card,body){
+  const source=records.get(card.dataset.formattedSource);
+  if(source)source.body=body;
+ },updateDictionaryLayers(item){
   const positions=new Map(item.words.map((w,i)=>[w.id,i]));
   for(const record of records.values())if(record.kind===item.kind&&record.id===item.id)for(const [uid,rows] of Object.entries(item.values)){
    const word=record.body.words?.[positions.get(uid)];if(!word)continue;const values=new Map((word.extra_layers||[]).filter(l=>!l.derived).map(l=>[l.id,l]));for(const row of rows)values.set(row.id,row);word.extra_layers=(item.layers||[...values.values()]).filter(l=>(l.anchor||'word')==='word'&&values.has(l.id)).map(l=>values.get(l.id));

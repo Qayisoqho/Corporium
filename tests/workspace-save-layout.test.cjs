@@ -38,7 +38,7 @@ test('save failure keeps the tag editor dirty and does not run a check',async()=
  const {c,calls,submit}=grammarSetup();c.saveError=true;await submit();assert.deepEqual(calls,['grammar-save']);assert.equal(c.grammarDirty,true);assert.match(c.$('grammar-error').textContent,/保存失败/);
 });
 test('dictionary starts its independent catalogs together and consumers reuse each pending request',async()=>{
- const paths=[],gates=new Map();const c={URL,URLSearchParams,structuredClone,activeLanguage:'one',window:{corporiumWorkspaceRevision:'a'},showLexeme:async()=>{},api:path=>{paths.push(path);return new Promise(r=>gates.set(path,r));},loadDictionary:async()=>{for(const p of ['dictionary-search-options','dictionary-organization','dictionary-counts'])await c.api(p);}};
+ const paths=[],gates=new Map();const c={URL,URLSearchParams,structuredClone,activeLanguage:'one',window:{corporiumWorkspaceRevision:'a'},showLexeme:async()=>{},api:path=>{paths.push(path);return new Promise(r=>gates.set(path,r));},loadDictionary:async()=>{for(const p of ['dictionary-organization','dictionary-counts'])await c.api(p);}};
  vm.createContext(c);vm.runInContext(fs.readFileSync('web/workspace-loading.js','utf8'),c);
- const pending=c.loadDictionary();assert.deepEqual(paths,['dictionary-search-options','dictionary-organization','dictionary-counts']);for(const release of gates.values())release({});await pending;assert.equal(paths.length,3);
+ const pending=c.loadDictionary();assert.deepEqual(paths,['dictionary-organization','dictionary-counts']);for(const release of gates.values())release({});await pending;assert.equal(paths.length,2);
 });

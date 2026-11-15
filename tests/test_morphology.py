@@ -1,7 +1,11 @@
+import source_fixtures
 import json
 import unittest
 from pathlib import Path
 import server
+import morphology
+import dictionary_relations
+from unittest.mock import patch
 from restore_backup import restore
 import test_lexicon
 from contextlib import closing
@@ -67,6 +71,7 @@ class MorphologyTests(unittest.TestCase):
         tag=self.tag();x=self.word(tag);child=self.word(tag,x['id'])
         x['body']['relation']={'base_id':child['id'],'type':'stem'}
         self.assertEqual(self.call('/api/lexeme-save',x)[0],400)
+
         self.assertEqual(self.call('/api/lexeme-delete',{'id':x['id'],'revision':x['revision'],'confirmed':True})[0],400)
         x['body']['relation']=None;x['body']['variants'][0]['conditions']=''
         code,x=self.call('/api/lexeme-save',x);self.assertEqual(code,200,x)
@@ -77,6 +82,20 @@ class MorphologyTests(unittest.TestCase):
         other=self.call('/api/save-language',{'name':'Other','metadata':{}})[1]['id'];foreign=self.tag('PST',other)
         x=self.call('/api/lexeme?id='+x['id'])[1];x['body']['features']=[foreign]
         self.assertEqual(self.call('/api/lexeme-save',x)[0],400)
+
+    def test_reverse_index_matches_sql_for_unrelated_legacy_shapes_and_external_changes(self):
+        tag=self.tag();base=self.word(tag);child=self.word(tag,base['id'])
+        code,other=self.call('/api/lexeme-save',dict(headword='legacy',body={}))
+        self.assertEqual(code,200,other)
+        with server.connect(audit=False) as db:
+            source_fixtures.patch_values(db,'lexemes',other['id'],((('relation',), 'old text'), (('word_structure',), 7)))
+            with patch.object(dictionary_relations,'ready',return_value=False):
+                expected=morphology.options(db,'ordos',base['id'])
+            self.assertEqual(morphology.options(db,'ordos',base['id']),expected)
+            source_fixtures.patch_values(db,'lexemes',child['id'],remove=(('relation',),))
+            with patch.object(dictionary_relations,'ready',return_value=False):
+                expected=morphology.options(db,'ordos',base['id'])
+            self.assertEqual(morphology.options(db,'ordos',base['id']),expected)
 
     def test_export_import_backup_and_independent_evidence(self):
         tag=self.tag();x=self.word(tag);child=self.word(tag,x['id']);e=self.seed();r,p=self.link(e,x,[tag])

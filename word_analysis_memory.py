@@ -7,6 +7,7 @@ and undo tables. SQLite triggers also cover undo, restores and external edits.
 import copy
 import hashlib
 import json
+import record_sources
 import unicodedata
 
 import corpus
@@ -47,6 +48,8 @@ def drop_triggers(db):
         for event in ('INSERT', 'UPDATE', 'DELETE'):
             db.execute(f'DROP TRIGGER IF EXISTS word_memory_{table}_{event}')
     db.execute('DROP TRIGGER IF EXISTS word_memory_text_language')
+    for event in ('INSERT','UPDATE','DELETE'):
+        db.execute(f'DROP TRIGGER IF EXISTS word_memory_overrides_{event}')
 
 
 def initialize(db):
@@ -62,22 +65,37 @@ def initialize(db):
     if not db.execute('SELECT 1 FROM word_analysis_version WHERE value=?',(INDEX_VERSION,)).fetchone():
         db.execute('DELETE FROM word_analysis_index');db.execute('DELETE FROM word_analysis_owners')
         db.execute('DELETE FROM word_analysis_version');db.execute('INSERT INTO word_analysis_version VALUES(?)',(INDEX_VERSION,))
+    install_owner_triggers(db)
+    for table,kind in (('entries','corpus'),('dictionary_examples','independent')):
+        db.execute(f'''INSERT OR IGNORE INTO word_analysis_dirty SELECT '{kind}',id FROM {table}
+            WHERE NOT EXISTS(SELECT 1 FROM word_analysis_owners WHERE kind=? AND owner_id={table}.id)''',(kind,))
+    record_sources.trigger(db,'word_memory_text_language','''AFTER UPDATE OF language_id ON texts
+        BEGIN INSERT INTO word_analysis_dirty SELECT 'corpus',id FROM entries e WHERE text_id=NEW.id
+        AND NOT EXISTS(SELECT 1 FROM word_analysis_dirty WHERE kind='corpus' AND owner_id=e.id); END''')
+
+
+def install_owner_triggers(db):
     for table, kind in (('entries', 'corpus'), ('dictionary_examples', 'independent')):
         for event in ('INSERT', 'UPDATE', 'DELETE'):
             ref = 'OLD' if event == 'DELETE' else 'NEW'
             # WHERE avoids trigger conflict policies being overridden by an
             # outer INSERT ... ON CONFLICT DO UPDATE used by sentence saves.
-            db.execute(f'DROP TRIGGER IF EXISTS word_memory_{table}_{event}')
-            db.execute(f'''CREATE TRIGGER word_memory_{table}_{event}
-                AFTER {event} ON {table} BEGIN
+            when=''
+            if event=='UPDATE' and kind=='independent' and record_sources.native(db):
+                when=f' WHEN OLD.id IS NOT NEW.id OR OLD.language_id IS NOT NEW.language_id OR {record_sources.change_sql(db,table)}'
+            record_sources.trigger(db,f'word_memory_{table}_{event}',f'''AFTER {event} ON {table}{when} BEGIN
                 INSERT INTO word_analysis_dirty SELECT '{kind}',{ref}.id
                 WHERE NOT EXISTS(SELECT 1 FROM word_analysis_dirty WHERE kind='{kind}' AND owner_id={ref}.id); END''')
-        db.execute(f'''INSERT OR IGNORE INTO word_analysis_dirty SELECT '{kind}',id FROM {table}
-            WHERE NOT EXISTS(SELECT 1 FROM word_analysis_owners WHERE kind=? AND owner_id={table}.id)''', (kind,))
-    db.execute('DROP TRIGGER IF EXISTS word_memory_text_language')
-    db.execute('''CREATE TRIGGER word_memory_text_language AFTER UPDATE OF language_id ON texts
-        BEGIN INSERT INTO word_analysis_dirty SELECT 'corpus',id FROM entries e WHERE text_id=NEW.id
-        AND NOT EXISTS(SELECT 1 FROM word_analysis_dirty WHERE kind='corpus' AND owner_id=e.id); END''')
+    if record_sources.native(db):
+        # Independent word overrides can change the reusable word without
+        # changing its sentence source. Link identities are read live.
+        for event in ('INSERT','UPDATE','DELETE'):
+            refs=('OLD','NEW') if event=='UPDATE' else ('OLD',) if event=='DELETE' else ('NEW',)
+            body=''.join(f'''INSERT INTO word_analysis_dirty SELECT 'independent',{ref}.example_id
+                   WHERE NOT EXISTS(SELECT 1 FROM word_analysis_dirty WHERE kind='independent'
+                                    AND owner_id={ref}.example_id);''' for ref in refs)
+            record_sources.trigger(db,f'word_memory_overrides_{event}',
+                                   f'AFTER {event} ON independent_word_overrides BEGIN {body} END')
 
 
 def refresh(db):
@@ -90,14 +108,17 @@ def refresh(db):
         for item in long_tasks.steps(dirty):
             kind, rid = item['kind'], item['owner_id']
             if kind == 'corpus':
-                row = db.execute('SELECT e.body,t.language_id FROM entries e JOIN texts t ON t.id=e.text_id WHERE e.id=?', (rid,)).fetchone()
+                row = db.execute('SELECT t.language_id FROM entries e JOIN texts t ON t.id=e.text_id WHERE e.id=?', (rid,)).fetchone()
                 ids = {r['position']: r['id'] for r in db.execute("SELECT id,position FROM corpus_units WHERE entry_id=? AND active=1 AND kind='word'", (rid,))}
             else:
-                row = db.execute('SELECT body,language_id FROM dictionary_examples WHERE id=?', (rid,)).fetchone()
+                row = db.execute('SELECT language_id FROM dictionary_examples WHERE id=?', (rid,)).fetchone()
                 ids = {}
             db.execute('DELETE FROM word_analysis_index WHERE kind=? AND owner_id=?', (kind, rid))
             if row:
-                body = json.loads(row['body'])
+                body = record_sources.read(db,'entries' if kind=='corpus' else 'dictionary_examples',rid)
+                if kind=='independent':
+                    from independent_links import source_body
+                    source_body(db,rid,body,include_targets=False)
                 lid = body.get('language_id') or row['language_id']
                 for i, word in enumerate(body.get('words', [])):
                     if not word.get('form', '').strip():
@@ -125,11 +146,18 @@ def candidates(db, destination, boundaries=MARKERS, notices=None):
     if not wanted:
         return {}
     refresh(db)
+    from independent_annotations import enabled, detached_sql
+    reference="json_remove(json_extract(t.payload,'$.segmentation_ref'),'$.word')"
+    if enabled(db):
+        # The grouping key only distinguishes analyses. Complete snapshots are
+        # read by word_links for the representative that actually gets checked.
+        reference='json_array(t.ref_form,t.ref_gloss,t.ref_unit_form,t.ref_unit_gloss,t.ref_snapshot)'
+    detached=detached_sql(db,'t')
     groups = {}
     for key in sorted(wanted):
         # Bindings separate identical-looking homonyms and analyses. The actual
         # link/form/features are checked and included below before offering one.
-        rows = db.execute('''WITH hits AS MATERIALIZED (SELECT w.*,
+        rows = db.execute(f'''WITH hits AS MATERIALIZED (SELECT w.*,
             (SELECT json_group_array(json_array(unit_key,meaning_id,mode,override_text,pattern))
              FROM (SELECT * FROM gloss_bindings b WHERE b.owner_kind=w.kind AND b.owner_id=w.owner_id
                    AND b.word_id=w.word_id ORDER BY unit_key)) bindings,
@@ -140,15 +168,12 @@ def candidates(db, destination, boundaries=MARKERS, notices=None):
                LEFT JOIN component_links c ON c.id=l.id LEFT JOIN lexical_reviews r ON r.id=l.id
                WHERE u.active=1 AND (u.id=w.word_id OR u.parent_id=w.word_id))
             ELSE (SELECT json_group_array(json_object(
-                'lexeme_id',json_extract(t.value,'$.lexeme_id'), 'usage_id',json_extract(t.value,'$.usage_id'),
-                'sense_id',json_extract(t.value,'$.sense_id'), 'form_id',json_extract(t.value,'$.form_id'),
-                'features',json_extract(t.value,'$.features'), 'component_ref',json_extract(t.value,'$.component_ref'),
-                'segmentation_review',json_extract(t.value,'$.segmentation_review'),
-                'reference',json_remove(json_extract(t.value,'$.segmentation_ref'),'$.word'),
-                'key',json_extract(t.value,'$.segmentation_ref.key'),
-                'detached',json_extract(t.value,'$.segmentation_ref.detached')))
-                FROM json_each((SELECT body FROM dictionary_examples WHERE id=w.owner_id),'$.targets') t
-                WHERE json_extract(t.value,'$.segmentation_ref.word')=w.position) END links
+                'lexeme_id',t.lexeme_id, 'usage_id',t.usage_id,
+                'sense_id',t.sense_id, 'form_id',t.form_id,
+                'features',json_extract(t.payload,'$.features'), 'component_ref',json_extract(t.payload,'$.component_ref'),
+                'reference',{reference},
+                'key',t.unit_key, 'detached',{detached}))
+                FROM independent_links t WHERE t.example_id=w.owner_id AND t.word_position=w.position) END links
             FROM word_analysis_index w WHERE language_id=? AND form_key=?
             AND NOT(w.kind=? AND w.owner_id=?)
             AND NOT EXISTS(SELECT 1 FROM code_spans s WHERE s.owner_kind=w.kind AND s.record_id=w.owner_id)

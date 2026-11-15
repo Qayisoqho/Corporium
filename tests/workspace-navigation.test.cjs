@@ -5,7 +5,7 @@ const fs=require('node:fs');
 const script=fs.readFileSync(require('node:path').join(__dirname,'../web/workspace-navigation.js'),'utf8');
 function setup(){
  const classes=new Set(),roots={};
- const c={activeLanguage:'one',workspace:'analysis',requestAnimationFrame:fn=>setImmediate(fn)};
+ const c={activeLanguage:'one',workspace:'analysis',requestAnimationFrame:fn=>setImmediate(fn),nextLayoutFrame:()=>new Promise(resolve=>setImmediate(resolve))};
  c.window={scrollX:0,scrollY:1400,scrollTo:({top})=>c.window.scrollY=Math.max(0,top)};
  for(const name of ['analysis','corpus']){
   const root={hidden:name!=='analysis',nodes:[],querySelectorAll:()=>root.nodes};roots[name+'-workspace']=root;
@@ -43,4 +43,10 @@ test('undo preserves the visible sentence offset after layout changes and restor
 test('undo with a deleted anchor falls back to its prior scroll and never restores over another workspace',async()=>{
  const {c,roots}=setup();await c.window.corporiumPreserveLocation(async()=>{c.window.scrollY=0;roots['analysis-workspace'].nodes=[];});assert.equal(c.window.scrollY,1400);
  await c.window.corporiumPreserveLocation(async()=>{c.workspace='corpus';c.window.scrollY=50;});assert.equal(c.window.scrollY,50);
+});
+test('restoring the last workspace finishes while the startup window cannot paint',async()=>{
+ const {c,classes}=setup(),app=fs.readFileSync(require.resolve('../web/app.js'),'utf8');
+ c.document.documentElement.dataset.appLoading='true';c.requestAnimationFrame=()=>{throw Error('Startup must not wait for paint');};
+ vm.runInContext(app.slice(app.indexOf('function nextLayoutFrame('),app.indexOf('async function api(')),c);
+ await c.setWorkspace('corpus');assert.equal(c.workspace,'corpus');assert.equal(classes.size,0);
 });

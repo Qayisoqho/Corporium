@@ -41,7 +41,8 @@ class RelationSequenceTests(unittest.TestCase):
         return e,ex,x,layer
 
     def health(self):
-        validators=[('lexicon','validate_links'),('lexicon','validate_unit_references'),*[(m,'validate') for m in ('dictionary_data','morpheme_registry','morphology','annotations','grammar','grammaticality','grammar_survey','timeline_hierarchy','timeline_text_order','code_switching','collaborators','homonyms','fieldwork_notes','object_media','dictionary_organization')]]
+        # validate_links also checks dictionary organization with its target map.
+        validators=[('lexicon','validate_links'),('lexicon','validate_unit_references'),*[(m,'validate') for m in ('dictionary_data','morpheme_registry','morphology','annotations','grammar','grammaticality','grammar_survey','timeline_hierarchy','timeline_text_order','code_switching','collaborators','homonyms','fieldwork_notes','object_media')]]
         with server.connect(audit=False) as db:
             self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
             self.assertEqual(list(db.execute('PRAGMA foreign_key_check')),[])

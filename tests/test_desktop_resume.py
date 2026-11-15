@@ -13,6 +13,23 @@ class DesktopResumeTests(unittest.TestCase):
     setUp=test_desktop.DesktopTests.setUp
     tearDown=test_desktop.DesktopTests.tearDown
 
+    def test_ready_handoff_saves_only_validated_presentation_and_shows_once(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        bridge=desktop.Bridge(self.projects);bridge._origin='http://127.0.0.1:12345'
+        bridge._window=Mock();bridge._window.get_current_url.return_value=bridge._origin+'/'
+        startup=SimpleNamespace(closed=False,smoke=False)
+        def finish():startup.closed=True
+        startup.finish=Mock(side_effect=finish)
+        with patch.object(desktop,'STARTUP',startup):
+            self.assertEqual(bridge.startup_ready(dict(scale=1.5,font='Junicode',weight=700,italic=True,path='not saved')),{'ok':True})
+            bridge._window.show.assert_called_once();startup.finish.assert_called_once()
+            bridge.startup_ready(dict(scale=1.5,font='Junicode',weight=700,italic=True))
+            bridge._window.show.assert_called_once()
+            self.assertEqual(desktop.Projects(self.root/'settings').settings['startup_ui'],dict(scale=1.5,font='Junicode',weight=700,italic=True))
+            bridge._window.get_current_url.return_value='https://untrusted.invalid/'
+            self.assertIn('error',bridge.startup_ready())
+
     def test_startup_language_is_available_without_project_and_survives_creation(self):
         bridge=desktop.Bridge(self.projects);bridge._origin='http://127.0.0.1:12345'
         bridge._window=type('Window',(),{'get_current_url':lambda _:bridge._origin+'/'})()
@@ -31,6 +48,18 @@ class DesktopResumeTests(unittest.TestCase):
         bridge.set_ui_language('en');self.projects.create(self.root/'new project')
         resumed=desktop.Projects(self.root/'settings');self.assertTrue(resumed.restore_last())
         self.assertEqual(resumed.status()['ui_language'],'en')
+
+    def test_appearance_write_failure_does_not_leave_main_window_hidden(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        bridge=desktop.Bridge(self.projects);bridge._origin='http://127.0.0.1:12345'
+        bridge._window=Mock();bridge._window.get_current_url.return_value=bridge._origin+'/'
+        startup=SimpleNamespace(closed=False,smoke=False,finish=Mock())
+        prior=dict(self.projects.settings)
+        with patch.object(desktop,'STARTUP',startup),patch.object(Path,'replace',side_effect=OSError('read only')),self.assertLogs(level='ERROR'):
+            self.assertEqual(bridge.startup_ready(dict(scale=1.5)),{'ok':True})
+        bridge._window.show.assert_called_once();startup.finish.assert_called_once()
+        self.assertEqual(self.projects.settings,prior)
 
     def test_last_successful_project_reopens_with_home_resources(self):
         path=self.root/'上次项目'

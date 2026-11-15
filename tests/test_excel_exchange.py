@@ -30,7 +30,7 @@ class ExcelTests(unittest.TestCase):
         p=self.action('preview',token=u['token'],sheets=[c]);self.assertEqual(p['texts'][0]['sentences'],2);self.assertEqual(p['texts'][0]['partial'],2)
         result=self.import_plan(u,[c]);self.assertEqual(result['count'],2)
         with server.connect(audit=False) as db:
-            b=json.loads(db.execute('SELECT body FROM entries ORDER BY position').fetchone()[0]);self.assertEqual(b['ipa'],'ɑ n');self.assertEqual(b['translation'],'');self.assertEqual([(w['form'],w['gloss']) for w in b['words']],[('a',''),('','GEN')]);self.assertEqual(db.execute('SELECT COUNT(*) FROM languages').fetchone()[0],1)
+            b=json.loads(db.execute('SELECT body FROM entries_documents ORDER BY position').fetchone()[0]);self.assertEqual(b['ipa'],'ɑ n');self.assertEqual(b['translation'],'');self.assertEqual([(w['form'],w['gloss']) for w in b['words']],[('a',''),('','GEN')]);self.assertEqual(db.execute('SELECT COUNT(*) FROM languages').fetchone()[0],1)
         self.assertEqual(self.undo()[0],200)
         with server.connect(audit=False) as db:self.assertEqual(db.execute('SELECT COUNT(*) FROM texts').fetchone()[0],0)
         self.assertEqual(self.undo('redo')[0],200)
@@ -60,7 +60,7 @@ class ExcelTests(unittest.TestCase):
         r=self.import_plan(u,[c,{**c,'index':1}]);e=self.action('export',ids=r['ids']);raw=base64.b64decode(e['data']);s=x.read(io.BytesIO(raw));self.assertEqual(len(s),2);self.assertNotEqual(s[0]['name'],s[1]['name']);self.assertEqual(s[0]['rows'][2][3],'=abc')
         u2=self.action('inspect',data=e['data']);r2=self.import_plan(u2,[c]);
         with server.connect(audit=False) as db:
-            bodies=[json.loads(row[0]) for row in db.execute('SELECT body FROM entries WHERE text_id=? ORDER BY position',(r2['ids'][0],))];self.assertEqual([len(b['words']) for b in bodies],[2,0,1]);self.assertEqual(bodies[0]['ipa'],'a\nb')
+            bodies=[json.loads(row[0]) for row in db.execute('SELECT body FROM entries_documents WHERE text_id=? ORDER BY position',(r2['ids'][0],))];self.assertEqual([len(b['words']) for b in bodies],[2,0,1]);self.assertEqual(bodies[0]['ipa'],'a\nb')
         zipped=self.action('export',ids=r['ids'],separate=True)
         with zipfile.ZipFile(io.BytesIO(base64.b64decode(zipped['data']))) as z:self.assertEqual(len(z.namelist()),2)
 
@@ -69,7 +69,7 @@ class ExcelTests(unittest.TestCase):
         u=self.action('inspect',data=base64.b64encode(excel_without_translation()).decode());c=dict(index=0,title='合成无译文工作表',start=2,mappings=[dict(column=4,target='ipa'),dict(column=5,target='form'),dict(column=6,target='gloss'),dict(column=7,target='notes')])
         p=self.action('preview',token=u['token'],sheets=[c]);self.assertGreater(p['texts'][0]['sentences'],10);r=self.import_plan(u,[c]);e=self.action('export',ids=r['ids']);self.assertTrue(e['data'])
         with server.connect(audit=False) as db:
-            bodies=[json.loads(row[0]) for row in db.execute('SELECT body FROM entries')];self.assertTrue(all(b['translation']=='' for b in bodies));self.assertTrue(bodies[0]['ipa'].startswith('synthetic0 ipa'))
+            bodies=[json.loads(row[0]) for row in db.execute('SELECT body FROM entries_documents ORDER BY rowid')];self.assertTrue(all(b['translation']=='' for b in bodies));self.assertTrue(bodies[0]['ipa'].startswith('synthetic0 ipa'))
 
     def test_desktop_save_as_cancel_and_project_scope(self):
         from unittest.mock import Mock,patch

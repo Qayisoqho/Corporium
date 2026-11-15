@@ -37,7 +37,7 @@ class Element {
 }
 function deferred(){let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};}
 const settle=()=>new Promise(setImmediate);
-const catalog={about:{name:'Corporium',version:'0.9.01108',description:'A local workspace',developer:'Erči',project_url:'https://example.invalid/project',issues_url:'https://example.invalid/issues'},items:[{id:'program-license',title:'Program license'}]};
+const catalog={about:{name:'Corporium',version:'0.9.01115',description:'A local workspace',developer:'Erči',project_url:'https://example.invalid/project',issues_url:'https://example.invalid/issues'},items:[{id:'program-license',title:'Program license'}]};
 const response=body=>({ok:true,json:async()=>body});
 function setup(locale='zh-CN'){
  const body=new Element('body'),brandParent=new Element('div'),brand=new Element('a'),management=new Element('dialog'),backup=new Element('div');

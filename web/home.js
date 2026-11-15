@@ -74,6 +74,8 @@ async function showHome(){
   const seq=++homeFetch;$('home-error').textContent='';
   try{const data=await api('home');if(seq!==homeFetch||!homeVisible)return;homeData=data;homeIndex=0;
     const c=data.counts;$('home-stats').innerHTML=(globalThis.CorporiumI18n?.f("52342ffe7db4b8",()=>[c.texts.toLocaleString(),c.corpus_sentences,c.independent_sentences,c.sentences.toLocaleString(),c.lexemes.toLocaleString()])??`<span><b>${c.texts.toLocaleString()}</b> 文本</span><i>·</i><span title="文本句子 ${c.corpus_sentences} ＋ 独立例句 ${c.independent_sentences}"><b>${c.sentences.toLocaleString()}</b> 句</span><i>·</i><span title="词典词条数量"><b>${c.lexemes.toLocaleString()}</b> 词条</span>`);
+    if(!homeInitialized)await corpusReady;
+    if(seq!==homeFetch||!homeVisible)return;
     drawHomeExample();scheduleHome();
   }catch(e){$('home-error').textContent=(globalThis.CorporiumI18n?.f("f7e68ee74b08b6",()=>[e.message])??'首页数据暂时无法加载：'+e.message);}
 }
@@ -107,7 +109,11 @@ async function restoreHomePlace(){
   }finally{homeRestoring=false;homeInitialized=true;}
 }
 const homeRestored=restoreHomePlace().catch(e=>$('home-error').textContent=e.message);
-homeRestored.then(()=>window.corporiumFontsReady).then(()=>document.fonts?.ready).finally(()=>{
+const homeStartup=(document.readyState==='loading'?new Promise(resolve=>document.addEventListener('DOMContentLoaded',resolve,{once:true})):Promise.resolve()).then(async()=>{
+ if(typeof initialLanguageReady!=='undefined')await initialLanguageReady;
+ if(!$('home-skip').checked)return showHome();
+ document.documentElement.dataset.home='false';
+});
+Promise.all([homeRestored,homeStartup]).then(()=>window.corporiumFontsReady).then(()=>document.fonts?.ready).finally(()=>{
  document.documentElement.dataset.appLoading='false';$('home-enter').disabled=false;
 });
-if(!$('home-skip').checked)showHome();else{document.documentElement.dataset.home='false';}

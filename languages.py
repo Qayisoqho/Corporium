@@ -42,6 +42,8 @@ def save(db, body, *, class_catalogs=()):
     if not name: raise ValueError('请填写语言名称')
     data=body.get('metadata',{})
     if not isinstance(data,dict): raise ValueError('语言信息格式不正确')
+    if 'chinese_mode' in data and type(data['chinese_mode']) is not bool:
+        raise ValueError('汉语模式必须是开关')
     grammar.ignored_values(data)
     import grammaticality
     if grammaticality.KEY in data:data[grammaticality.KEY]=grammaticality.clean(data[grammaticality.KEY])
@@ -134,12 +136,18 @@ def request_scope(db, path, body):
         if row:ids.append(row[0])
     elif path in ('code-save','code-delete','code-link','code-unlink'):
         ids.append(annotations.owner(db,body['kind'],body['record_id'])[2])
-    elif path in ('annotation-save','inline-save','grammaticality-save','segmentation-save','segmentation-link','sentence-dictionary-preview','sentence-dictionary-apply','sentence-gloss-preview','sentence-gloss-apply','gloss-source-save'):
+    elif path=='inline-save':
+        ids.append(annotations.owner_record(db,body['kind'],body['id'])['language_id'])
+    elif path=='segmentation-link' and body.get('kind')=='independent':
+        row=db.execute('SELECT language_id FROM dictionary_examples WHERE id=?',(body.get('id'),)).fetchone()
+        if not row:raise ValueError('例句已不存在')
+        ids.append(row[0])
+    elif path in ('annotation-save','grammaticality-save','segmentation-save','segmentation-link','sentence-dictionary-preview','sentence-dictionary-apply','sentence-gloss-preview','sentence-gloss-apply','gloss-source-save'):
         ids.append(annotations.owner(db,body['kind'],body['id'])[2])
     elif path in ('layer-save','layer-delete') and body.get('id'):
         row=db.execute('SELECT language_id FROM annotation_layers WHERE id=?',(body['id'],)).fetchone()
         if row:ids.append(row[0])
-    elif path in ('writing-save','writing-delete','example-save','example-delete') and body.get('id'):
+    elif path in ('writing-save','writing-delete','example-save','example-delete','example-links-save') and body.get('id'):
         table='writing_types' if path.startswith('writing-') else 'dictionary_examples'
         row=db.execute('SELECT language_id FROM '+table+' WHERE id=?',(body['id'],)).fetchone()
         if row:ids.append(row[0])
@@ -177,10 +185,10 @@ def request_scope(db, path, body):
     return lid
 
 
-def annotate(entry, default, catalogue):
+def annotate(entry, default, catalogue, *, settings=None):
     lid=entry.get('language_id') or default
     lang=catalogue.get(lid,catalogue[default])
-    data=json.loads(lang['metadata'])
+    data=settings[lid if lid in catalogue else default] if settings is not None else json.loads(lang['metadata'])
     analyze(entry)
     if not data.get('check_boundaries',True): entry['warnings']=[w for w in entry['warnings'] if '边界' not in w]
     if not data.get('check_commands',True): entry['warnings']=[w for w in entry['warnings'] if 'Typst' not in w]
@@ -257,7 +265,8 @@ def import_bundle(db, bundle, lid, media_files=None,fresh_references=False):
             if entry.get('reduplications'):
                 import reduplication
                 analyze(entry);reduplication.check_relations(entry);reduplication.fork(entry)
-            db.execute('INSERT INTO entries(id,text_id,position,body) VALUES(?,?,?,?)',(eid,tid,position,json.dumps(analyze(entry),ensure_ascii=False)))
+            import sentence_rows
+            sentence_rows.write(db,'corpus',eid,analyze(entry),columns=dict(text_id=tid,position=position),insert=True)
             count+=1
     imported=lexicon.import_bundle(db,bundle,mapping,entry_map,lid,layouts)
     import quick_edit

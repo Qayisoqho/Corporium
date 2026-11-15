@@ -90,10 +90,10 @@ class DisplaySpacingTests(unittest.TestCase):
         self.assertEqual(self.call('/api/lexeme-save',record)[0],200)
         current=lambda:self.call('/api/lexeme?id='+record['id'])[1]['body']['orthographies'][0]
         self.assertEqual(current()['space_before'],75)
-        with server.connect() as db: before=db.execute('SELECT body FROM lexemes WHERE id=?',(record['id'],)).fetchone()[0]
+        with server.connect() as db: before=db.execute('SELECT body FROM lexemes_documents WHERE id=?',(record['id'],)).fetchone()[0]
         self.assertEqual(self.call('/api/writing-save',{**t,'space_before':150})[0],200)
         self.assertEqual(current()['space_before'],150)
-        with server.connect() as db: self.assertEqual(db.execute('SELECT body FROM lexemes WHERE id=?',(record['id'],)).fetchone()[0],before)
+        with server.connect() as db: self.assertEqual(db.execute('SELECT body FROM lexemes_documents WHERE id=?',(record['id'],)).fetchone()[0],before)
         self.assertEqual(self.undo()[0],200);self.assertEqual(current()['space_before'],75)
         generation=self.call('/api/undo-state')[1]['generation']
         self.assertEqual(self.call('/api/redo',dict(generation=generation))[0],200)

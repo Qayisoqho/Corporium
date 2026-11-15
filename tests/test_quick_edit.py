@@ -1,6 +1,8 @@
+import source_fixtures
 import copy
 import json
 import unittest
+from unittest.mock import patch
 import server
 import test_morpheme_registry
 
@@ -28,6 +30,26 @@ class QuickEditTests(unittest.TestCase):
         settings=self.api('quick-edit-settings?_language='+other)
         self.assertEqual(settings['selected'],[])
         self.assertEqual(self.call('/api/quick-edit-settings',dict(_language=other,revision=settings['revision'],writing_types=[t['id']]))[0],400)
+
+    def test_chinese_mode_and_default_columns_save_and_undo_together(self):
+        writing=self.api('writing-save',dict(name='汉字',font='Junicode'))
+        before=self.api('quick-edit-settings')
+        payload=dict(revision=before['revision'],writing_types=[writing['id']],chinese_mode=True)
+        for invalid in (dict(payload,chinese_mode='true'),dict(payload,writing_types=['foreign'])):
+            self.assertEqual(self.call('/api/quick-edit-settings',invalid)[0],400)
+            self.assertEqual(self.api('quick-edit-settings'),before)
+        with patch('lexicon.validate_links',side_effect=AssertionError('Input preferences must be checked locally')):
+            saved=self.api('quick-edit-settings',payload)
+            self.assertEqual(saved['revision'],before['revision']+1)
+            self.assertEqual((saved['chinese_mode'],saved['selected']),(True,[writing['id']]))
+            self.assertEqual(self.undo()[0],200)
+            undone=self.api('quick-edit-settings')
+            self.assertEqual((undone['chinese_mode'],undone['selected']),(False,[]))
+            self.assertEqual(self.undo('redo')[0],200)
+            redone=self.api('quick-edit-settings')
+            self.assertEqual((redone['chinese_mode'],redone['selected']),(True,[writing['id']]))
+        columns_only=self.api('quick-edit-settings',dict(revision=redone['revision'],writing_types=[]))
+        self.assertTrue(columns_only['chinese_mode'])
 
     def test_settings_exchange_and_writing_replacement(self):
         a=self.api('writing-save',dict(name='汉字',font='Junicode'))
@@ -106,10 +128,10 @@ class QuickEditTests(unittest.TestCase):
         self.assertEqual(self.assign(x,create=None,morpheme_id=m['id'],morpheme_revision=m['revision'],components=[dict(analysis_id='a',component_id='c'),dict(analysis_id='b',component_id='d')])[0],200)
         # Reproduce data from versions that did not materialize inherited writings.
         with server.connect(audit=False) as db:
-            body=json.loads(db.execute('SELECT body FROM lexemes WHERE id=?',(x['id'],)).fetchone()[0])
+            body=json.loads(db.execute('SELECT body FROM lexemes_documents WHERE id=?',(x['id'],)).fetchone()[0])
             body['word_structure']['analyses'][0]['components'][0]['writings']=[]
             body['word_structure']['analyses'][1]['components'][0]['writings']=[dict(type_id=t['id'],text='局部')]
-            db.execute('UPDATE lexemes SET body=? WHERE id=?',(json.dumps(body),x['id']))
+            source_fixtures.replace(db,'lexemes',x['id'],json.dumps(body))
         before=self.api('entries')['items']
         repaired=self.api('morpheme-sync-writings',{});self.assertEqual((repaired['lexemes'],repaired['components']),(1,1))
         self.assertEqual(self.api('undo-state')['undo']['label'],'同步语素书写形式')
@@ -126,7 +148,7 @@ class QuickEditTests(unittest.TestCase):
     def test_complete_reading_sizes_preserve_whole_homophone_groups(self):
         with server.connect(audit=False) as db:
             for i in range(57):
-                for n in range(2):db.execute('INSERT INTO morphemes VALUES(?,?,?,?,?,1)',(f'{i}-{n}','ordos',f'form{i}-{n}',1,json.dumps(dict(readings=[f'r{i:02}']))))
+                for n in range(2):source_fixtures.seed(db,'morphemes',('id', 'language_id', 'form', 'number', 'body', 'revision'),(f'{i}-{n}', 'ordos', f'form{i}-{n}', 1, json.dumps(dict(readings=[f'r{i:02}'])), 1))
         for size in (10,20,50,'all'):
             data=self.api('homophones?language=ordos&view=reading&page_size='+str(size))
             self.assertEqual(len(data['groups']),57 if size=='all' else size)

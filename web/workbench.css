@@ -39,7 +39,6 @@ html[data-home=false] #workspace-sidebar .brand{margin:0;font-size:1.7rem}html[d
 .workbench-language-options{margin-top:5px;font-size:var(--ui-text-size)}.workbench-language-options summary{cursor:pointer}.language-panel{margin:0!important;padding-bottom:8px!important}
 html[data-home=false] #workbench-module-nav #survey-tree{position:static;max-height:none;border:0;padding:0;background:transparent;overflow:visible}
 html[data-home=false] #workbench-module-nav #dictionary-search-panel, html[data-home=false] #workbench-module-nav #survey-search{position:sticky;top:0;z-index:12;max-height:min(60dvh,32rem);overflow:auto;background:var(--sidebar,var(--paper));margin-top:0;isolation:isolate}
-html[data-home=false][data-workbench=dictionary] #workbench-module-nav{scroll-padding-top:var(--dictionary-search-inset,0px)}
 html[data-home=false][data-workbench=survey] .survey-layout{display:block}
 html[data-home=false] #workbench-module-nav .dictionary-list-panel{height:auto;max-height:none;min-height:0;border:0;background:transparent;display:block}
 html[data-home=false] #workbench-module-nav #dictionary-list{max-height:none;overflow:visible}
@@ -382,39 +381,61 @@ html[data-home=false] #dictionary-detail .ws-component-writings>.ws-writing-view
 #dictionary-search-options .dictionary-condition-field{display:block;width:100%;box-sizing:border-box}
 #dictionary-search-options .dictionary-condition>div{min-width:0;max-width:100%}
 
-/* Docoid: neutral reading surfaces, blue module navigation, pale command ribbon. */
+/* The Docoid palettes share document layout, controls and dialog geometry. */
+/* Both editing views render the original morpheme draft with shared controls. */
+#chinese-headword-editor{flex:1 0 100%;width:100%;min-width:0;margin-block:var(--ui-gap);container:chinese-source / inline-size}
+#chinese-headword-editor[hidden],#chinese-headword-editor [hidden]{display:none!important}
+.chinese-source-controls{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--ui-gap);align-items:center}
+.chinese-source-field{display:flex;align-items:center;gap:var(--ui-gap);min-width:0}
+.chinese-source-field>label{flex:none;white-space:nowrap;margin:0}
+#chinese-headword-editor .chinese-source-field>:is(select,input){flex:1;min-width:0;width:0;max-width:100%;margin:0}
+.chinese-table-host{min-width:0;margin-top:var(--ui-gap)}
+.chinese-table-host #ws-analyses{display:block;margin:0;padding:0}
+html[data-home=false] #chinese-headword-editor .ws-analysis{display:block;margin:0;padding:0;border:0;background:transparent}
+.chinese-table-host .ws-analysis>:not(.quick-component-table,.quick-analysis-tools){display:none!important}
+#chinese-headword-editor .quick-component-row>:not(.quick-component-line){display:none!important}
+#chinese-headword-editor .quick-component-row{display:block;width:100%;max-width:none;padding:0;margin:0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent}
+#chinese-headword-editor .quick-component-gloss[hidden]{display:none}
+#chinese-headword-editor .quick-component-line,#chinese-headword-editor .quick-component-head{gap:var(--ui-gap)}
+.chinese-form-actions{display:flex;justify-content:flex-end;margin-top:var(--ui-gap)}
+#chinese-headword-editor .quick-analysis-tools>.chinese-form-actions{margin:0 0 0 auto}
+#lexeme-quick-editor #chinese-headword-editor{grid-column:1/-1;order:3}
+@container chinese-source (max-width:40rem){.chinese-source-field{flex-direction:column;align-items:stretch}.chinese-source-field>label{white-space:normal}#chinese-headword-editor .chinese-source-field>:is(select,input){width:100%}}
+@container chinese-source (max-width:22rem){.chinese-source-controls{grid-template-columns:minmax(0,1fr)}}
+html[data-theme|="docoid"]{--docoid-gutter:clamp(20px,3vw,48px)}
 html[data-theme="docoid"]{
  color-scheme:light;
  --ink:#24282e;--muted:#626a73;--paper:#fff;--surface:#fff;--sidebar:#f0f1f3;--line:#d5d9df;
  --green:#185b9d;--accent:#e1edf9;--hover:#e8eef5;--selected:#dceafa;--body-text:#24282e;--ipa:#24282e;--gloss:#363c43;
  --gold:#185b9d;--hit:#fff0b3;--danger:#a32626;--warning:#875600;--primary-hover:#104a82;--button-ink:#fff;--focus:#256bb0;--edit-surface:#f4f7fb;
- --docoid-nav:#185b9d;--docoid-tools:#f1f4f8;--docoid-gutter:clamp(20px,3vw,48px);
+ --docoid-nav:#185b9d;--docoid-tools:#f1f4f8;
 }
-html[data-theme="docoid"][data-home="false"] body>main{padding-left:var(--docoid-gutter);padding-right:var(--docoid-gutter)}
-html[data-theme="docoid"][data-home="false"] #workspace-toolbar{padding:0;margin:0 calc(-1 * var(--docoid-gutter)) 20px;background:var(--docoid-tools);border-bottom:1px solid var(--line);box-shadow:none}
-html[data-theme="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs{margin:0;padding:0 16px;gap:0 10px;background:var(--docoid-nav);border:0}
-html[data-theme="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs button{margin:0;padding:10px 9px 8px;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;color:#fff;box-shadow:none}
-html[data-theme="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs button:hover{background:#ffffff1f}
-html[data-theme="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs button[aria-pressed="true"]{color:#fff;background:#ffffff12;border-bottom-color:#fff;font-weight:600}
-html[data-theme="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs button:focus-visible{outline:2px solid #fff;outline-offset:-5px}
-html[data-theme="docoid"][data-home="false"] #workspace-toolbar .toolbar-row{padding:6px 16px;background:var(--docoid-tools);color:var(--ink);gap:5px 8px}
-html[data-theme="docoid"][data-home="false"] #workspace-toolbar .toolbar-row button{border-radius:3px}
-html[data-theme="docoid"] #workspace-history{padding:8px 16px;background:var(--docoid-tools)}
-html[data-theme="docoid"] :is(button,input:not([type=checkbox]),select,textarea){border-radius:3px}
-html[data-theme="docoid"] :is(dialog,.metadata-panel,.ws-box,.usage-editor,.variant-editor,.object-media-gallery){border-radius:4px;box-shadow:none}
-html[data-theme="docoid"] .dialog-top, html[data-theme="docoid"] .dialog-bottom{background:var(--docoid-tools)}
-html[data-theme="docoid"] dialog::backdrop{background:#172b444d}
-html[data-theme="docoid"] :is(.folder-tools,#brand-language-menu,.workbench-menu-items){background:var(--surface);border-color:var(--line);border-radius:4px;box-shadow:0 4px 12px #182b4020}
-html[data-theme="docoid"] #workspace-sidebar :is(.nav.active,.lexeme-list-item.active){background:var(--selected);box-shadow:inset 3px 0 var(--green);border-color:transparent;border-radius:3px}
-html[data-theme="docoid"] #workspace-sidebar .lexeme-list-item:not(.active){background:transparent;box-shadow:none}
-html[data-theme="docoid"] header::after{display:none}
+html[data-theme|="docoid"][data-home="false"] body>main{padding-left:var(--docoid-gutter);padding-right:var(--docoid-gutter)}
+html[data-theme|="docoid"][data-home="false"] #workspace-toolbar{padding:0;margin:0 calc(-1 * var(--docoid-gutter)) 20px;background:var(--docoid-tools);border-bottom:1px solid var(--line);box-shadow:none}
+html[data-theme|="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs{margin:0;padding:0 16px;gap:0 10px;background:var(--docoid-nav);border:0}
+html[data-theme|="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs button{margin:0;padding:10px 9px 8px;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;color:#fff;box-shadow:none}
+html[data-theme|="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs button:hover{background:#ffffff1f}
+html[data-theme|="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs button[aria-pressed="true"]{color:#fff;background:#ffffff12;border-bottom-color:#fff;font-weight:600}
+html[data-theme|="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs button:focus-visible{outline:2px solid #fff;outline-offset:-5px}
+html[data-theme|="docoid"][data-home="false"] #workspace-toolbar .toolbar-row{padding:6px 16px;background:var(--docoid-tools);color:var(--ink);gap:5px 8px}
+html[data-theme|="docoid"][data-home="false"] #workspace-toolbar .toolbar-row button{border-radius:3px}
+html[data-theme|="docoid"] #workspace-history{padding:8px 16px;background:var(--docoid-tools)}
+html[data-theme|="docoid"] :is(button,input:not([type=checkbox]),select,textarea){border-radius:3px}
+html[data-theme|="docoid"] :is(dialog,.metadata-panel,.ws-box,.usage-editor,.variant-editor,.object-media-gallery){border-radius:4px;box-shadow:none}
+html[data-theme|="docoid"] .dialog-top, html[data-theme|="docoid"] .dialog-bottom{background:var(--docoid-tools)}
+html[data-theme|="docoid"] dialog::backdrop{background:var(--docoid-backdrop,#172b444d)}
+html[data-theme|="docoid"] :is(.folder-tools,#brand-language-menu,.workbench-menu-items){background:var(--surface);border-color:var(--line);border-radius:4px;box-shadow:0 4px 12px var(--docoid-shadow-color,#182b4020)}
+html[data-theme|="docoid"] #workspace-sidebar :is(.nav.active,.lexeme-list-item.active){background:var(--selected);box-shadow:inset 3px 0 var(--green);border-color:transparent;border-radius:3px}
+html[data-theme|="docoid"] #workspace-sidebar .lexeme-list-item:not(.active){background:transparent;box-shadow:none}
+html[data-theme|="docoid"] header::after{display:none}
 html[data-theme="docoid"]::selection{background:#c8def7;color:#162d48}
 html[data-theme="docoid"] #timeline-workspace{--tl-accent:#185b9d}
-html[data-theme="docoid"][data-home="false"] :is(#add,:is(#new-lexeme,#morpheme-new)){border-radius:4px;box-shadow:none}
+html[data-theme="docoid-crimson"] #timeline-workspace{--tl-accent:#506680}
+html[data-theme|="docoid"][data-home="false"] :is(#add,:is(#new-lexeme,#morpheme-new)){border-radius:4px;box-shadow:none}
 @media(max-width:600px){
- html[data-theme="docoid"]{--docoid-gutter:12px}
- html[data-theme="docoid"][data-home="false"]:not(.sidebar-collapsed) #workspace-toolbar{margin-left:calc(var(--sidebar-width) - var(--docoid-gutter))}
- html[data-theme="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs, html[data-theme="docoid"][data-home="false"] #workspace-toolbar .toolbar-row{padding-left:10px;padding-right:10px}
+ html[data-theme|="docoid"]{--docoid-gutter:12px}
+ html[data-theme|="docoid"][data-home="false"]:not(.sidebar-collapsed) #workspace-toolbar{margin-left:calc(var(--sidebar-width) - var(--docoid-gutter))}
+ html[data-theme|="docoid"][data-home="false"] #workspace-toolbar .workspace-tabs, html[data-theme|="docoid"][data-home="false"] #workspace-toolbar .toolbar-row{padding-left:10px;padding-right:10px}
 }
 
 /* Shared timeline density: every skin uses the same single-row controls. */
@@ -444,8 +465,8 @@ html.sidebar-collapsed #sidebar-toggle{left:0}
 html.sidebar-collapsed #sidebar-toggle svg{transform:rotate(180deg)}
 html[data-home=true] #sidebar-toggle{display:none}
 /* The inspector reserves main-content space, but navigation still spans its top. */
-@media(min-width:851px){html[data-theme=docoid][data-home=false].workbench-inspecting #workspace-toolbar{margin-right:calc(-360px - var(--docoid-gutter));padding-right:0}}
-@media(max-width:850px){html[data-theme=docoid][data-home=false].workbench-inspecting #workspace-toolbar{margin-right:calc(-1 * var(--docoid-gutter));padding-right:0}}
+@media(min-width:851px){html[data-theme|=docoid][data-home=false].workbench-inspecting #workspace-toolbar{margin-right:calc(-360px - var(--docoid-gutter));padding-right:0}}
+@media(max-width:850px){html[data-theme|=docoid][data-home=false].workbench-inspecting #workspace-toolbar{margin-right:calc(-1 * var(--docoid-gutter));padding-right:0}}
 
 /* Keep the association title and its existing close form on one shared row. */
 
@@ -947,26 +968,26 @@ html[data-theme=dawoid] #segmentation-dialog .segment-color{border-bottom-color:
 .quick-sense-number{font-size:var(--ui-text-size);color:var(--muted);white-space:nowrap}
 .quick-sense-tools{display:flex;gap:3px;justify-content:flex-end}
 #lexeme-quick-editor .quick-sense-tools button{padding:var(--ui-control-padding);min-height:var(--ui-field-height)}
-#lexeme-quick-editor .quick-component-table{overflow:auto;margin:4px 0;border:1px solid var(--line);border-radius:4px;background:var(--paper)}
+:is(#lexeme-quick-editor,#chinese-headword-editor) .quick-component-table{overflow:auto;margin:4px 0;border:1px solid var(--line);border-radius:4px;background:var(--paper)}
 .quick-component-sheet{min-width:var(--quick-component-width)}
-#lexeme-quick-editor #word-structure-editor .ws-components{display:block;margin:0;padding:0}
-#lexeme-quick-editor #word-structure-editor .ws-components>.quick-component-row{display:block;max-width:none;width:100%;margin:0;padding:0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent}
-#lexeme-quick-editor .quick-component-row>:not(.quick-component-line){display:none!important}
+html[data-home=false] :is(#lexeme-quick-editor,#chinese-headword-editor) .ws-components{display:block;margin:0;padding:0}
+html[data-home=false] :is(#lexeme-quick-editor,#chinese-headword-editor) .ws-components>.quick-component-row{display:block;max-width:none;width:100%;margin:0;padding:0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent}
+:is(#lexeme-quick-editor,#chinese-headword-editor) .quick-component-row>:not(.quick-component-line){display:none!important}
 .quick-component-line,.quick-component-head{display:grid;grid-template-columns:var(--quick-component-columns);gap:8px;align-items:center;padding:4px 6px}
 .quick-component-head{font-size:var(--ui-text-size);color:var(--muted);padding-top:3px;padding-bottom:3px;background:var(--surface,var(--paper))}
 .quick-component-head>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .quick-component-search{display:flex;gap:3px;align-items:center;min-width:0}
-#lexeme-quick-editor .quick-component-search .ws-registry-query{width:0;flex:1;min-width:0}
-#lexeme-quick-editor .quick-component-search button{flex:none;width:25px;height:var(--ui-field-height);min-height:var(--ui-field-height);padding:var(--ui-control-padding)}
+:is(#lexeme-quick-editor,#chinese-headword-editor) .quick-component-search .ws-registry-query{width:0;flex:1;min-width:0}
+:is(#lexeme-quick-editor,#chinese-headword-editor) .quick-component-search button{flex:none;width:25px;height:var(--ui-field-height);min-height:var(--ui-field-height);padding:var(--ui-control-padding)}
 .quick-component-search svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;vertical-align:middle}
-#lexeme-quick-editor .quick-component-search select{flex:none;width:28px;min-width:0;padding:var(--ui-control-padding);height:var(--ui-field-height)}
-#lexeme-quick-editor .quick-component-search .ws-registry-form{width:6.5em;font-size:.8rem}
+:is(#lexeme-quick-editor,#chinese-headword-editor) .quick-component-search select{flex:none;width:28px;min-width:0;padding:var(--ui-control-padding);height:var(--ui-field-height)}
+:is(#lexeme-quick-editor,#chinese-headword-editor) .quick-component-search .ws-registry-form{width:6.5em;font-size:.8rem}
 .quick-component-writings{display:contents}
-#lexeme-quick-editor :is(.quick-row-input,.quick-sense-pos,.quick-component-search input){min-width:0;width:100%;margin:0;height:var(--ui-field-height);padding:var(--ui-control-padding);font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
-#lexeme-quick-editor .quick-row-input[readonly]{background:transparent;border-color:transparent;color:var(--ink)}
+:is(#lexeme-quick-editor,#chinese-headword-editor) :is(.quick-row-input,.quick-sense-pos,.quick-component-search input){min-width:0;width:100%;margin:0;height:var(--ui-field-height);padding:var(--ui-control-padding);font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
+:is(#lexeme-quick-editor,#chinese-headword-editor) .quick-row-input[readonly]{background:transparent;border-color:transparent;color:var(--ink)}
 .quick-component-form{font-family:var(--annotation-font,Junicode),serif;font-style:var(--form-style,normal);font-weight:var(--form-weight,600)}
 .quick-component-readings{font-family:var(--ipa-font,IPAPANNEW),serif;font-style:var(--ipa-style,normal);font-weight:var(--ipa-weight,400)}
-#lexeme-quick-editor .quick-row-grip, #lexeme-quick-editor .quick-row-remove{padding:0;width:24px;height:28px;min-height:0;border-color:transparent;background:transparent}
+:is(#lexeme-quick-editor,#chinese-headword-editor) .quick-row-grip, :is(#lexeme-quick-editor,#chinese-headword-editor) .quick-row-remove{padding:0;width:24px;height:28px;min-height:0;border-color:transparent;background:transparent}
 .quick-row-grip{touch-action:none;cursor:grab;color:var(--muted)}
 .quick-row-dragging{opacity:.6}.quick-sort-row[data-quick-drop=before]{box-shadow:inset 0 2px var(--green)}.quick-sort-row[data-quick-drop=after]{box-shadow:inset 0 -2px var(--green)}
 .quick-component-line>.ws-registry-results{grid-column:1/-1;margin:0 0 2px 32px;background:var(--surface,var(--paper))}
@@ -978,7 +999,7 @@ html[data-theme=dawoid] #segmentation-dialog .segment-color{border-bottom-color:
 
 #lexeme-quick-editor .quick-writing-add{display:inline-block;width:auto;max-width:10rem;margin:3px 8px;padding:3px 6px;font-size:var(--ui-text-size);height:1.8rem}
 #lexeme-quick-editor .quick-writing-add[hidden]{display:none}
-#lexeme-quick-editor .quick-row-grip, #lexeme-quick-editor .quick-row-remove{font-size:.9rem;line-height:1}
+:is(#lexeme-quick-editor,#chinese-headword-editor) .quick-row-grip, :is(#lexeme-quick-editor,#chinese-headword-editor) .quick-row-remove{font-size:.9rem;line-height:1}
 #lexeme-quick-editor #lexeme-orthographies .orthography-editor label{font-size:0;line-height:0}
 #lexeme-quick-editor #lexeme-orthographies .orthography-editor input, #lexeme-quick-editor #lexeme-orthographies .orthography-editor select{font-size:var(--ui-text-size);height:var(--ui-field-height);line-height:var(--ui-text-leading);margin:0;padding:var(--ui-control-padding)}
 #lexeme-quick-editor #lexeme-orthographies .remove-orthography{font-size:var(--ui-text-size);height:2rem;min-height:0;padding:3px 7px}
@@ -995,10 +1016,10 @@ html[data-theme=dawoid] #segmentation-dialog .segment-color{border-bottom-color:
 #lexeme-quick-editor .quick-sense-tools button{font-size:var(--ui-text-size);line-height:var(--ui-text-leading)}
 
 /* A small readability increase without adding rows or changing compact row heights. */
-#lexeme-quick-editor :is(.quick-row-input,.quick-sense-pos,.quick-component-search input){font-size:var(--ui-text-size)}
+:is(#lexeme-quick-editor,#chinese-headword-editor) :is(.quick-row-input,.quick-sense-pos,.quick-component-search input){font-size:var(--ui-text-size)}
 #lexeme-quick-editor #lexeme-orthographies .orthography-editor input, #lexeme-quick-editor #lexeme-orthographies .orthography-editor select{font-size:var(--ui-text-size)}
 #lexeme-quick-editor #lexeme-headword{font-size:.95rem}
-#lexeme-quick-editor .quick-component-head{font-size:var(--ui-text-size)}
+:is(#lexeme-quick-editor,#chinese-headword-editor) .quick-component-head{font-size:var(--ui-text-size)}
 #lexeme-quick-editor .quick-sense-number{font-size:var(--ui-text-size)}
 #lexeme-quick-editor :is(.quick-sense-tools button,.quick-writing-add){font-size:var(--ui-text-size)}
 .ws-registry-candidates>button>.ws-candidate-writing{max-width:100%}
@@ -1476,6 +1497,9 @@ html[data-shell] #workbench-preferences.settings-moved{display:none}
 #management-dialog .theme-swatch[data-swatch=docoid] i:nth-child(1){background:#185b9d}
 #management-dialog .theme-swatch[data-swatch=docoid] i:nth-child(2){background:#f4f5f7}
 #management-dialog .theme-swatch[data-swatch=docoid] i:nth-child(3){background:#fff}
+#management-dialog .theme-swatch[data-swatch=docoid-crimson] i:nth-child(1){background:#873d42}
+#management-dialog .theme-swatch[data-swatch=docoid-crimson] i:nth-child(2){background:#f1eeeb}
+#management-dialog .theme-swatch[data-swatch=docoid-crimson] i:nth-child(3){background:#fcfbf9}
 #management-dialog .theme-swatch[data-swatch=dawoid] i:nth-child(1){background:#1b1e22}
 #management-dialog .theme-swatch[data-swatch=dawoid] i:nth-child(2){background:#1d2024}
 #management-dialog .theme-swatch[data-swatch=dawoid] i:nth-child(3){background:#181a1d}
@@ -1592,15 +1616,58 @@ html[data-shell] #app-status .app-status-save>span{overflow:hidden;text-overflow
 #management-dialog .settings-inline-title{margin:0;font-size:var(--ui-text-size);font-weight:600}
 #management-dialog .settings-inline-note{margin:0 0 .875rem;font-size:var(--ui-help-size);color:var(--muted)}
 @media(max-width:760px){
- #management-dialog .settings-layout{grid-template-columns:minmax(0,1fr)}
- #management-dialog .settings-nav{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--line);padding:0 0 .5rem;max-height:30dvh}
- #management-dialog .settings-scope{flex:1 1 12rem}
- #management-dialog .settings-group{margin:0 0 .5rem}
+ #management-dialog .settings-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);gap:var(--ui-gap)}
+ #management-dialog .settings-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:var(--ui-gap);border-right:0;border-bottom:1px solid var(--line);padding:0 0 var(--ui-gap);max-height:30dvh}
+ #management-dialog .settings-group{margin:0 0 var(--ui-gap)}
+ #management-dialog .settings-group small{display:none}
  #management-dialog .settings-pages{min-height:0}
 }
 @container settings-pages (max-width:34rem){
  #management-dialog .management-entry{grid-template-columns:minmax(0,1fr);align-items:start;gap:.375rem}
  #management-dialog .management-entry>button{width:min(100%,14rem)}
+}
+
+/* Language and project records use the settings page's own scroll area. */
+#management-dialog :is(.management-language-actions,.management-language-tabs,.management-section-commands,.management-language-target){
+ display:flex;align-items:center;flex-wrap:wrap;gap:var(--ui-gap);margin:0 0 var(--ui-gap);
+}
+#management-dialog .management-language-tabs{border-bottom:1px solid var(--line);padding-bottom:var(--ui-gap)}
+#management-dialog .management-language-tabs button[aria-current=true]{background:var(--selected);border-color:var(--green);font-weight:600}
+#management-dialog .management-language-target{
+ position:sticky;top:0;z-index:2;display:grid;grid-template-columns:auto minmax(0,1fr);
+ padding-block:var(--ui-gap);background:var(--surface,var(--paper));
+}
+#management-dialog .management-language-target select{width:100%;min-width:0;margin:0}
+#management-dialog .management-language-list{display:grid;gap:var(--ui-gap)}
+#management-dialog .management-language-list button{text-align:left;overflow-wrap:anywhere}
+#management-dialog :is(.management-language-actions,.management-language-list,.management-language-tabs,.management-language-target,.management-annotation-entries,#management-entries,.management-hidden-field)[hidden]{display:none}
+#management-dialog .management-editor-panel{min-width:0}
+#management-dialog .management-editor-status:empty{display:none}
+#management-dialog :is(.management-inline-editor,.management-inline-progress)[open]{
+ position:static;inset:auto;display:block;width:100%;min-width:0;max-width:none;height:auto;max-height:none;
+ margin:0;padding:0;border:0;background:transparent;box-shadow:none;overflow:visible;
+}
+#management-dialog .management-inline-progress[open]{margin-bottom:var(--ui-gap);padding-bottom:var(--ui-gap);border-bottom:1px solid var(--line)}
+#management-dialog .management-inline-editor>.dialog-top{display:none}
+#management-dialog .management-inline-editor>.dialog-content{display:block;min-width:0;max-height:none;padding:0;overflow:visible}
+#management-dialog .management-inline-editor>.dialog-bottom{position:static;flex-wrap:wrap;padding:var(--ui-gap) 0 0;background:transparent}
+#management-dialog .management-inline-editor>.dialog-bottom:empty{display:none}
+#management-dialog .management-inline-editor :is(h2,h3,legend,label,p){overflow-wrap:anywhere}
+#management-dialog .management-inline-editor #participant-list button{white-space:normal;overflow-wrap:anywhere}
+#management-dialog .management-inline-editor #participant-form{min-width:0}
+#management-dialog .management-inline-editor .person-field-row{grid-template-columns:repeat(3,minmax(0,1fr)) var(--ui-field-height);gap:var(--ui-gap)}
+#management-dialog .management-inline-editor .person-field-row>button{width:var(--ui-field-height);padding:0}
+#management-dialog .management-inline-editor .hp-inventory-row{align-items:center}
+@container settings-pages (max-width:34rem){
+ #management-dialog .management-language-target{grid-template-columns:minmax(0,1fr)}
+ #management-dialog .management-inline-editor .participant-columns{grid-template-columns:minmax(0,1fr)}
+ #management-dialog .management-inline-editor .person-field-row{grid-template-columns:minmax(0,1fr) var(--ui-field-height)}
+ #management-dialog .management-inline-editor .person-field-row>:is(input,select){grid-column:1/-1}
+ #management-dialog .management-inline-editor .person-field-row>button{grid-column:2}
+ #management-dialog .management-inline-editor .hp-inventory-row{grid-template-columns:var(--ui-field-height) repeat(2,minmax(0,1fr))}
+ #management-dialog .management-inline-editor .hp-inventory-row .homophone-links{grid-column:2/-1}
+ #management-dialog .management-inline-editor .language-typography-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #management-dialog .management-inline-editor .language-typography-grid>label:nth-child(3n+1){grid-column:1/-1}
 }
 @media(prefers-reduced-motion:reduce){
  html[data-shell] :is(.lx-toggle svg,.search-grip-chevron){transition:none}
@@ -1774,8 +1841,9 @@ html[data-shell] #lexeme-form.lx-arranged .lx-entry-metadata{position:relative;m
 html[data-shell] #lexeme-form.lx-arranged .lx-entry-metadata>summary{display:inline-flex;align-items:center;min-height:var(--ui-control-height-small);padding:.25rem .5rem;cursor:pointer;color:var(--muted)}
 html[data-shell] #lexeme-form.lx-arranged .lx-entry-metadata>summary::before{content:'›';display:inline-block;margin-right:.375rem;font-size:1rem;line-height:1;transform:rotate(0)}
 html[data-shell] #lexeme-form.lx-arranged .lx-entry-metadata[open]>summary::before{transform:rotate(90deg)}
-html[data-shell] #lexeme-form.lx-arranged .lx-entry-metadata[open]{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem .875rem;padding-bottom:.375rem}
-html[data-shell] #lexeme-form.lx-arranged .lx-entry-metadata>label{display:inline-flex;align-items:center;gap:.375rem;margin:.25rem .5rem;font-size:var(--ui-text-size);color:var(--muted)}
+html[data-shell] #lexeme-form.lx-arranged .lx-entry-metadata[open]{width:100%;padding-bottom:var(--ui-gap)}
+html[data-shell] #lexeme-form.lx-arranged .lx-metadata-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(16rem,100%),1fr));align-items:center;gap:var(--ui-gap)}
+html[data-shell] #lexeme-form.lx-arranged .lx-metadata-fields>label{display:flex;align-items:center;gap:var(--ui-gap);min-width:0;margin:0;font-size:var(--ui-text-size);color:var(--muted)}
 html[data-shell] #lexeme-form.lx-arranged .lx-relation-line{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem .625rem;min-width:0}
 html[data-shell] #lexeme-form.lx-arranged .lx-relation-summary{flex:1 1 20rem;min-width:0;margin:0;font-size:var(--ui-text-size);line-height:1.6;overflow-wrap:anywhere}
 html[data-shell] #lexeme-form.lx-arranged .lx-relation-line>button{min-height:var(--ui-control-height-small);margin:0;font-size:var(--ui-text-size)}
@@ -1788,3 +1856,6 @@ html[data-shell] #lexeme-form.lx-arranged .lx-relation-fields label{margin:0;fon
 html[data-shell] #lexeme-form.lx-arranged .lx-empty-help{margin:.5rem 0;font-size:var(--ui-help-size);color:var(--muted)}
 html[data-shell] #lexeme-form.lx-arranged .lx-empty-help[hidden]{display:none}
 @media(max-width:760px){html[data-shell] #lexeme-form.lx-arranged .lx-relation-fields>.morph-base-relation-fields{grid-template-columns:minmax(0,1fr)}}
+
+html[data-shell] #lexeme-form.lx-arranged .lx-entry-metadata>summary{grid-column:1/-1;justify-self:start}
+html[data-shell] #lexeme-form.lx-arranged .lx-metadata-caption{flex:none;white-space:nowrap}

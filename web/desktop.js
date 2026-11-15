@@ -51,6 +51,34 @@
    const version=document.getElementById('startup-version');if(version){version.textContent=s.version;version.setAttribute('aria-label',ui('版本 '+s.version+'，关于与许可','Version '+s.version+', about and licenses'));}
   }
  });
+ // Wait for the actual application readiness flag, not just the loaded event.
+ // A projectless start page has no workspace restoration to await.
+ async function completeStartup(){
+  await status;
+  if(!window.pywebview?.api)await new Promise(resolve=>window.addEventListener('pywebviewready',resolve,{once:true}));
+  if(document.documentElement.dataset.appLoading==='true')await new Promise(resolve=>{
+   const observer=new MutationObserver(()=>{if(document.documentElement.dataset.appLoading!=='true'){observer.disconnect();resolve();}});
+   observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-app-loading']});
+   if(document.documentElement.dataset.appLoading!=='true'){observer.disconnect();resolve();}
+  });
+  await window.corporiumFontsReady;await document.fonts?.ready;
+  // Hidden WebViews can throttle animation frames. The native window is shown
+  // by the bridge after the page's data/font completion, then can paint normally.
+  const remember=()=>{const style=getComputedStyle(document.body),root=getComputedStyle(document.documentElement);
+   const first=style.fontFamily.split(',')[0].trim().replace(/^["']|["']$/g,''),font=typeof fontSources!=='undefined'?fontSources[first]?.name||first:first;
+   return window.pywebview.api.startup_ready({scale:parseFloat(root.fontSize)/16,font,weight:parseInt(style.fontWeight),italic:style.fontStyle==='italic'});};
+  await remember();
+  // Workspace classes and geometry variables change during ordinary editing.
+  // Read layout only when the actual font/size preferences changed.
+  const stamp=()=>['--text-scale','--global-font-stack','--ui-style','--ui-weight'].map(key=>document.documentElement.style?.getPropertyValue(key)||'').join('\0');
+  let timer,last=stamp();const preferences=new MutationObserver(()=>{const next=stamp();if(next===last)return;last=next;clearTimeout(timer);timer=setTimeout(()=>void remember().catch(()=>{}),100);});
+  preferences.observe(document.documentElement,{attributes:true,attributeFilter:['style']});
+ }
+ void completeStartup().catch(error=>{
+  const target=document.getElementById('desktop-error');if(target)target.textContent=error.message;
+  // Keep startup errors reviewable instead of leaving a hidden main window.
+  void window.pywebview?.api?.startup_ready?.();
+ });
  document.addEventListener('click',async e=>{
   const button=e.target.closest('[data-project-action]');if(!button||busy)return;
   const action=button.dataset.projectAction;

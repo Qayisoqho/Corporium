@@ -12,7 +12,7 @@ function setup(){
  nodes['grammar-issue']=issue;nodes['grammar-source']=Object.assign(new Element(),{value:'all'});nodes['grammar-lower']=new Element();nodes['grammar-query']=new Element();nodes['grammar-summary']=new Element();
  const root=nodes['grammar-workspace']=new Element(),heading=new Element(),checks=new Element();checks.nextElementSibling=new Element();
  root.querySelector=()=>heading;root.querySelectorAll=()=>[checks];
- const c={$:id=>nodes[id],window:{addEventListener:events.addEventListener.bind(events)},dispatchEvent:events.dispatchEvent.bind(events),CustomEvent,URLSearchParams,localStorage:{getItem(){return null;},setItem(){}},document:{createElement:tag=>{const el=new Element(tag);made.push(el);return el;}},grammarRequest:0,grammarPage:1,grammarFocus:'',grammarCandidateFocus:null,drawGrammarTags(){},grammarTypes:Object.fromEntries(issue.options.map(o=>[o.value,o.value]))};
+ const c={activeLanguage:'ordos',grammarPanel:{dataset:{grammarView:'checks'}},grammarTagNav:new Element(),$:id=>nodes[id],window:{addEventListener:events.addEventListener.bind(events)},dispatchEvent:events.dispatchEvent.bind(events),CustomEvent,URLSearchParams,localStorage:{getItem(){return null;},setItem(){}},document:{createElement:tag=>{const el=new Element(tag);made.push(el);return el;}},grammarRequest:0,grammarPage:1,grammarFocus:'',grammarCandidateFocus:null,drawGrammarTags(){},grammarTypes:Object.fromEntries(issue.options.map(o=>[o.value,o.value]))};
  vm.createContext(c);
  const bench=fs.readFileSync('web/workbench.js','utf8'),a=bench.indexOf('/* Tags and checks:');
  vm.runInContext(bench.slice(a,bench.indexOf('/* Settings center:',a)),c);

@@ -188,7 +188,11 @@ def mutate(db,lid,action,b):
         if parent:
             p=require(db,lid,parent)
             if p['kind']=='question':raise ValueError('问题不能作为其他条目的父层')
-        if old and parent in {n['id'] for n in descendants(db,lid,old['id'])}:raise ValueError('不能移到自身或下级条目中')
+        if old:
+            import save_validation
+            if (parent!=old['parent_id'] or not save_validation.trusted(db)) and parent in {
+                n['id'] for n in descendants(db,lid,old['id'])
+            }:raise ValueError('不能移到自身或下级条目中')
         body=clean_body(db,b.get('body',{}),lid)
         if old:
             pos=old['position'] if parent==old['parent_id'] else db.execute('SELECT COALESCE(MAX(position),0)+1 FROM survey_nodes WHERE parent_id IS ? AND language_id=?',(parent,lid)).fetchone()[0]

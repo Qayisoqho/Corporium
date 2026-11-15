@@ -10,10 +10,11 @@ def compatible_row(table,row):
     import manual_status
     row=manual_status.row(table,row)
     if table=='entries' and row.get('body'):
-        import json,grammaticality
-        body=json.loads(row['body'])
+        import json,grammaticality,record_sources
+        body=record_sources.body(row,mutable=False)
         if any(k in body for k in grammaticality.CORPUS_FIELDS):
-            row={**row,'body':json.dumps(grammaticality.strip_corpus(body),ensure_ascii=False)}
+            value=grammaticality.strip_corpus(dict(body))
+            row={**row,'body':value if isinstance(row['body'],dict) else json.dumps(value,ensure_ascii=False)}
     return {k:v for k,v in row.items() if k not in RETIRED.get(table,())}
 
 

@@ -11,6 +11,7 @@ from contextlib import closing
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 import paradigms
+import record_sources
 
 
 def split_label(label,base):
@@ -73,7 +74,8 @@ def run(path,apply=False):
     path=Path(path).resolve()
     with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True)) as db:
         db.row_factory=sqlite3.Row
-        planned=[(dict(r),*plan(dict(r))) for r in db.execute('SELECT * FROM lexemes') if json.loads(r['body']).get('paradigms')]
+        rows=record_sources.with_bodies(db,'lexemes',db.execute('SELECT id,language_id,headword,revision FROM lexemes'))
+        planned=[(r,*plan(r)) for r in rows if r['body'].get('paradigms')]
     result=dict(database=str(path),applied=apply,entries=[r for old,b,r in planned],backup=None)
     changed=[(old,b,r) for old,b,r in planned if r['changes']]
     if not apply or not changed:return result
@@ -92,8 +94,8 @@ def run(path,apply=False):
                 with server.connect() as db:
                     for old,b,r in changed:
                         if old['language_id']!=lid:continue
-                        current=db.execute('SELECT revision,body FROM lexemes WHERE id=?',(old['id'],)).fetchone()
-                        if not current or current['revision']!=old['revision'] or current['body']!=old['body']:raise ValueError('词条在预览后已修改，请重新迁移')
+                        current=db.execute('SELECT revision FROM lexemes WHERE id=?',(old['id'],)).fetchone()
+                        if not current or current['revision']!=old['revision'] or record_sources.read(db,'lexemes',old['id'])!=old['body']:raise ValueError('词条在预览后已修改，请重新迁移')
                         lexicon.mutate(db,'lexeme-save',dict(id=old['id'],revision=old['revision'],headword=old['headword'],body=b),lid)
             finally:journal.scope.reset(s);journal.action.reset(a)
     finally:server.DB=original

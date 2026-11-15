@@ -13,7 +13,8 @@ class Values:
 
     @staticmethod
     def initialize(db):
-        db.executescript('''
+        import record_sources
+        record_sources.schema_sql(db, '''
           CREATE TABLE IF NOT EXISTS projection_search_values(id INTEGER PRIMARY KEY,
             value TEXT NOT NULL UNIQUE,folded TEXT NOT NULL,reversed_value TEXT NOT NULL,reversed_folded TEXT NOT NULL,nonblank INTEGER NOT NULL DEFAULT 1);
           CREATE INDEX IF NOT EXISTS projection_search_folded ON projection_search_values(folded);
@@ -57,8 +58,9 @@ class Values:
         return vid
 
     def release(self, ids):
+        if not ids:return
         # Both projections can own a value; never delete another reader's keys.
-        refs = [name for name in ('gloss_search_keys', 'material_search_keys', 'material_search_custom')
+        refs = [name for name in ('gloss_search_keys', 'material_search_keys', 'material_search_custom', 'dictionary_form_search', 'dictionary_own_keys', 'material_search_manual_values')
                 if self.db.execute('SELECT 1 FROM sqlite_master WHERE name=?', (name,)).fetchone()]
         for vid in ids:
             if any(self.db.execute('SELECT 1 FROM '+name+' WHERE value_id=? LIMIT 1', (vid,)).fetchone() for name in refs):

@@ -9,20 +9,32 @@ def configuration(meta):
     if not isinstance(ids,list) or any(not isinstance(v,str) or not v for v in ids) or len(set(ids))!=len(ids):raise ValueError('快捷编辑书写类型设置无效')
     return ids
 
+def validate_preferences(db,lid,meta):
+    if type(meta.get('chinese_mode',False)) is not bool:
+        raise ValueError('汉语模式必须是开关')
+    ids=configuration(meta)
+    if ids:
+        valid={r['id'] for r in db.execute('SELECT id FROM writing_types WHERE language_id=?',(lid,))}
+        if not set(ids)<=valid:raise ValueError('书写类型不存在或不属于当前语言')
+
 def get(db,lid):
     row=languages.require(db,lid)
     types=[dict(r) for r in db.execute('SELECT * FROM writing_types WHERE language_id=? ORDER BY position,name,id',(lid,))]
-    raw=configuration(json.loads(row['metadata']))
-    return dict(revision=row['revision'],writing_types=types,selected=[t['id'] for t in types if t['id'] in raw])
+    meta=json.loads(row['metadata'])
+    raw=configuration(meta)
+    return dict(revision=row['revision'],writing_types=types,selected=[t['id'] for t in types if t['id'] in raw],
+                chinese_mode=meta.get('chinese_mode') is True)
 
 def save(db,lid,body):
     row=languages.require(db,lid)
     if row['revision']!=body.get('revision'):raise ValueError('语言设置已变化，请重新打开后保存')
     ids=body.get('writing_types',[])
     if not isinstance(ids,list) or any(not isinstance(v,str) for v in ids) or len(set(ids))!=len(ids):raise ValueError('请选择书写类型')
-    valid={r['id'] for r in db.execute('SELECT id FROM writing_types WHERE language_id=?',(lid,))}
-    if any(v not in valid for v in ids):raise ValueError('书写类型不存在或不属于当前语言')
-    meta=json.loads(row['metadata']);meta['lexeme_quick_edit']={'writing_types':ids}
+    meta=json.loads(row['metadata'])
+    if 'chinese_mode' in body:
+        meta['chinese_mode']=body['chinese_mode']
+    meta['lexeme_quick_edit']={'writing_types':ids}
+    validate_preferences(db,lid,meta)
     db.execute('UPDATE languages SET metadata=?,revision=revision+1 WHERE id=?',(json.dumps(meta,ensure_ascii=False),lid))
     return get(db,lid)
 

@@ -1,4 +1,5 @@
 """Semantic guards for bounded research reads and independent timeline writes."""
+import source_fixtures
 import base64,copy,json,sqlite3,unittest,zlib
 from contextlib import closing
 from unittest.mock import patch
@@ -140,8 +141,7 @@ class AuditReuseTests(unittest.TestCase):
         with server.connect(audit=False,observe_snapshot=True) as reader:
             reader.execute('BEGIN');before=grammar.audit(reader,dict(language='ordos',lower='true',reuse='1'))
             with closing(sqlite3.connect(server.DB)) as writer:
-                row=writer.execute('SELECT id,body FROM entries').fetchone();body=json.loads(row[1]);body['words'][0]['gloss']='AFTER'
-                writer.execute('UPDATE entries SET body=? WHERE id=?',(json.dumps(body),row[0]))
+                writer.execute("UPDATE sentence_word_rows SET gloss='AFTER' WHERE kind='corpus' AND position=0")
                 writer.commit()
             # No analysis_state increment: detect the external commit independently.
             self.assertIsNone(grammar_audit_cache.load(reader,dict(language='ordos',lower='true',reuse='1')))
@@ -160,7 +160,7 @@ class AuditReuseTests(unittest.TestCase):
                 stable=original();calls.append(True)
                 if len(calls)==1:
                     with closing(sqlite3.connect(server.DB)) as writer:
-                        writer.execute("UPDATE entries SET body=json_set(body,'$.words[0].gloss','AFTER')");writer.commit()
+                        source_fixtures.patch_values(writer,'entries',None,((('words', 0, 'gloss'), 'AFTER'),));writer.commit()
                 return stable
             with patch.object(observer,'stable',race):self.assertIsNone(grammar_audit_cache.load(reader,dict(language='ordos',lower='true',reuse='1')))
             self.assertEqual(grammar.audit(reader,dict(language='ordos',lower='true',reuse='1'))['unknown'][0]['symbol'],'AFTER')

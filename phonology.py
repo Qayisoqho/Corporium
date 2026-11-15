@@ -74,12 +74,26 @@ def choice_matches(reading,config,choice):
         if any(core.startswith(prefix) and core[len(prefix):] in finals for prefix in rows['initials']['matches']):return True
     return False
 
-def classify(reading,config):
+def classifier(config):
+    finals=final_aliases(config)
+    signatures={}
+    def classify_one(reading):
+        return classify(reading,config,finals,signatures)
+    return classify_one
+
+
+def classify(reading,config,finals=None,signatures=None):
     reading=norm(reading);saved=config['assignments'].get(reading)
     if saved:
-        valid=signature(config,saved)==saved.get('signature') and saved.get('signature') is not None
+        key=tuple(saved.get(axis) for axis in AXES)
+        if signatures is None:
+            current=signature(config,saved)
+        else:
+            if key not in signatures:signatures[key]=signature(config,saved)
+            current=signatures[key]
+        valid=current==saved.get('signature') and saved.get('signature') is not None
         if valid:return dict(state='confirmed',choice={axis:saved.get(axis) for axis in AXES},reason='',candidates=[])
-    result=match_reading(reading,config)
+    result=match_reading(reading,config,finals)
     if saved:
         result['previous_choice']={axis:saved.get(axis) for axis in AXES}
         if result['state']=='unmatched':
@@ -87,10 +101,15 @@ def classify(reading,config):
         elif result['state']=='candidate':result['reason']='按当前音系清单重新匹配，结果唯一，可批量确认'
     return result
 
-def match_reading(reading,config):
+def final_aliases(config):
     finals={}
     for row in config['finals']:
         for alias in row['matches']:finals.setdefault(alias,[]).append(row['id'])
+    return finals
+
+
+def match_reading(reading,config,finals=None):
+    if finals is None:finals=final_aliases(config)
     candidates=[];seen=set()
     for tone in config['tones']:
         for tail in tone['matches']:
@@ -132,8 +151,12 @@ def mutate(db,lid,body):
             data['assignments'][reading]={**choice,'signature':sig}
     elif body.get('action')=='confirm_unique':
         import homophones
-        groups=homophones.table(db,lid,{'_collect':True})
-        unique={g['reading']:c['choice'] for g in groups if (c:=classify(g['reading'],current))['state']=='candidate'}
+        import homophone_index
+        labels=homophone_index.table(db,lid,{'_labels':True})
+        if labels is None:labels=[g['reading'] for g in homophones.scan_table(db,lid,{'_collect':True})]
+        selected_set=None if body.get('all') or not isinstance(body.get('readings'),list) else {v for v in body['readings'] if isinstance(v,str)}
+        classify_one=classifier(current)
+        unique={r:c['choice'] for r in labels if (selected_set is None or r in selected_set) and (c:=classify_one(r))['state']=='candidate'}
         selected=body.get('readings') if not body.get('all') else list(unique)
         if not isinstance(selected,list) or not selected or any(not isinstance(r,str) or r not in unique for r in selected):raise ValueError('请选择当前仍为唯一匹配的实际读音；歧义、待核对和临时代用形式不能批量确认')
         for reading in long_tasks.steps(set(selected)):
@@ -141,12 +164,16 @@ def mutate(db,lid,body):
     else:raise ValueError('未知音系操作')
     row=languages.require(db,lid);meta=json.loads(row['metadata']);meta['homophone_phonology']=data
     db.execute('UPDATE languages SET metadata=?,revision=revision+1 WHERE id=?',(json.dumps(meta,ensure_ascii=False),lid))
-    return get(db,lid)
+    result=get(db,lid)
+    if body.get('_language_update'):
+        result['_language_update']={'id':lid,'before':row['revision'],'revision':row['revision']+1}
+    return result
 
 def arrange(result,config,q):
     buckets={};pending=[]
+    classify_one=classifier(config)
     for group in result:
-        classification=classify(group['reading'],config)
+        classification=classify_one(group['reading'])
         group['classification']=classification
         if classification['state']=='confirmed':
             choice=classification['choice'];buckets.setdefault(choice['finals'],{}).setdefault(choice['initials'],{}).setdefault(choice['tones'],[]).append(group)

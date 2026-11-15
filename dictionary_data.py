@@ -7,8 +7,10 @@ import morphology
 import segmentation
 import gloss_inheritance
 import display_spacing
+import independent_links
+import sentence_rows
 
-TABLES=('writing_types','dictionary_examples')
+TABLES=('writing_types','dictionary_examples')+independent_links.TABLES
 
 def initialize(db):
     db.executescript('''CREATE TABLE IF NOT EXISTS writing_types(id TEXT PRIMARY KEY,language_id TEXT NOT NULL,name TEXT NOT NULL,font TEXT NOT NULL,position INTEGER NOT NULL DEFAULT 0,revision INTEGER NOT NULL DEFAULT 1);
@@ -18,11 +20,13 @@ def initialize(db):
     display_spacing.initialize(db, 'writing_types')
 
 def types(db,lid,catalog_only=False):
+    import record_sources
     items=[dict(r) for r in db.execute('SELECT * FROM writing_types WHERE language_id=? ORDER BY position,name,id',(lid,))]
     legacy={}
     if catalog_only:return dict(items=items,legacy=[])
-    for row in db.execute('SELECT body FROM lexemes WHERE language_id=?',(lid,)):
-        for o in json.loads(row['body']).get('orthographies',[]):
+    rows=record_sources.with_bodies(db,'lexemes',db.execute('SELECT id FROM lexemes WHERE language_id=?',(lid,)))
+    for row in rows:
+        for o in row['body'].get('orthographies',[]):
             if not o.get('type_id'):
                 group=legacy.setdefault(o['label'],dict(name=o['label'],fonts=[],count=0))
                 group['count']+=1
@@ -41,29 +45,70 @@ def resolve(db,body,catalog=None):
 
 def validate(db,targets=None):
     annotations.validate(db)
-    import lexicon
     if targets is None:targets={r['id']:{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT * FROM dictionary_targets')}
-    for x in targets.values():
-        for o in x['body'].get('orthographies',[]):
-            if o.get('type_id'):
-                t=db.execute('SELECT language_id FROM writing_types WHERE id=?',(o['type_id'],)).fetchone()
-                if not t or t[0]!=x['language_id']:raise ValueError('书写类型仍被词条引用，不能删除或撤销；请先调整引用')
-    for e in db.execute('SELECT * FROM dictionary_examples'):
-        for target in json.loads(e['body'])['targets']:
-            row=targets.get(target['lexeme_id'])
-            if not row or row['language_id']!=e['language_id']:raise ValueError('独立例句引用的词条已不存在或语言不一致')
-            try:lexicon.selection(row['body'],target.get('usage_id'),target.get('sense_id'))
-            except ValueError as error:raise ValueError('独立例句仍引用词条「'+row['headword']+'」中要移除的义项或用法，请先解除或调整关联；重新编号不会自动转移关联。') from error
+    for x in targets.values():validate_writings(db,x)
+    independent_links.validate(db)
+
+
+def validate_writings(db,entry):
+    for writing in entry['body'].get('orthographies',[]):
+        if writing.get('type_id'):
+            row=db.execute('SELECT language_id FROM writing_types WHERE id=?',(writing['type_id'],)).fetchone()
+            if not row or row[0]!=entry['language_id']:
+                raise ValueError('书写类型仍被词条引用，不能删除或撤销；请先调整引用')
+
 
 def examples(db,xid):
-    row=db.execute('SELECT language_id FROM dictionary_targets WHERE id=?',(xid,)).fetchone()
+    if not db.in_transaction:db.execute('BEGIN')
+    row=independent_links.identity(db,xid)
     if not row:raise ValueError('词条不存在')
-    return [{**dict(r),'body':annotations.enrich(db,json.loads(r['body']),'independent',r['id'])} for r in db.execute('SELECT * FROM dictionary_examples WHERE language_id=? ORDER BY rowid',(row[0],)) if any(t['lexeme_id']==xid for t in json.loads(r['body'])['targets'])]
+    import evidence_owners
+    scope,args=evidence_owners.independent_scope(db,xid,row['language_id'])
+    result=[]
+    cursor=db.execute('SELECT e.id,e.language_id,e.revision'+scope+' ORDER BY e.rowid',args)
+    while batch:=cursor.fetchmany(100):result.extend(_example_cards(db,batch))
+    return result
 
-def mutate(db,action,b,lid):
+
+def _example_cards(db,rows):
+    bodies=annotations.evidence_cards(db,'independent',rows)
+    return [{**dict(row),'body':bodies[row['id']]} for row in rows]
+
+
+def example_rows(db,entry,ids):
+    if not ids:return []
+    marks=','.join('?' for _ in ids)
+    rows={row['id']:row for row in db.execute(f"""SELECT e.id,e.language_id,e.revision
+        FROM dictionary_examples e WHERE e.id IN ({marks}) AND e.language_id=?
+        AND EXISTS(SELECT 1 FROM independent_links l WHERE l.example_id=e.id AND l.lexeme_id=?)""",
+        (*ids,entry['language_id'],entry['id']))}
+    return _example_cards(db,[rows[xid] for xid in ids if xid in rows])
+
+
+def example_page(db,xid,page=1,form_id='all',focus=None):
+    if not db.in_transaction:db.execute('BEGIN')
+    row=independent_links.identity(db,xid)
+    if not row:raise ValueError('词条不存在')
+    import evidence_owners
+    scope,args=evidence_owners.independent_scope(db,xid,row['language_id'],form_id=form_id)
+    total=db.execute('SELECT count(*)'+scope,args).fetchone()[0]
+    pages=max(1,(total+19)//20)
+    found=None
+    if focus is not None:
+        target=db.execute('SELECT e.rowid'+scope+' AND e.id=?',args+[focus]).fetchone()
+        found=target is not None
+        if found:page=1+db.execute('SELECT count(*)'+scope+' AND e.rowid<?',args+[target[0]]).fetchone()[0]//20
+    page=max(1,min(int(page),pages))
+    # Sort only narrow identities; expand annotation and media data for this page.
+    rows=db.execute('SELECT e.id,e.language_id,e.revision'+scope+' ORDER BY e.rowid LIMIT 20 OFFSET ?',args+[(page-1)*20]).fetchall()
+    items=_example_cards(db,rows)
+    return dict(items=items,total=total,page=page,pages=pages,focus_found=found)
+
+def mutate(db,action,b,lid,*,sentence_edit=False):
     import lexicon
     table='writing_types' if action.startswith('writing-') else 'dictionary_examples'
-    old=db.execute('SELECT * FROM '+table+' WHERE id=?',(b.get('id'),)).fetchone()
+    columns='*' if table=='writing_types' else 'id,language_id,revision'
+    old=db.execute('SELECT '+columns+' FROM '+table+' WHERE id=?',(b.get('id'),)).fetchone()
     if b.get('id') and (not old or old['revision']!=b.get('revision')):raise ValueError('内容已变化，请重新打开')
     xid=b.get('id') or str(uuid.uuid4())
     if action=='writing-delete':
@@ -91,7 +136,7 @@ def mutate(db,action,b,lid):
         grammar_survey.writing_replace(db,xid,replacement)
         import fieldwork_notes
         fieldwork_notes.writing_replace(db,xid,replacement)
-        for m in db.execute('SELECT id,body FROM morphemes WHERE language_id=?',(lid,)).fetchall():
+        for m in db.execute('SELECT id,body FROM morphemes_documents WHERE language_id=?',(lid,)).fetchall():
             data=json.loads(m['body']);changed=False
             for w in data.get('writings',[]):
                 if w['type_id']==xid:
@@ -99,7 +144,8 @@ def mutate(db,action,b,lid):
                     w['type_id']=replacement;changed=True
             if changed:
                 morphology.word_structure.writings(data)
-                db.execute('UPDATE morphemes SET body=?,revision=revision+1 WHERE id=?',(json.dumps(data,ensure_ascii=False),m['id']))
+                import dictionary_rows
+                dictionary_rows.write(db,'morpheme',m['id'],data)
         if replacement:db.execute("UPDATE annotation_layers SET dictionary_field=?,revision=revision+1 WHERE source='dictionary' AND dictionary_field=? AND language_id=?",('writing:'+replacement,'writing:'+xid,lid))
         import quick_edit
         quick_edit.writing_replace(db,xid,replacement)
@@ -136,7 +182,7 @@ def mutate(db,action,b,lid):
         if not isinstance(words,list):raise ValueError('标注格式错误')
         result['words']=[dict(form=lexicon.text(w['form']),gloss=lexicon.text(w['gloss'])) for w in words]
         from corpus import compact_edited_pairs
-        previous=gloss_inheritance.load(db,'independent',xid,old['body']) if old else {}
+        previous=gloss_inheritance.load(db,'independent',xid,sentence_rows.one(db,'independent',xid)) if old else {}
         import grammaticality
         grammaticality.copy_value(previous,result,data)
         result['words'],positions=compact_edited_pairs(result['words'],previous.get('words',[]))
@@ -145,15 +191,14 @@ def mutate(db,action,b,lid):
             import reduplication
             reduplication.fork(result)
         annotations.independent_ids(previous,result)
-        targets=data.get('targets',[])
+        targets=data['targets'] if 'targets' in data else independent_links.targets(db,xid) if old else []
         if not isinstance(targets,list):raise ValueError('词条例证关联格式无效')
         result['targets']=[];seen=set()
         for t in targets:
             if not isinstance(t,dict):raise ValueError('词条引用格式错误')
-            x=lexicon.get_lexeme(db,t['lexeme_id'])
-            if x['language_id']!=lid:raise ValueError('例句只能关联同语言词条')
+            x=independent_links.identity(db,t['lexeme_id'])
+            if not x or x['language_id']!=lid:raise ValueError('例句只能关联同语言词条')
             form_id=t.get('form_id') or None
-            morphology.form_selection(x['body'],form_id)
             features=morphology.check_features(db,lid,t.get('features',[]))
             ref=t.get('segmentation_ref')
             if ref is not None:
@@ -163,9 +208,7 @@ def mutate(db,action,b,lid):
                     else:ref['detached']=True
             key=(x['id'],t.get('usage_id') or None,t.get('sense_id') or None,form_id,json.dumps(ref,sort_keys=True))
             if key in seen:raise ValueError('例句引用重复')
-            seen.add(key);lexicon.selection(x['body'],key[1],key[2])
-            import paradigms
-            paradigms.validate_selection(x['body'],key[1],key[2],form_id)
+            seen.add(key);independent_links.validate_selection(db,x['id'],key[1],key[2],form_id)
             result['targets'].append(dict(lexeme_id=key[0],usage_id=key[1],sense_id=key[2],form_id=form_id,features=features))
             if ref:result['targets'][-1]['segmentation_ref']=ref
             if t.get('gloss_binding_id'):
@@ -178,11 +221,14 @@ def mutate(db,action,b,lid):
                 result['targets'][-1]['component_ref']=component_links.validate(t['component_ref'])
             if 'notes' in t:result['targets'][-1]['notes']=lexicon.text(t['notes'])
             if t.get('review_reason'):result['targets'][-1]['review_reason']=lexicon.text(t['review_reason'])
+        if sentence_edit:
+            import auto_reduplication
+            auto_reduplication.on_save(db,'independent',xid,result,lid,previous=previous)
         if result.get('reduplications'):
             from corpus import analyze
             import reduplication
             analyze(result);reduplication.check_relations(result)
-        db.execute('INSERT INTO dictionary_examples VALUES(?,?,?,1) ON CONFLICT(id) DO UPDATE SET body=excluded.body,revision=dictionary_examples.revision+1',(xid,lid,json.dumps(result,ensure_ascii=False)))
+        independent_links.write_body(db,xid,result,language=lid)
         import example_numbering
         number=example_numbering.assign(db,lid,xid)
         return dict(id=xid,language_id=lid,body=result,library_number=number,revision=(old['revision'] if old else 0)+1)

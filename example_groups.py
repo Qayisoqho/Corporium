@@ -2,6 +2,7 @@
 import hashlib
 import json
 import uuid
+import sqlite3
 import long_tasks
 
 TABLES = ('example_groups', 'example_group_members')
@@ -22,6 +23,49 @@ def initialize(db):
     CREATE INDEX IF NOT EXISTS example_groups_language ON example_groups(language_id);
     CREATE INDEX IF NOT EXISTS example_group_order ON example_group_members(group_id,active,position);
     CREATE INDEX IF NOT EXISTS example_group_source ON example_group_members(example_id);''')
+    initialize_validation(db)
+
+
+def drop_validation(db):
+    for name, in db.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name GLOB 'example_group_checked_*'").fetchall():
+        db.execute('DROP TRIGGER "'+name.replace('"','""')+'"')
+    db.execute('DROP TABLE IF EXISTS example_group_validation')
+
+
+def initialize_validation(db):
+    db.execute('''CREATE TABLE IF NOT EXISTS example_group_validation(
+        id INTEGER PRIMARY KEY,epoch INTEGER,checked_epoch INTEGER,checked_schema INTEGER)''')
+    db.execute('INSERT OR IGNORE INTO example_group_validation VALUES(1,0,-1,-1)')
+    for table in ('example_groups','example_group_members','languages','dictionary_examples'):
+        for event in ('INSERT','UPDATE','DELETE'):
+            when = ''
+            if table in ('languages','dictionary_examples'):
+                if event == 'INSERT' and table == 'languages':
+                    continue
+                if event == 'UPDATE':
+                    when = ' WHEN OLD.id IS NOT NEW.id'
+                    if table == 'dictionary_examples':
+                        when += ' OR OLD.language_id IS NOT NEW.language_id'
+            db.execute(f'''CREATE TRIGGER IF NOT EXISTS example_group_checked_{table}_{event}
+              AFTER {event} ON {table}{when} BEGIN
+              UPDATE example_group_validation SET epoch=epoch+1 WHERE id=1; END''')
+    # A fresh startup or repaired schema re-establishes the current validator.
+    db.execute('UPDATE example_group_validation SET checked_epoch=-1,checked_schema=-1 WHERE id=1')
+
+
+def validate_changes(db):
+    schema = db.execute('PRAGMA main.schema_version').fetchone()[0]
+    try:
+        state = db.execute('SELECT epoch,checked_epoch,checked_schema FROM example_group_validation WHERE id=1').fetchone()
+    except sqlite3.OperationalError as error:
+        if 'no such table' not in str(error):raise
+        state = None
+    if state and state[0] == state[1] and state[2] == schema:
+        return
+    initialize_validation(db)
+    validate(db)
+    schema = db.execute('PRAGMA main.schema_version').fetchone()[0]
+    db.execute('UPDATE example_group_validation SET checked_epoch=epoch,checked_schema=? WHERE id=1',(schema,))
 
 
 def label(numbering, position):
@@ -59,7 +103,7 @@ def detail(db, lid, gid, enrich=True):
                 record = annotations.get(db, 'independent', member['example_id'])
                 record['body'] = annotations.enrich(db, analyze(record['body']), 'independent', member['example_id'])
             else:
-                record = dict(db.execute('SELECT * FROM dictionary_examples WHERE id=?', (member['example_id'],)).fetchone())
+                record = dict(db.execute('SELECT * FROM dictionary_examples_documents WHERE id=?', (member['example_id'],)).fetchone())
                 record['body'] = json.loads(record['body'])
             record['ordering']=source['ordering'];record['library_number']=source['number'];item['record'] = record
         row['members'].append(item)
@@ -126,63 +170,182 @@ def validate(db):
     for row in db.execute('SELECT * FROM example_groups'):
         clean_body(json.loads(row['body']))
         if not db.execute('SELECT 1 FROM languages WHERE id=?', (row['language_id'],)).fetchone(): raise ValueError('例句组语言不存在')
-    for row in db.execute('SELECT m.*,g.language_id owner,d.language_id source FROM example_group_members m LEFT JOIN example_groups g ON g.id=m.group_id LEFT JOIN dictionary_examples d ON d.id=m.example_id'):
+    for row in db.execute('SELECT m.*,g.language_id owner,d.language_id source FROM example_group_members m LEFT JOIN example_groups g ON g.id=m.group_id LEFT JOIN dictionary_examples_documents d ON d.id=m.example_id'):
         if not row['owner'] or row['owner'] != row['language_id'] or (row['source'] and row['source'] != row['owner']): raise ValueError('例句组成员语言或所属关系无效')
         if row['active'] not in (0, 1) or not isinstance(row['role'], str) or len(row['role']) > 40: raise ValueError('例句组成员设置无效')
 
 
+import read_views
+LIBRARY_CARDS=read_views.Cache(24*1024**2)
+LIBRARY_PLANS=read_views.Cache(48*1024**2)
+
+
 def library(db, lid, query):
-    """Paginate groups as units, count matching sentences separately from context."""
+    """Page display units in SQLite. A shared example counts once as a sentence."""
     import annotations
+    import code_switching
     from corpus import normalize
+    if not db.in_transaction:
+        db.execute('BEGIN')
     if lid != 'all':
         import languages
-        languages.require(db, lid)
-    term = query.get('q', ''); field = query.get('field', 'all'); case = query.get('case') == 'true'
-    mode = query.get('mode', 'contains')
-    def text_hit(value):
-        a,b=normalize(value,case),normalize(term,case)
-        return a==b if mode=='exact' else a.startswith(b) if mode=='prefix' else a.endswith(b) if mode=='suffix' else b in a
-    # Reuse the ordinary search for layer/code/grammaticality semantics, including
-    # its complete paginated hit set. Empty ordinary browsing uses only narrow rows.
-    filtered = bool(term or query.get('grammaticality') or query.get('code_mode') or query.get('code_id') or field == 'reduplication')
+        languages.require(db,lid)
+    only = query.get('group_filter','all')
+    order = query.get('sort_order','added-asc')
+    if only not in ('groups','ungrouped','all'):
+        raise ValueError('分组筛选无效')
+    if order not in ('added-asc','added-desc'):
+        raise ValueError('独立例句排序方式无效')
+    direction = ' DESC' if order=='added-desc' else ' ASC'
+    term = query.get('q','')
+    field = query.get('field','all')
+    restricted = any(query.get(k) for k in ('grammaticality','code_mode','code_id'))
+    filtered = bool(term or restricted or field=='reduplication')
+    lang = '' if lid=='all' else ' AND d.language_id=:lid'
+    params = dict(lid=lid)
+    stamp=read_views.token(db,'dictionary')
+    plan_key=(stamp,lid,tuple(sorted((k,str(v)) for k,v in query.items() if k not in ('page','focus')))) if stamp else None
+    plan=LIBRARY_PLANS.get(plan_key)
+    if plan is not None:
+        ordered,group_hits,totals=plan
+        return library_page(db,ordered,group_hits,totals,query,stamp)
     if filtered:
-        matches = set(annotations.search(db, dict(query, language=lid, source='independent'), ids_only=True)['ids'])
-    else: matches = {r[0] for r in db.execute("SELECT id FROM dictionary_examples WHERE ?='all' OR language_id=?", (lid, lid))}
-    units = []; grouped = set(); groups = list(db.execute("SELECT rowid,* FROM example_groups WHERE ?='all' OR language_id=? ORDER BY rowid", (lid, lid)))
-    only = query.get('group_filter', 'all')
-    if only not in ('all', 'groups', 'ungrouped'): raise ValueError('分组筛选无效')
-    for row in groups:
-        members = list(db.execute('SELECT m.example_id,n.ordering FROM example_group_members m LEFT JOIN dictionary_examples d ON d.id=m.example_id LEFT JOIN example_numbers n ON n.id=d.id AND n.language_id=d.language_id WHERE m.group_id=? AND m.active=1 ORDER BY m.position,m.id', (row['id'],)))
-        grouped.update(m['example_id'] for m in members)
-        hits = [m['example_id'] for m in members if m['example_id'] in matches]
-        body = json.loads(row['body']); name_hit = bool(term and field == 'all' and any(text_hit(body.get(k, '')) for k in ('name', 'context')))
-        if only != 'ungrouped' and (not filtered or hits or (name_hit and not query.get('grammaticality') and not query.get('code_mode') and not query.get('code_id'))):
-            order = min((m['ordering'] for m in members if m['ordering'] is not None), default=10**15 + row['rowid'])
-            units.append((order, 'group', row['id'], row['language_id'], hits))
-    if only != 'groups':
-        for row in db.execute("SELECT n.ordering,d.id,d.language_id FROM dictionary_examples d JOIN example_numbers n ON n.id=d.id AND n.language_id=d.language_id WHERE ?='all' OR d.language_id=?", (lid, lid)):
-            if row['id'] in matches and row['id'] not in grouped: units.append((row['ordering'], 'independent', row['id'], row['language_id'], []))
-    sort=query.get('sort_order','added-asc')
-    if sort not in ('added-asc','added-desc'):raise ValueError('独立例句排序方式无效')
-    units.sort(key=lambda u:(u[0],u[1],u[2]),reverse=sort=='added-desc'); total = len(units); pages = max(1, (total + 19)//20); page = max(1, min(pages, int(query.get('page', 1))))
-    counted={rid for u in units for rid in (u[4] if u[1]=='group' else [u[2]])}
-    items = []
-    for ordering, kind, rid, language, hits in units[(page-1)*20:page*20]:
-        if kind == 'group': items.append(dict(kind=kind, id=rid, group=detail(db, language, rid), matched_ids=hits if filtered else []))
-        else:
-            record = annotations.get(db, 'independent', rid)
-            from corpus import analyze
-            record['body'] = annotations.enrich(db, analyze(record['body']), 'independent', rid)
-            items.append(dict(kind=kind, id=rid, language_id=language, body=record['body'],ordering=ordering))
-    import code_switching
-    summary=code_switching.summary_records(db,{('independent',rid) for rid in counted})
+        db.execute('DROP TABLE IF EXISTS temp.library_hits')
+        db.execute('CREATE TEMP TABLE library_hits(id TEXT PRIMARY KEY) WITHOUT ROWID')
+        def receive(ids):
+            db.executemany('INSERT OR IGNORE INTO library_hits VALUES(?)',((rid,) for rid in ids))
+        annotations.search(db,dict(query,language=lid,source='independent'),ids_only=receive)
+    hit_join = ' JOIN library_hits h ON h.id=d.id' if filtered else ''
+    candidates='library_hits h CROSS JOIN dictionary_examples d ON d.id=h.id' if filtered else 'dictionary_examples d'
+    singles=("SELECT n.ordering,'independent' kind,d.id,d.language_id FROM "+candidates+
+             " JOIN example_numbers n ON n.id=d.id AND n.language_id=d.language_id WHERE 1=1"+lang)
+    groups_exist = db.execute('SELECT 1 FROM example_groups d WHERE 1=1'+lang+' LIMIT 1',params).fetchone()
+    groups = 0
+    if filtered and not db.execute('SELECT 1 FROM library_hits LIMIT 1').fetchone() and not (only!='ungrouped' and term and field=='all' and not restricted):
+        groups_exist=False
+    if groups_exist:
+        db.execute('DROP TABLE IF EXISTS temp.library_units')
+        db.execute('CREATE TEMP TABLE library_units(ordering INTEGER,kind TEXT,id TEXT,language_id TEXT,PRIMARY KEY(kind,id)) WITHOUT ROWID')
+        if only!='groups':
+            db.execute('INSERT INTO library_units '+singles+''' AND NOT EXISTS(
+                SELECT 1 FROM example_group_members m JOIN example_groups g ON g.id=m.group_id
+                WHERE m.example_id=d.id AND m.active=1 AND (:lid='all' OR g.language_id=:lid))''',params)
+        if only!='ungrouped':
+            eligible = ''
+            if filtered:
+                eligible = ''' AND (EXISTS(SELECT 1 FROM example_group_members m JOIN library_hits h ON h.id=m.example_id
+                                       WHERE m.group_id=d.id AND m.active=1)'''
+                if term and field=='all' and not restricted:
+                    case = query.get('case')=='true'
+                    needle = normalize(term,case)
+                    mode = query.get('mode','contains')
+                    def group_hit(raw):
+                        body=json.loads(raw)
+                        for key in ('name','context'):
+                            value=normalize(body.get(key,''),case)
+                            if (value==needle if mode=='exact' else value.startswith(needle) if mode=='prefix'
+                                else value.endswith(needle) if mode=='suffix' else needle in value):
+                                return True
+                        return False
+                    db.create_function('library_group_hit',1,group_hit)
+                    eligible += ' OR library_group_hit(d.body)'
+                eligible += ')'
+            db.execute("""INSERT INTO library_units SELECT COALESCE((SELECT min(n.ordering)
+                FROM example_group_members m JOIN dictionary_examples e ON e.id=m.example_id
+                JOIN example_numbers n ON n.language_id=e.language_id AND n.id=e.id
+                WHERE m.group_id=d.id AND m.active=1),1000000000000000+d.rowid),
+                'group',d.id,d.language_id FROM example_groups d WHERE 1=1"""+lang+eligible,params)
+        units = 'SELECT * FROM library_units'
+        groups = db.execute("SELECT count(*) FROM library_units WHERE kind='group'").fetchone()[0]
+    else:
+        units = singles + (' AND 0' if only=='groups' else '')
+    total = db.execute('SELECT count(*) FROM ('+units+')',params).fetchone()[0]
+    pages=max(1,(total+19)//20)
+    requested_page=max(1,min(pages,int(query.get('page',1))))
+    cacheable=bool(plan_key) and total<=100000
+    if cacheable and filtered and groups:
+        cacheable=not db.execute("""SELECT 1 FROM library_units g JOIN example_group_members m ON m.group_id=g.id AND m.active=1
+            JOIN library_hits h ON h.id=m.example_id WHERE g.kind='group' LIMIT 1 OFFSET 65536""").fetchone()
+    sql='SELECT * FROM ('+units+') ORDER BY ordering'+direction+',kind'+direction+',id'+direction
+    if not cacheable:
+        if query.get('focus'):
+            rank=db.execute('SELECT rank FROM (SELECT id,row_number() OVER (ORDER BY ordering'+direction+',kind'+direction+',id'+direction+') rank FROM ('+units+')) WHERE id=:focus',{**params,'focus':query['focus']}).fetchone()
+            if rank:requested_page=(rank[0]-1)//20+1
+            query={**query,'page':requested_page,'_focus_found':bool(rank)}
+        sql+=' LIMIT 20 OFFSET :off'
+    ordered=list(db.execute(sql,{**params,'off':(requested_page-1)*20}))
+    if groups:
+        counted = """SELECT id FROM library_units WHERE kind='independent' UNION
+            SELECT d.id FROM library_units g JOIN example_group_members m ON g.kind='group' AND m.group_id=g.id
+            JOIN dictionary_examples d ON d.id=m.example_id"""+hit_join+' WHERE m.active=1'+lang
+        sentence_total=db.execute('SELECT count(*) FROM ('+counted+')',params).fetchone()[0]
+    else:
+        counted='SELECT id FROM ('+units+')'
+        sentence_total=total
+    codes=list(db.execute("SELECT c.* FROM code_sentence_index c WHERE c.owner_kind='independent' AND EXISTS(SELECT 1 FROM ("+counted+") s WHERE s.id=c.record_id)",params))
+    group_hits={}
+    if filtered and groups:
+        query_groups="""SELECT m.group_id,m.example_id FROM library_units g
+                JOIN example_group_members m ON m.group_id=g.id AND m.active=1 JOIN library_hits h ON h.id=m.example_id
+                WHERE g.kind='group'"""
+        group_args=[]
+        if not cacheable:
+            group_args=[r['id'] for r in ordered if r['kind']=='group']
+            query_groups+=" AND m.group_id IN ("+(','.join('?' for _ in group_args) or 'NULL')+")"
+        for g,rid in db.execute(query_groups+' ORDER BY m.group_id,m.position,m.id',group_args):
+            group_hits.setdefault(g,[]).append(rid)
     cited=[]
     if query.get('survey_node'):
         import grammar_survey
         grammar_survey.require(db,lid,query['survey_node'])
         cited=[r[0] for r in db.execute('SELECT record_id FROM survey_evidence WHERE node_id=? AND kind=?',(query['survey_node'],KIND))]
-    return dict(items=items,total=total,page=page,pages=pages,sentence_total=len(counted),group_total=sum(u[1]=='group' for u in units),ungrouped_total=sum(u[1]=='independent' for u in units),code_summary=summary,cited_ids=cited,filtered=filtered)
+    if groups_exist:db.execute('DROP TABLE library_units')
+    if filtered:db.execute('DROP TABLE library_hits')
+    totals=dict(total=total,sentence_total=sentence_total,group_total=groups,ungrouped_total=total-groups,
+                code_summary=code_switching.summary_rows(db,codes),cited_ids=cited,filtered=filtered)
+    cost=512+sum(240+4*(len(r['id'])+len(r['language_id'])) for r in ordered)+sum(160+sum(80+4*len(v) for v in members) for members in group_hits.values())
+    if cacheable:LIBRARY_PLANS.put(plan_key,(ordered,group_hits,totals),cost)
+    return library_page(db,ordered,group_hits,totals,query,stamp,windowed=not cacheable)
+
+
+def library_page(db,ordered,group_hits,totals,query,stamp,*,windowed=False):
+    import annotations,copy,gloss_inheritance
+    pages=max(1,(totals['total']+19)//20)
+    page=max(1,min(pages,int(query.get('page',1))))
+    focused=query.get('_focus_found',False)
+    if query.get('focus') and not windowed:
+        from dictionary_paging import focused_page
+        target=focused_page((r['id'] for r in ordered),query['focus'],20)
+        focused=target is not None
+        if focused:page=target
+    rows=ordered if windowed else ordered[(page-1)*20:page*20]
+    items=[]
+    selected=[r['id'] for r in rows if r['kind']=='independent' and LIBRARY_CARDS.get((stamp,r['id'])) is None]
+    if selected:
+        gloss_inheritance.prefetch(db,'independent',selected)
+    for row in rows:
+        rid=row['id']
+        if row['kind']=='group':
+            cache_key=(stamp,'group',rid) if stamp else None
+            raw=LIBRARY_CARDS.get(cache_key)
+            if raw is None:
+                group=detail(db,row['language_id'],rid)
+                if cache_key:
+                    raw=json.dumps(group,ensure_ascii=False,separators=(',',':')).encode()
+                    LIBRARY_CARDS.put(cache_key,raw,len(raw)+256)
+            else:group=json.loads(raw)
+            items.append(dict(kind='group',id=rid,group=group,matched_ids=list(group_hits.get(rid,()))))
+        else:
+            key=(stamp,rid) if stamp else None
+            raw=LIBRARY_CARDS.get(key)
+            if raw is None:
+                body=annotations.independent_card(db,rid)
+                if key:
+                    raw=json.dumps(body,ensure_ascii=False,separators=(',',':')).encode('utf8')
+                    LIBRARY_CARDS.put(key,raw,len(raw)+256)
+            else:body=json.loads(raw)
+            items.append(dict(kind='independent',id=rid,language_id=row['language_id'],body=body,ordering=row['ordering']))
+    return dict(items=items,page=page,pages=pages,**copy.deepcopy(totals),**({'focus_found':focused} if query.get('focus') else {}))
 
 
 def export_bundle(db, lid):

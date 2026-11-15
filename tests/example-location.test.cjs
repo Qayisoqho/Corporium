@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 function setup(nested=false){
  const listeners=new Map(),observers=[],classes=new Set(),scrolls=[];
- const c={activeLanguage:'one',workspace:'corpus',dictionarySelection:'lexeme',requestAnimationFrame:fn=>setImmediate(fn),getComputedStyle:()=>({overflowY:'auto'})};
+ const c={activeLanguage:'one',workspace:'corpus',dictionarySelection:'lexeme',requestAnimationFrame:fn=>setImmediate(fn),nextLayoutFrame:()=>new Promise(resolve=>setImmediate(resolve)),getComputedStyle:()=>({overflowY:'auto'})};
  c.window={scrollX:0,scrollY:1400,scrollTo:p=>{c.window.scrollX=p.left;c.window.scrollY=p.top;scrolls.push(p);}};
  const page={};
  const root={id:'corpus-workspace',dataset:{},parentElement:page,scrollHeight:0,clientHeight:0,isConnected:true,getClientRects:()=>[{}]};

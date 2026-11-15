@@ -41,9 +41,9 @@ class GrammaticalityTests(unittest.TestCase):
 
     def test_catalog_rename_no_sentence_write_disable_delete_and_undo(self):
         self.seed();e=self.independent();t=self.type();self.mark('independent',e,t['id'])
-        with server.connect(audit=False) as db:before=db.execute('SELECT body,revision FROM dictionary_examples WHERE id=?',(e['id'],)).fetchone();before=tuple(before)
+        with server.connect(audit=False) as db:before=db.execute('SELECT body,revision FROM dictionary_examples_documents WHERE id=?',(e['id'],)).fetchone();before=tuple(before)
         self.type(id=t['id'],name='很不自然',symbol='#')
-        with server.connect(audit=False) as db:self.assertEqual(tuple(db.execute('SELECT body,revision FROM dictionary_examples WHERE id=?',(e['id'],)).fetchone()),before)
+        with server.connect(audit=False) as db:self.assertEqual(tuple(db.execute('SELECT body,revision FROM dictionary_examples_documents WHERE id=?',(e['id'],)).fetchone()),before)
         self.type(id=t['id'],name='很不自然',symbol='#',enabled=False)
         i=self.independent();d=self.data('independent',i)
         self.assertEqual(self.call('/api/grammaticality-save',dict(kind='independent',id=i['id'],revision=d['revision'],grammaticality=t['id']))[0],400)
@@ -83,7 +83,7 @@ class GrammaticalityTests(unittest.TestCase):
         d=self.mark('independent',i,'ungrammatical');body=dict(d['body']);body.pop('grammaticality')
         self.assertEqual(self.call('/api/example-save',dict(id=i['id'],revision=d['revision'],body=body))[0],200);self.assertEqual(self.data('independent',i)['body']['grammaticality'],'ungrammatical')
         with server.connect(audit=False) as db:
-            for row in db.execute('SELECT body FROM entries'):
+            for row in db.execute('SELECT body FROM entries_documents'):
                 self.assertFalse(set(grammaticality.CORPUS_FIELDS)&json.loads(row[0]).keys())
 
     def test_analysis_conditions_distribution_and_json_only_independent(self):
@@ -164,24 +164,27 @@ class GrammaticalityTests(unittest.TestCase):
         self.assertNotIn('grammaticality',plan['texts'][0]['examples'][0]['body'])
 
     def test_startup_migration_backs_up_only_changes_text_fields_and_is_idempotent(self):
+        server.DB=Path(self.temp.name)/'legacy-judgment.sqlite3'
+        server.init(source_mode='legacy')
         e=self.seed();i=self.independent();self.mark('independent',i,'questionable')
         with server.connect(audit=False) as db:
             body=json.loads(db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0]);body.update(grammaticality='old',grammaticality_definition={'id':'old'},grammaticality_display={'symbol':'!'})
             db.execute('UPDATE entries SET body=? WHERE id=?',(json.dumps(body),e['id']))
             before={t:[tuple(r) for r in db.execute('SELECT * FROM '+t)] for t in journal.TABLES if t!='entries'}
-        server.init()
+        server.init(source_mode='legacy')
         with server.connect(audit=False) as db:
             self.assertFalse(grammaticality.corpus_rows_needed(db));self.assertEqual(json.loads(db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0]),grammaticality.strip_corpus(dict(body)))
             self.assertEqual(before,{t:[tuple(r) for r in db.execute('SELECT * FROM '+t)] for t in before})
         backups=list((server.DB.parent/'backups').glob('*.sqlite3'));self.assertEqual(len(backups),1)
         with closing(sqlite3.connect(backups[0])) as old:self.assertEqual(json.loads(old.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0])['grammaticality'],'old')
-        server.init();self.assertEqual(list((server.DB.parent/'backups').glob('*.sqlite3')),backups)
+        server.init(source_mode='legacy');self.assertEqual(list((server.DB.parent/'backups').glob('*.sqlite3')),backups)
         self.assertEqual(self.data('independent',i)['body']['grammaticality'],'questionable')
 
     def test_legacy_undo_and_redo_do_not_restore_corpus_field(self):
         e=self.seed();self.assertEqual(self.call('/api/save',{**e,'notes':'edited'})[0],200)
         with server.connect(audit=False) as db:
-            row=db.execute('SELECT id,changes FROM undo_steps ORDER BY id DESC LIMIT 1').fetchone();changes=journal.decode_changes(row['changes'])
+            row=db.execute('SELECT id,changes FROM undo_steps ORDER BY id DESC LIMIT 1').fetchone()
+            changes=journal.decode_changes(journal.portable_step(row)['changes'])
             for c in changes:
                 if c['table']!='entries':continue
                 for side in ('before','after'):

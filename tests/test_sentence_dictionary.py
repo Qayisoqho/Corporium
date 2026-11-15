@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 import unittest
 from unittest.mock import patch
@@ -229,9 +230,9 @@ class SentenceDictionaryTests(unittest.TestCase):
             # editors compact them. Exercise the actual stored representation.
             if kind == 'independent':
                 with server.connect(audit=False) as db:
-                    body=json.loads(db.execute('SELECT body FROM dictionary_examples WHERE id=?',(src['id'],)).fetchone()[0])
+                    body=json.loads(db.execute('SELECT body FROM dictionary_examples_documents WHERE id=?',(src['id'],)).fetchone()[0])
                     body['words'][0]['gloss']='Existing-'
-                    db.execute('UPDATE dictionary_examples SET body=? WHERE id=?',(json.dumps(body),src['id']))
+                    source_fixtures.replace(db,'dictionary_examples',src['id'],json.dumps(body))
             p = self.complete(src)
             self.assertEqual([w['gloss'] for w in self.detail(src)['body']['words']], ['Existing-B', '', 'Mismatch'])
             self.assertTrue(p['skipped'])

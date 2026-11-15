@@ -1,6 +1,5 @@
 """Immutable creation dates travel inside entry bodies; missing means unknown."""
 from datetime import datetime, timezone
-import json
 
 ORDERS = ('@added-asc', '@added-desc')
 
@@ -28,13 +27,13 @@ def stamp(data, old=None):
 
 def imported(db, table, xid, source):
     assert table in ('lexemes', 'morphemes')
-    row = db.execute('SELECT body FROM '+table+' WHERE id=?', (xid,)).fetchone()
-    data = json.loads(row['body'])
+    import record_sources
+    data = record_sources.read(db,table,xid)
     data.pop('created_at', None)
     value = parse(source.get('created_at'))
     if value is not None:
         data['created_at'] = value
-    db.execute('UPDATE '+table+' SET body=? WHERE id=?', (json.dumps(data, ensure_ascii=False), xid))
+    record_sources.write(db,table,xid,data,bump=False)
 
 def sort_rows(rows, order):
     if order not in ORDERS:
@@ -49,9 +48,14 @@ def sort_rows(rows, order):
     unknown.sort(key=lambda x: x[1]['id'])
     return [r for _, r in known+unknown]
 
-def sql_order(order, alias):
+def sql_order(order, alias, *, date=None):
     if order not in ORDERS:
         raise ValueError('排序方式无效')
-    date = "json_extract("+alias+".body,'$.created_at')"
+    if date is None:date = "json_extract("+alias+".body,'$.created_at')"
     direction = 'ASC' if order == '@added-asc' else 'DESC'
     return f'{date} IS NULL ASC,{date} {direction},{alias}.id ASC'
+
+
+def relational_date(alias, kind):
+    return (f"(SELECT d.value FROM dictionary_value_rows d WHERE d.target_kind='{kind}' "
+            f"AND d.target_id={alias}.id AND d.parent=0 AND d.slot='created_at' LIMIT 1)")

@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 import unittest
 from unittest.mock import patch
@@ -58,10 +59,10 @@ class EvidenceIntegrationTests(unittest.TestCase):
 
     def test_sources_catalog_owners_layers_rollback_and_deletion_stay_current(self):
         with server.connect(audit=False) as db:
-            db.executemany('INSERT INTO lexemes VALUES(?,?,?,?,1)',[(x,'ordos',x,'{}') for x in ('one','two')])
+            source_fixtures.seed_many(db,'lexemes',('id', 'language_id', 'headword', 'body', 'revision'),((row[0], row[1], row[2], row[3], 1) for row in [(x,'ordos',x,'{}') for x in ('one','two')]))
             def body(label,owner='one'):
                 return json.dumps(dict(ipa='Straße',translation='e\u0301cole',words=[dict(form=label,gloss='词',annotation_id='word')],targets=[dict(lexeme_id=owner)],custom=dict(title='custom-only')))
-            db.execute('INSERT INTO dictionary_examples VALUES(?,?,?,1)',('example','ordos',body('before-only')))
+            source_fixtures.seed(db,'dictionary_examples',('id', 'language_id', 'body', 'revision'),('example', 'ordos', body('before-only'), 1))
             db.execute("INSERT INTO annotation_layers(id,language_id,name,font,anchor) VALUES('layer','ordos','extra','Junicode','word')")
             db.execute("INSERT INTO annotation_cells VALUES('cell','independent','example','word','layer','layer-only',1)")
             for needle in ('before-only','STRASSE','Straße','é','layer-only','custom-only','词','absent'):
@@ -74,12 +75,12 @@ class EvidenceIntegrationTests(unittest.TestCase):
             with patch.object(dictionary_search.SearchIndex,'document',checked):
                 rows=self.rows(db);dictionary_search.SearchIndex(db,'ordos',rows,search_spec=dict(field='all'),query='new query')
             db.execute('SAVEPOINT preview')
-            db.execute('UPDATE dictionary_examples SET body=? WHERE id=?',(body('after-only','two'),'example'))
+            source_fixtures.replace(db,'dictionary_examples','example',body('after-only','two'))
             self.assertEqual(self.compare(db,'after-only'),['two']);self.assertEqual(self.compare(db,'before-only'),[])
             db.execute('ROLLBACK TO preview');db.execute('RELEASE preview')
             self.assertEqual(self.compare(db,'before-only'),['one']);self.assertEqual(self.compare(db,'after-only'),[])
             # No revision bump is needed for correctness: actual JSON is checked.
-            db.execute('UPDATE dictionary_examples SET body=? WHERE id=?',(body('before-only','two'),'example'))
+            source_fixtures.replace(db,'dictionary_examples','example',body('before-only','two'))
             self.assertEqual(self.compare(db,'before-only'),['two'])
             db.execute("DELETE FROM dictionary_examples WHERE id='example'")
             self.assertEqual(self.compare(db,'before-only'),[])
@@ -87,7 +88,7 @@ class EvidenceIntegrationTests(unittest.TestCase):
             # Catalog names and symbols also invalidate derived evidence values.
             db.execute("INSERT INTO writing_types(id,language_id,name,font,position) VALUES('writing','ordos','Old script','Junicode',0)")
             b=json.loads(body('word'));b['orthographies']=[dict(type_id='writing',text='sample')]
-            db.execute('INSERT INTO dictionary_examples VALUES(?,?,?,1)',('new','ordos',json.dumps(b)))
+            source_fixtures.seed(db,'dictionary_examples',('id', 'language_id', 'body', 'revision'),('new', 'ordos', json.dumps(b), 1))
             self.assertEqual(self.compare(db,'Old script'),['one'])
             db.execute("UPDATE writing_types SET name='New script' WHERE id='writing'")
             self.assertEqual(self.compare(db,'Old script'),[]);self.assertEqual(self.compare(db,'New script'),['one'])

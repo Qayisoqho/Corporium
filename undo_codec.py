@@ -3,6 +3,7 @@ import base64
 import hashlib
 import json
 import zlib
+from itertools import islice
 
 FORMAT='corporium-undo-zlib-v1'
 THRESHOLD=4096
@@ -14,11 +15,14 @@ def checkpoint():
 
 
 def chunks(changes):
+    items=iter(changes)
     yield b'['
-    for i,change in enumerate(changes):
-        if i%64==0:checkpoint()
-        if i:yield b', '
-        yield json.dumps(change,ensure_ascii=False).encode('utf-8')
+    separator=b''
+    while batch:=list(islice(items,64)):
+        checkpoint()
+        # Keep the portable row-image encoding and feed the compressor in blocks.
+        yield separator+json.dumps(batch,ensure_ascii=False)[1:-1].encode('utf-8')
+        separator=b', '
     yield b']'
 
 

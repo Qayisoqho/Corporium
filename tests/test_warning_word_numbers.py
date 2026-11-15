@@ -125,11 +125,12 @@ class WarningWordNumberRouteTests(unittest.TestCase):
         self.assertEqual(code,200,result)
         # Existing projects may persist the old physical-cell wording. Display
         # readers must refresh it without rewriting those stored materials.
+        import record_sources
         with server.connect(audit=False) as db:
             for table,identity in [('entries',entry['id']),('dictionary_examples',rid)]:
-                body=json.loads(db.execute('SELECT body FROM '+table+' WHERE id=?',(identity,)).fetchone()[0])
+                body=record_sources.read(db,table,identity)
                 body['warnings']=['第 4 词：语素数量或边界不一致，保留整词配对']
-                db.execute('UPDATE '+table+' SET body=? WHERE id=?',(json.dumps(body,ensure_ascii=False),identity))
+                record_sources.write(db,table,identity,body,bump=False)
         before=self.snapshot()
         paths=[('/api/entries',lambda r:r['items'][0]),
                ('/api/example-library?source=independent',lambda r:next(e['body'] for e in r['items'] if e['id']==rid)),

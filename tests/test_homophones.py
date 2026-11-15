@@ -1,9 +1,28 @@
+import source_fixtures
 import unittest
 import test_morpheme_registry
 
 class HomophoneTests(unittest.TestCase):
     for helper in ('setUp','tearDown','call','seed','entries','undo','fixture','link','assign'):
         locals()[helper]=getattr(test_morpheme_registry.MorphemeRegistryTests,helper)
+    def test_grid_reuses_only_current_material_for_the_same_reading(self):
+        from urllib.parse import urlencode
+        def page(**extra):
+            code,result=self.call('/api/homophones?'+urlencode(dict(language='ordos',view='phonology',view_only='1',**extra)))
+            self.assertEqual(code,200,result)
+            return result
+        self.assertEqual(self.call('/api/morpheme-save',dict(form='one',body={'readings':['a']}))[0],200)
+        original=page()
+        known=dict(material_version=original['material_version'],known='["a"]')
+        self.assertEqual(original['pending'][0]['items'][0]['form'],'one')
+        repeated=page(**known)
+        self.assertTrue(repeated['pending'][0]['reuse_items'])
+        self.assertEqual(repeated['pending'][0]['items'],[])
+        self.assertEqual(self.call('/api/morpheme-save',dict(form='two',body={'readings':['a']}))[0],200)
+        changed=page(**known)
+        self.assertNotEqual(changed['material_version'],original['material_version'])
+        self.assertEqual({r['form'] for r in changed['pending'][0]['items']},{'one','two'})
+
     def test_reading_identity_dedup_and_component_override(self):
         _,x=self.fixture()
         m=self.call('/api/morpheme-save',{'form':'abstract','body':{'readings':['ma55'],'gloss':'麻','status':'confirmed'}})[1]
@@ -72,7 +91,7 @@ class HomophoneTests(unittest.TestCase):
     def test_pagination_and_reading_search_include_review(self):
         import json,server
         with server.connect(audit=False) as db:
-            for i in range(45):db.execute('INSERT INTO morphemes VALUES(?,?,?,?,?,1)',(str(i),'ordos','form'+str(i),1,json.dumps({'readings':['r%02d'%i],'status':'pending'})))
+            for i in range(45):source_fixtures.seed(db,'morphemes',('id', 'language_id', 'form', 'number', 'body', 'revision'),(str(i), 'ordos', 'form'+str(i), 1, json.dumps({'readings':['r%02d'%i],'status':'pending'}), 1))
         result=self.call('/api/homophones?language=ordos&page=2&review_page=2')[1]
         self.assertEqual((result['total'],len(result['groups']),result['review_total'],len(result['review'])),(45,5,0,0))
         result=self.call('/api/homophones?language=ordos&q=r04')[1]

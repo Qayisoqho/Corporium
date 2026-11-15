@@ -67,8 +67,9 @@ class ComponentLinkTests(unittest.TestCase):
         other=self.call('/api/save-language',{'name':'Copy','metadata':{}})[1]['id']
         code,r=self.call('/api/import-language',{'_language':other,'bundle':bundle});self.assertEqual(code,200,r)
         with server.connect() as db:
-            row=db.execute('SELECT body FROM dictionary_examples WHERE language_id=?',(other,)).fetchone();t=json.loads(row[0])['targets'][0]
-            body=json.loads(db.execute('SELECT body FROM lexemes WHERE id=?',(t['lexeme_id'],)).fetchone()[0])
+            from independent_links import targets
+            row=db.execute('SELECT id FROM dictionary_examples WHERE language_id=?',(other,)).fetchone();t=targets(db,row[0])[0]
+            body=json.loads(db.execute('SELECT body FROM lexemes_documents WHERE id=?',(t['lexeme_id'],)).fetchone()[0])
             self.assertFalse(component_links.review(body,t['component_ref']))
 
     def test_corpus_export_and_backup_restore(self):
@@ -77,7 +78,7 @@ class ComponentLinkTests(unittest.TestCase):
         other=self.call('/api/save-language',{'name':'Copy','metadata':{}})[1]['id']
         code,r=self.call('/api/import-language',{'_language':other,'bundle':bundle});self.assertEqual(code,200,r)
         with server.connect() as db:
-            rows=db.execute('SELECT c.body,x.body FROM component_links c JOIN lexical_links l ON c.id=l.id JOIN lexemes x ON x.id=l.lexeme_id').fetchall()
+            rows=db.execute('SELECT c.body,x.body FROM component_links c JOIN lexical_links l ON c.id=l.id JOIN lexemes_documents x ON x.id=l.lexeme_id').fetchall()
             self.assertEqual(len(rows),2)
             for ref,body in rows:self.assertFalse(component_links.review(json.loads(body),json.loads(ref)))
         backup=self.call('/api/backup')[1];src=Path(self.temp.name)/'backup.json';src.write_text(json.dumps(backup),encoding='utf-8')

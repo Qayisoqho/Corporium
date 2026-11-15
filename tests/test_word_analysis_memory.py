@@ -1,4 +1,5 @@
 """Whole-analysis reuse exercises real routes and undo in isolated projects."""
+import source_fixtures
 import json
 import unittest
 
@@ -126,7 +127,7 @@ class WordAnalysisMemoryTests(unittest.TestCase):
         self.assertTrue(self.api('sentence-gloss-preview',self.args(dst))['analyses'])
         with server.connect(audit=False) as db:
             self.assertEqual(db.execute('SELECT count(*) FROM word_analysis_dirty').fetchone()[0],0)
-            db.execute('UPDATE entries SET body=json_set(body,\'$.words[0].form\',\'other\') WHERE id=?',(src['id'],))
+            source_fixtures.patch_values(db,'entries',src['id'],((('words', 0, 'form'), 'other'),))
             self.assertEqual(db.execute('SELECT count(*) FROM word_analysis_dirty').fetchone()[0],1)
         self.assertFalse(self.api('sentence-gloss-preview',self.args(dst))['analyses'])
         backup=self.api('backup')

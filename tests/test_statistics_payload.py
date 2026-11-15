@@ -22,6 +22,27 @@ class StatisticsPayloadTests(unittest.TestCase):
             result=payload.statistics_metadata(self.encoded)
         self.assertEqual(result,{k:self.value[k] for k in ('statistics','vocabulary')})
 
+    def test_compact_count_hits_round_trip_through_all_readers_and_full_snapshots(self):
+        value=copy.deepcopy(self.value)
+        value.pop('records')
+        value['hits']=[dict(entry_id='é'+str(i//3),word=i%3,form='汉𐀀',value='汉𐀀',unit_id='') for i in range(20)]
+        compact=analysis.pack(value,compact_counts=True)
+        self.assertEqual(analysis.unpack(compact),value)
+        self.assertEqual(payload.read(compact),value)
+        self.assertEqual([hit for _,hit in payload.items(compact,'hits')],value['hits'])
+        sections={key:list(rows) if key=='hits' else rows for key,rows in payload.sections(compact)}
+        self.assertEqual(sections['hits'],[(None,hit) for hit in value['hits']])
+        self.assertEqual(payload.selected_hits(compact,[19,0,19]),[{**value['hits'][i],'index':i} for i in (19,0,19)])
+        self.assertEqual(payload.occurrence(compact,19)[0],value['hits'][19])
+        frozen={**value,'records':{}}
+        frozen_encoded=analysis.pack(frozen,compact_counts=True)
+        self.assertNotIn(payload.COUNTED_HITS,json.loads(zlib.decompress(base64.b64decode(frozen_encoded))))
+        self.assertEqual(analysis.unpack(frozen_encoded),frozen)
+        for hit in (self.value['hits'][0],{**value['hits'][0],'extension':'preserved'},
+                    {**value['hits'][0],'word':False}):
+            legacy={**value,'hits':[hit]}
+            self.assertEqual(payload.read(analysis.pack(legacy,compact_counts=True)),legacy)
+
     def test_selected_hits_keep_order_duplicates_and_legacy_indexing(self):
         for indices in ([5,0,5,2],[],[-1,0],[True,False]):
             with self.subTest(indices=indices):

@@ -7,12 +7,13 @@ test('palette defaults retain theme colors, and a master switch makes every role
 test('existing palettes gain a source-only reduplication switch and independent colors for all skins',()=>{
  const c=setup(),p=c.normalizeMorphPalette({roles:{affix:false},colors:{docoid:{reduplication:'#9B4566'},night:{reduplication:'#D8A6BD'}}});
  assert.equal(p.roles.reduplication,true);assert.equal(p.roles.affix,false);
- for(const skin of ['docoid','dawoid','ivory','night','forest'])assert.equal(c.morphPaletteValues(p,skin).reduplication,p.colors[skin].reduplication||'var(--morph-reduplication,var(--ink))');
+ for(const skin of ['docoid','docoid-crimson','dawoid','ivory','night','forest'])assert.equal(c.morphPaletteValues(p,skin).reduplication,p.colors[skin].reduplication||'var(--morph-reduplication,var(--ink))');
  p.roles.reduplication=false;assert.equal(c.morphPaletteValues(p,'docoid').reduplication,'var(--ipa,var(--ink))');assert.equal(p.colors.docoid.reduplication,'#9b4566');
  p.roles.reduplication=true;assert.equal(c.morphPaletteValues(p,'night').reduplication,'#d8a6bd');
 });
 test('role switches preserve custom colors and keep skin palettes independent',()=>{
- const c=setup(),p=c.normalizeMorphPalette({roles:{clitic:false},colors:{dawoid:{affix:'#F080A0',clitic:'#00aaff'},docoid:{affix:'#246810'}}});
+ const c=setup(),p=c.normalizeMorphPalette({roles:{clitic:false},colors:{dawoid:{affix:'#F080A0',clitic:'#00aaff'},docoid:{affix:'#246810'},'docoid-crimson':{affix:'#ABCDEF'}}});
+ assert.equal(c.morphPaletteValues(p,'docoid-crimson').affix,'#abcdef');
  assert.equal(c.morphPaletteValues(p,'dawoid').affix,'#f080a0');assert.equal(c.morphPaletteValues(p,'docoid').affix,'#246810');assert.equal(c.morphPaletteValues(p,'dawoid').clitic,'var(--ipa,var(--ink))');assert.equal(p.colors.dawoid.clitic,'#00aaff');
  p.roles.clitic=true;assert.equal(c.morphPaletteValues(p,'dawoid').clitic,'#00aaff');assert.equal(c.morphPaletteValues(p,'forest').affix,'var(--gold,var(--ink))');
 });

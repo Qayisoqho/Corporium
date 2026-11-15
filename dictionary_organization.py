@@ -54,21 +54,24 @@ def descendants(rows,root):
         found.add(item);todo.extend(children.get(item,[]))
     return found
 
-def validate_ids(db,lid,ids):
+def validate_ids(db,lid,ids,valid=None):
     if not isinstance(ids,list) or any(not isinstance(i,str) for i in ids) or len(ids)!=len(set(ids)):raise ValueError('语义分类选择无效')
-    valid={r[0] for r in db.execute('SELECT id FROM semantic_classes WHERE language_id=?',(lid,))}
+    if valid is None:valid={r[0] for r in db.execute('SELECT id FROM semantic_classes WHERE language_id=?',(lid,))}
     if not set(ids)<=valid:raise ValueError('语义分类已删除或属于其他语言，请重新选择')
     return ids
 
-def validate(db):
+def validate(db,targets):
     rows=[dict(r) for r in db.execute('SELECT * FROM semantic_classes')];byid={r['id']:r for r in rows}
+    valid={}
     for r in rows:
+        valid.setdefault(r['language_id'],set()).add(r['id'])
         seen={r['id']};parent=r['parent_id']
         while parent:
             if parent in seen or parent not in byid or byid[parent]['language_id']!=r['language_id']:raise ValueError('语义分类层级无效')
             seen.add(parent);parent=byid[parent]['parent_id']
-    for r in db.execute('SELECT language_id,body FROM dictionary_targets'):
-        validate_ids(db,r['language_id'],json.loads(r['body']).get('semantic_classes',[]))
+    empty=frozenset()
+    for r in targets.values():
+        validate_ids(db,r['language_id'],r['body'].get('semantic_classes',[]),valid.get(r['language_id'],empty))
 
 def filter_sort(db,lid,rows,category='',order=''):
     config=listing(db,lid)
@@ -113,11 +116,12 @@ def _mutate(db,lid,action,b):
         items=b.get('items',[])
         if not isinstance(items,list) or not items:raise ValueError('请选择词条')
         for item in long_tasks.steps(items):
-            row=db.execute('SELECT * FROM lexemes WHERE id=? AND language_id=?',(item['id'],lid)).fetchone()
+            row=db.execute('SELECT * FROM lexemes_documents WHERE id=? AND language_id=?',(item['id'],lid)).fetchone()
             if not row or row['revision']!=item.get('revision'):raise ValueError('词条已变化，请刷新后重试')
             data=json.loads(row['body']);old=data.get('semantic_classes',[])
             data['semantic_classes']=list(dict.fromkeys(old+ids)) if mode=='add' else [i for i in old if i not in ids] if mode=='remove' else ids
-            db.execute('UPDATE lexemes SET body=?,revision=revision+1 WHERE id=?',(json.dumps(data,ensure_ascii=False),row['id']))
+            import dictionary_rows
+            dictionary_rows.write(db,'lexeme',row['id'],data)
         return {'ok':True}
     isclass=action.startswith('class-');table='semantic_classes' if isclass else 'dictionary_orders'
     if action not in ('class-save','class-delete','order-save','order-delete','order-copy'):raise ValueError('未知词典组织操作')

@@ -20,11 +20,15 @@ class CorporiumWorkspaceViews{
  let rendered=null,loadSequence=0,readers=0,failures=0,reads=new Map();
  const stamp=()=>JSON.stringify([activeLanguage,window.dictionaryEntryKind?.()||'lexeme',window.corporiumWorkspaceRevision]);
  const catalogs=new Map(),catalogNames=new Set(['dictionary-search-options','morpheme-search-options','dictionary-organization','dictionary-counts','writing-types','grammar-tags']);
- window.corporiumInvalidateViews=()=>{rendered=null;reads.clear();catalogs.clear();views.invalidateAll();};
+ window.corporiumInvalidateViews=()=>{window.corporiumInvalidateSentenceReads?.();rendered=null;reads.clear();catalogs.clear();views.invalidateAll();};
  const shared=new Set(['lexeme','morphology-options','dictionary-organization','dictionary-examples','grammar-tags','morpheme-components','synonyms','object-media','collaborators']);
+ const readOnlyPosts=new Set(['docx-inspect','docx-preview','docx-export','docx-template','text-replace-preview','dictionary-replace-preview']);
  const previousApi=api;
  api=async function(path,body){
-  if(body){if(!['docx-inspect','docx-preview','docx-export','docx-template'].includes(path)){rendered=null;reads.clear();catalogs.clear();views.invalidateAll();}return previousApi(path,body);}
+  if(body){
+   if(!readOnlyPosts.has(path)){window.corporiumInvalidateSentenceReads?.();rendered=null;reads.clear();catalogs.clear();views.invalidateAll();}
+   return previousApi(path,body);
+  }
   const url=new URL(path,'http://corporium.local/');
   if(window.corporiumWorkspaceRevision&&catalogNames.has(url.pathname.slice(1))){
    url.searchParams.sort();const key=stamp()+'\0'+url.pathname+'?'+url.searchParams;
@@ -57,7 +61,7 @@ class CorporiumWorkspaceViews{
    // await the same promises, including normal error handling and invalidation.
    if(window.corporiumWorkspaceRevision){
     const paths=(window.dictionaryEntryKind?.()||'lexeme')==='morpheme'
-     ?['morpheme-search-options']:['dictionary-search-options','dictionary-organization','dictionary-counts'];
+     ?['dictionary-counts']:['dictionary-organization','dictionary-counts'];
     for(const path of paths)void api(path).catch(()=>{});
    }
    const result=await previousLoad(...args);
@@ -66,6 +70,11 @@ class CorporiumWorkspaceViews{
   });
  };
  window.corporiumReuseDictionary=()=>!!rendered&&rendered===stamp();
+ window.corporiumMarkSavedView=name=>{
+  window.corporiumInvalidateViews();
+  if(name==='dictionary')rendered=stamp();
+  else views.mark(name);
+ };
  // Check before changing panels: a background window may have saved this project.
  window.corporiumCheckDictionary=async()=>{
   if(!window.corporiumReuseDictionary())return;
@@ -116,16 +125,16 @@ class CorporiumWorkspaceViews{
  if(typeof corpusReady!=='undefined')void corpusReady.then(()=>{if(workspace==='corpus')views.mark('corpus');});
  const previousShow=showLexeme;
  showLexeme=async function(...args){return render(()=>previousShow(...args));};
- // Gather sections before replacing the old detail, so the next paint is complete.
- window.corporiumPrepareLexeme=async x=>{
-  await Promise.all([
-   api('dictionary-examples?id='+encodeURIComponent(x.id)),
-   api('grammar-tags?language='+encodeURIComponent(x.language_id)),
-   api('dictionary-organization?lexical_language='+encodeURIComponent(x.language_id)),
-   api('morpheme-components?id='+encodeURIComponent(x.id)),
-   api('synonyms?'+new URLSearchParams({kind:'lexeme',id:x.id,language:activeLanguage})),
-   api('object-media?'+new URLSearchParams({kind:'lexeme',id:x.id})),
-   api('collaborators')
-  ]);
+ // The core is already usable. Share the remaining section reads with the
+ // consumers in this render, without loading catalogs the entry does not use.
+ window.corporiumPrepareLexeme=x=>{
+  const paths=[
+   'morpheme-components?id='+encodeURIComponent(x.id),
+   'synonyms?'+new URLSearchParams({kind:'lexeme',id:x.id,language:activeLanguage}),
+   'object-media?'+new URLSearchParams({kind:'lexeme',id:x.id}),
+   'collaborators'
+  ];
+  if(x.body.semantic_classes?.length)paths.push('dictionary-organization?lexical_language='+encodeURIComponent(x.language_id));
+  return Promise.allSettled([...paths.map(path=>api(path)),window.CorporiumObjectMedia?.prepare('lexeme',[x.id])]);
  };
 })();

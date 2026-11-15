@@ -47,7 +47,7 @@ def configuration(db,b,old,lid,anchor):
 def unique(values):return list(dict.fromkeys(v for v in values if isinstance(v,str) and v.strip()))
 
 class Projection:
- def __init__(self,db,body,kind,rid,lid):
+ def __init__(self,db,body,kind,rid,lid,target_cache=None):
   self.db=db;self.body=body;self.lid=lid;self.links={};self.targets={}
   if kind=='corpus':
    sql='''SELECT l.*,COALESCE(p.position,u.position) word_position,u.position morph_position,u.kind,
@@ -71,10 +71,13 @@ class Projection:
     if not ref or t.get('segmentation_review') or ref.get('detached'):continue
     self.links.setdefault(ref['word'],{}).setdefault(ref['key'],[]).append(t)
   ids={t['lexeme_id'] for groups in self.links.values() for values in groups.values() for t in values}
-  for start in range(0,len(ids),300):
-   batch=list(ids)[start:start+300]
-   for row in db.execute('SELECT id,language_id,headword,body,target_kind FROM dictionary_targets WHERE id IN ('+','.join('?' for _ in batch)+')',batch):
-    if row['language_id']==lid:self.targets[row['id']]={**dict(row),'body':json.loads(row['body'])}
+  cache={} if target_cache is None else target_cache
+  missing=list(ids-cache.keys())
+  if missing:
+   from dictionary_rows import targets
+   cache.update(dict.fromkeys(missing))
+   cache.update(targets(db,missing))
+  self.targets={xid:cache[xid] for xid in ids if cache[xid] and cache[xid]['language_id']==lid}
   self.classes=None;self.semantic=None;self.writings=None
 
  def extract(self,target,link,field):
@@ -130,18 +133,22 @@ class Projection:
   if field.startswith('writing:') and not missing:result['font']=self.writings[field[8:]]['font']
   return result
 
-def project(db,body,kind,rid,lid,definitions,*,linked_only=False):
+def project(db,body,kind,rid,lid,definitions,*,linked_only=False,target_cache=None,unit_ids=None):
  derived=[d for d in definitions if d.get('source')=='dictionary']
  if not derived:return body
- resolver=Projection(db,body,kind,rid,lid)
+ resolver=Projection(db,body,kind,rid,lid,target_cache)
  for index,word in enumerate(body.get('words',[])):
+  if unit_ids is not None and index>=len(unit_ids):continue
   # Search consumes actual values only; unlinked placeholders cannot match.
   # Normal rendering still constructs every position, including placeholders.
   if linked_only and index not in resolver.links:
    word['extra_layers']=[]
    continue
   existing={l['id']:l for l in word.get('extra_layers',[])}
-  for definition in derived:existing[definition['id']]=resolver.layer(index,definition)
+  for definition in derived:
+   layer=resolver.layer(index,definition)
+   if unit_ids is not None:layer['unit_id']=unit_ids[index]
+   existing[definition['id']]=layer
   word['extra_layers']=[existing[d['id']] for d in definitions if d.get('anchor','word')=='word' and d['id'] in existing]
  return body
 

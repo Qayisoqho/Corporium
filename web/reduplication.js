@@ -9,7 +9,7 @@
   const s=state,opts=s.plan.options.map(o=>`<option value="${esc(optionKey(o))}">${esc(o.label)}</option>`).join('');
   $('redup-source').innerHTML=$('redup-base').innerHTML=opts;
   $('redup-list').innerHTML=s.plan.info.relations.map(r=>(globalThis.CorporiumI18n?.f("c4326509556493",()=>[esc(r.notes||''),rich(r.source.form),rich(r.base.form),esc(kinds[r.type]),r.review?(globalThis.CorporiumI18n?.f("fa6cca33724997",()=>[])??' · 待核对'):'',esc(r.id),r.review?(globalThis.CorporiumI18n?.f("275ed5fecc2d8b",()=>[])??'核对'):(globalThis.CorporiumI18n?.f("fa5ab2de4c2774",()=>[])??'编辑'),esc(r.id)])??`<div class="redup-row"><span title="${esc(r.notes||'')}">${rich(r.source.form)} → ${rich(r.base.form)} <small>${esc(kinds[r.type])}${r.review?' · 待核对':''}</small></span><button type="button" data-redup-edit="${esc(r.id)}">${r.review?'核对':'编辑'}</button><button type="button" data-redup-delete="${esc(r.id)}">解除</button></div>`)).join('');
-  $('redup-help').textContent=(s.plan.info.candidates.length?(globalThis.CorporiumI18n?.f("155aa67e0db4db",()=>[])??'~ 仅提示候选，请确认方向与基底。'):'')+(s.draft?(globalThis.CorporiumI18n?.f("feb131961dbd77",()=>[])??'关系随本句“保存”一起生效。'):(globalThis.CorporiumI18n?.f("162bcc95be2108",()=>[])??'修改不会自动改写标注或登记词典变体。'));
+  $('redup-help').textContent=(s.plan.info.candidates.length?(globalThis.CorporiumI18n?.f("155aa67e0db4db",()=>[])??'可在此手动确认方向与基底；已有关系优先保留。'):'')+(s.draft?(globalThis.CorporiumI18n?.f("feb131961dbd77",()=>[])??'关系随本句“保存”一起生效。'):(globalThis.CorporiumI18n?.f("162bcc95be2108",()=>[])??'修改不会自动改写标注或登记词典变体。'));
   $('redup-save').disabled=!s.plan.options.length;
   reset();
  }
@@ -64,7 +64,7 @@
  const originalTools=inlineSlotTools;
  inlineSlotTools=function(d){return originalTools(d).replace('</div>',(globalThis.CorporiumI18n?.f("fe5b6f007a0c67",()=>[])??'<button type="button" data-redup-open>关联重叠基底</button></div>'));};
  const originalFields=inlineFields;
- inlineFields=function(d){const html=originalFields(d),count=d.body.words.filter(w=>w.form.includes('~')).length;return html+(count?(globalThis.CorporiumI18n?.f("521af4308bd754",()=>[])??'<small class="redup-candidate">含 ~：可选中词格后关联重叠基底，候选不会自动生效。</small>'):'');};
+ inlineFields=function(d){const html=originalFields(d),count=d.body.words.filter(w=>w.form.includes('~')).length;return html+(count?(globalThis.CorporiumI18n?.f("521af4308bd754",()=>[])??'<small class="redup-candidate">保存句子时会按标注关联明确的重叠基底；其余可手动关联。</small>'):'');};
  function summary(){return '';}
  window.CorporiumReduplication={summary};
  const draw=drawSegmentation;

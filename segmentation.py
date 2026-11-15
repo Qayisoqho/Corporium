@@ -187,45 +187,79 @@ def decorate_refs(body):
 
 
 def link(db,b,lid):
-    import json
     import lexicon
-    import morphology
+    if b['kind']=='independent':return link_independent(db,b,lid)
     d=get(db,b['kind'],b['id']);body=d['body']
     if b.get('revision')!=d['revision']:raise ValueError('例句已修改，请重新打开形态分析')
-    if b['kind']=='independent' and b.get('remove_target') is not None:
+    i=b.get('word')
+    if not isinstance(i,int) or not 0<=i<len(body['words']):raise ValueError('请选择当前词')
+    unit=link_unit(body['words'][i],b)
+    x=lexicon.get_lexeme(db,b['lexeme_id'])
+    if x['language_id']!=d['language_id'] or x['revision']!=b.get('lexeme_revision'):raise ValueError('词条已修改或语言不一致，请重新选择')
+    u=lexicon.unit_info(db,unit['unit_id'])
+    if b.get('link_revision',0)!=u['link'].get('revision',0):raise ValueError('语素的词典关联已变化，请重新打开关联窗口')
+    return lexicon.mutate(db,'lexeme-link',{**b,'unit_id':u['id'],'unit_revision':u['revision'],'entry_revision':u['entry_revision'],'revision':u['link'].get('revision',0),'status':b.get('status','pending')},lid)
+
+
+def link_unit(word,b):
+    key=b.get('key')
+    if key=='@word':
+        if word.get('unit_type') in ('phonological_boundary','punctuation'):raise ValueError('标点或音系边界不能关联词典')
+        if b.get('component_selection'):raise ValueError('只有语素可以关联词条形态组分')
+        return dict(key=key,form=word['form'],gloss=word['gloss'],fragments=[],unit_id=word.get('unit_id'))
+    unit=next((m for m in word.get('morphemes',[]) if m['key']==key),None)
+    if not unit:raise ValueError('语素已变化，请重新选择')
+    return unit
+
+
+def link_independent(db,b,lid):
+    import gloss_inheritance
+    import independent_links
+    import morphology
+    rid=b['id']
+    owner=db.execute('SELECT language_id,revision FROM dictionary_examples WHERE id=?',(rid,)).fetchone()
+    if not owner or owner['language_id']!=lid or b.get('revision')!=owner['revision']:
+        raise ValueError('例句已修改，请重新打开形态分析')
+    if b.get('remove_target') is not None:
         i=b['remove_target']
-        if not isinstance(i,int) or not 0<=i<len(body['targets']) or not body['targets'][i].get('segmentation_ref'):raise ValueError('语素关联已变化')
-        body['targets'].pop(i)
-    else:
-        i=b.get('word')
-        if not isinstance(i,int) or not 0<=i<len(body['words']):raise ValueError('请选择当前词')
-        w=body['words'][i];unit=next((m for m in w.get('morphemes',[]) if m['key']==b.get('key')),None)
-        if b.get('key')=='@word':
-            if w.get('unit_type') in ('phonological_boundary','punctuation'):raise ValueError('标点或音系边界不能关联词典')
-            if b.get('component_selection'):raise ValueError('只有语素可以关联词条形态组分')
-            unit=dict(key='@word',form=w['form'],gloss=w['gloss'],fragments=[],unit_id=w.get('unit_id'))
-        if not unit:raise ValueError('语素已变化，请重新选择')
-        x=lexicon.get_lexeme(db,b['lexeme_id'])
-        if x['language_id']!=d['language_id'] or x['revision']!=b.get('lexeme_revision'):raise ValueError('词条已修改或语言不一致，请重新选择')
-        if b['kind']=='corpus':
-            u=lexicon.unit_info(db,unit['unit_id'])
-            if b.get('link_revision',0)!=u['link'].get('revision',0):raise ValueError('语素的词典关联已变化，请重新打开关联窗口')
-            return lexicon.mutate(db,'lexeme-link',{**b,'unit_id':u['id'],'unit_revision':u['revision'],'entry_revision':u['entry_revision'],'revision':u['link'].get('revision',0),'status':b.get('status','pending')},lid)
-        usage,sense=lexicon.selection(x['body'],b.get('usage_id') or None,b.get('sense_id') or None)
-        morphology.form_selection(x['body'],b.get('form_id'))
-        import paradigms
-        paradigms.validate_selection(x['body'],b.get('usage_id'),b.get('sense_id'),b.get('form_id'))
-        features=morphology.check_features(db,d['language_id'],b.get('features',[]))
-        ref=reference(w,i,unit)
-        target=dict(lexeme_id=x['id'],usage_id=usage['id'] if usage else None,sense_id=sense['id'] if sense else None,form_id=b.get('form_id') or None,features=features,segmentation_ref=ref)
-        target.update(notes=str(b.get('notes','')))
-        matches=[j for j,t in enumerate(body['targets']) if t.get('segmentation_ref')==ref]
-        if 'component_selection' in b:target['component_ref']=morphology.component_links.choose(x['body'],b['component_selection'])
-        elif len(matches)==1 and body['targets'][matches[0]]['lexeme_id']==x['id']:target['component_ref']=body['targets'][matches[0]].get('component_ref')
-        if len(matches)==1:body['targets'][matches[0]]=target
-        elif matches:raise ValueError('此语素存在多个关联，请先在独立例句编辑器中核对')
-        else:body['targets'].append(target)
-    db.execute('UPDATE dictionary_examples SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body,ensure_ascii=False),b['id']))
+        if type(i) is not int or i<0:raise ValueError('语素关联已变化')
+        row=db.execute('SELECT position,unit_key FROM independent_links WHERE example_id=? ORDER BY position LIMIT 1 OFFSET ?',
+                       (rid,i)).fetchone()
+        if not row or row['unit_key'] is None:raise ValueError('语素关联已变化')
+        independent_links.remove(db,rid,[row['position']])
+        return {'ok':True}
+    i=b.get('word')
+    if type(i) is not int or i<0:raise ValueError('请选择当前词')
+    _,raw=independent_links.word(db,rid,i)
+    if raw is None:raise ValueError('请选择当前词')
+    word,_,active=gloss_inheritance.independent_word(db,rid,raw)
+    unit=link_unit(word,b);ref=reference(word,i,unit)
+    x=independent_links.identity(db,b['lexeme_id'])
+    if not x or x['language_id']!=lid or x['revision']!=b.get('lexeme_revision'):
+        raise ValueError('词条已修改或语言不一致，请重新选择')
+    usage,sense,form=(b.get(key) or None for key in ('usage_id','sense_id','form_id'))
+    independent_links.validate_selection(db,x['id'],usage,sense,form)
+    features=morphology.check_features(db,lid,b.get('features',[]))
+    value=dict(lexeme_id=x['id'],usage_id=usage,sense_id=sense,form_id=form,features=features,
+               segmentation_ref=ref,notes=str(b.get('notes','')))
+    matches=[]
+    for row in db.execute('SELECT * FROM independent_links WHERE example_id=? AND word_position=? AND unit_key=?',
+                          (rid,i,b.get('key'))):
+        prior=independent_links.target(independent_links.image(db,row));saved=prior['segmentation_ref']
+        binding=active.get(prior.get('gloss_binding_id'))
+        if not saved.get('detached') and binding and binding['unit_key']==b.get('key'):saved=ref
+        if saved==ref or (not saved.get('detached') and all(saved[k]==word[k] for k in ('form','gloss')) and
+                          script_reprojection(dict(key=saved['key'],form=saved['unit_form'],gloss=saved['unit_gloss'],fragments=saved['fragments']),unit)):
+            matches.append((row['position'],prior))
+    if len(matches)>1:raise ValueError('此语素存在多个关联，请先在独立例句编辑器中核对')
+    position,prior=matches[0] if matches else (None,{})
+    if 'component_selection' in b:
+        from dictionary_targets import common
+        choice=b['component_selection']
+        value['component_ref']=morphology.component_links.choose(common(db,x['id']),choice) if choice else None
+    elif prior.get('lexeme_id')==x['id']:
+        value['component_ref']=prior.get('component_ref')
+    independent_links.replace(db,rid,position,value)
     return {'ok':True}
 
 
@@ -268,7 +302,11 @@ def save(db,b,lid):
             w['morph_groups']=[g for g in groups if g['id']!=gid]+[group]
         else:raise ValueError('未知形态分析操作')
     analyze(body)
-    table='entries' if b['kind']=='corpus' else 'dictionary_examples'
     # Source text and raw Typst stay untouched: this operation only adds analysis.
-    db.execute('UPDATE '+table+' SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body,ensure_ascii=False),b['id']))
+    if b['kind']=='independent':
+        from independent_links import write_body
+        write_body(db,b['id'],body)
+    else:
+        import sentence_rows
+        sentence_rows.write(db,'corpus',b['id'],body)
     return {'ok':True}

@@ -53,6 +53,14 @@ test('commit status disables cancellation, then finishes successfully',async()=>
  assert.equal(disabled,true);assert.equal(result.ok,true);assert.equal(h.dialogs[0].open,false);
 });
 
+test('language package tasks use the language selected in management',async()=>{
+ const h=harness([]);h.context.activeLanguage='all';
+ await h.context.api('language-package-export',{_language:'selected-language',include_media:false});
+ const request=h.calls.find(call=>call[0]==='task-start')[1];
+ assert.equal(request.kind,'language-package');
+ assert.equal(request.request.language,'selected-language');
+});
+
 test('short foreground tasks recheck promptly and restart the backoff for each job',async()=>{
  const h=harness([{state:'running',message:'working'},{state:'done',message:'done',result:{ok:true}},{state:'running',message:'working'}]),delays=[];
  h.context.setTimeout=(fn,ms)=>{delays.push(ms);fn();};
@@ -67,6 +75,16 @@ test('sustained tasks retain the 400ms cap and dictionary searches keep their 80
  const search=harness([{state:'running',message:'working'}]),searchDelays=[];
  search.context.setTimeout=(fn,ms)=>{searchDelays.push(ms);fn();};await search.context.api('lexemes?q=word');
  assert.deepEqual(searchDelays,[80]);assert.equal(search.context.window.corporiumLongTaskActive(),false);
+});
+
+test('reviewed previews and automatic links use completion waits, with polling for older servers',async()=>{
+ for(const [path,body] of [['text-replace-preview',{}],['lexeme-auto-preview',undefined],['lexeme-auto-link',{token:'p'}]]){
+  const h=harness([{state:'running',message:'ready',waited:true},{state:'running',message:'ready'}]),delays=[];
+  h.context.setTimeout=(fn,ms)=>{delays.push(ms);fn();};
+  assert.equal((await h.context.api(path,body)).ok,true);
+  assert.deepEqual(delays,[25]);
+  assert.equal(h.calls.filter(c=>c[0]==='task-status?id=job&wait=1').length,3);
+ }
 });
 
 test('existing dictionary saves use cancellable tasks while new records keep the quick save path',async()=>{

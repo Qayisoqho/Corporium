@@ -77,6 +77,7 @@ function mountGlobalSettingsSection(content,key,title){
  return section;
 }
 makeDialog('typography-dialog',(globalThis.CorporiumI18n?.f("9ef2f3f3f5ee28",()=>[variantOptions])??'<h2>全局设置</h2><form id="typography-form"><div id="global-font-settings"><p>界面字体适用于所有语言，保存在本机。例句各行的字体、变体和字号比例在“语言选项 → 编辑语言信息”中分别设置。</p><label>界面字体<select id="global-ui-font" class="global-font"></select></label><label>界面字体变体<select id="global-ui-variant">'+variantOptions+'</select></label></div><button class="primary" type="submit">保存设置</button></form>'));
+$('global-font-settings').querySelector('p').textContent=fontUI('界面字体适用于所有语言，保存在本机。语料行字体、变体和字号比例在「管理 → 语言 → 录入与显示」中设置。','Interface fonts apply to every language on this computer. Configure corpus row fonts, variants, and sizes in Manage → Languages → Entry and display.');
 mountGlobalSettingsSection($('global-font-settings'),'fonts',(globalThis.CorporiumI18n?.f("ac474ec1030210",()=>[])??'字体设置'));
 const globalFontEditor=createFontStackEditor($('global-font-settings'));
 $('typography-form').addEventListener('corporium-settings-discard',()=>globalFontEditor.load(typography));

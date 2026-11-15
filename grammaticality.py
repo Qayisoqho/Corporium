@@ -1,5 +1,6 @@
 """Language-owned judgments for independent examples only. Empty means grammatical."""
 import json
+import record_sources
 import uuid
 from functools import lru_cache
 
@@ -56,6 +57,9 @@ def strip_corpus(body):
 
 
 def corpus_rows_needed(db):
+    import record_sources
+    if record_sources.native(db):
+        return False
     if not db.execute("SELECT 1 FROM sqlite_master WHERE name='entries'").fetchone():return False
     return bool(db.execute("SELECT 1 FROM entries WHERE "+' OR '.join("json_type(body,'$."+key+"') IS NOT NULL" for key in CORPUS_FIELDS)+" LIMIT 1").fetchone())
 
@@ -74,10 +78,12 @@ def normalize_rows(db,changes):
         # Reuse the journal's current row image: no extra SELECT or JSON parse
         # for normal text edits, including large imports and replacements.
         raw=after['body']
-        if not any('"'+key+'"' in raw for key in CORPUS_FIELDS):continue
-        body=json.loads(raw)
+        if isinstance(raw,str) and not any('"'+key+'"' in raw for key in CORPUS_FIELDS):continue
+        if isinstance(raw,dict) and not any(key in raw for key in CORPUS_FIELDS):continue
+        body=record_sources.body(after)
         if not any(key in body for key in CORPUS_FIELDS):continue
-        db.execute('UPDATE entries SET body=? WHERE rowid=?',(json.dumps(strip_corpus(body),ensure_ascii=False),rowid))
+        import sentence_rows
+        sentence_rows.write(db,'corpus',after['id'],strip_corpus(body),bump=False)
 
 
 def copy_value(old,new,source,kind='independent'):
@@ -90,7 +96,14 @@ def copy_value(old,new,source,kind='independent'):
 
 
 def references(db,lid):
-    return db.execute("SELECT id,COALESCE(json_extract(body,'$.grammaticality'),'') value FROM dictionary_examples WHERE language_id=?",(lid,))
+    import record_sources
+    if record_sources.native(db):
+        return db.execute("""SELECT e.id,COALESCE(s.grammaticality,'') value FROM dictionary_examples e
+            JOIN sentence_text_rows s ON s.kind='independent' AND s.owner_id=e.id WHERE e.language_id=?""",(lid,))
+    return db.execute("""SELECT e.id,COALESCE(CASE WHEN s.owner_id IS NULL
+        THEN json_extract(e.body,'$.grammaticality') ELSE s.grammaticality END,'') value
+        FROM dictionary_examples e LEFT JOIN sentence_text_rows s
+        ON s.kind='independent' AND s.owner_id=e.id WHERE e.language_id=?""",(lid,))
 
 
 def validate(db,changes=None):
@@ -110,7 +123,9 @@ def validate(db,changes=None):
             if {r['id'] for r in old}-{r['id'] for r in new}:
                 for ref in references(db,after['id']):selected(ref['value'],new)
         elif table=='dictionary_examples':
-            b=json.loads(after['body'])
+            from independent_links import revision_only
+            if revision_only(before,after):continue
+            b=record_sources.body(after,mutable=False)
             if FIELD not in b:continue
             lid=after['language_id']
             selected(b[FIELD],rows(lid))
@@ -141,6 +156,7 @@ def mutate_type(db,action,b,lid):
 
 def save(db,b,lid):
     import annotations
+    import sentence_rows
     if b.get('kind')!='independent':raise ValueError('只有独立例句库的句子可以设置合法性')
     data=annotations.get(db,b['kind'],b['id'])
     if data['owner_language']!=lid or b.get('revision')!=data['revision']:raise ValueError('例句已修改，请重新打开')
@@ -148,22 +164,22 @@ def save(db,b,lid):
     if not isinstance(value,str):raise ValueError('合法性值格式错误')
     item=selected(value,catalog(db,data['language_id'])['items'])
     if not item['enabled'] and value!=data['body'].get(FIELD,''):raise ValueError('该合法性类型已停用')
-    table='dictionary_examples'
     # Use stored body: resolved glosses and display metadata must not be written.
-    row=db.execute('SELECT body FROM '+table+' WHERE id=?',(b['id'],)).fetchone();body=json.loads(row[0])
+    body=sentence_rows.one(db,'independent',b['id'])
     if body.get(FIELD,'')!=value:
         body[FIELD]=value
-        db.execute('UPDATE '+table+' SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body,ensure_ascii=False),b['id']))
+        sentence_rows.write(db,'independent',b['id'],body)
     return dict(ok=True)
 
 
-def filter_sql(q,body='e.body',language=None):
+def filter_sql(q,body='e.body',language=None,*,field=None):
     value=q.get(FIELD,'')
     if not value:return '',[]
     if not isinstance(value,str) or len(value)>220:raise ValueError('合法性筛选无效')
     lid,sep,rid=value.partition('/')
     rid=rid if sep else value
-    sql=" AND COALESCE(json_extract("+body+",'$.grammaticality'),'')=?";args=['' if rid=='legal' else rid]
+    if field is None:field="json_extract("+body+",'$.grammaticality')"
+    sql=" AND COALESCE("+field+",'')=?";args=['' if rid=='legal' else rid]
     if sep and language:sql+=' AND '+language+'=?';args.append(lid)
     return sql,args
 

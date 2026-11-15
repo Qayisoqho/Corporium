@@ -15,7 +15,7 @@ import material_search_index
 import sentence_search_index
 from itertools import islice
 
-HIDDEN_KEYS=frozenset(('gloss_mode','gloss_addition','show_gloss_addition','default_base_sense_id','status','id','font','font_variant','language_id','parent_id','targets','revision','segmentation_ref','token_id','annotation_id','gloss_frozen','gloss_sources','gloss_revision','_gloss_active_bindings'))
+HIDDEN_KEYS=frozenset(('gloss_mode','gloss_addition','show_gloss_addition','default_base_sense_id','status','id','font','font_variant','language_id','parent_id','targets','revision','segmentation_ref','token_id','annotation_id','gloss_frozen','gloss_sources','gloss_revision','_gloss_active_bindings','headword_source'))
 PLAIN_WORDS=(frozenset(('form','gloss')),frozenset(('form','gloss','form_kind','gloss_kind')))
 
 LABELS=dict(headword='词形',notes='备注',homonym_note='同形词辨析',homonym_number='同形词编号',entry_type='条目类型',features='语法特征',tags='使用标签',usages='词类用法',pos='词类',subclass='词类子类',senses='义项',short_gloss='简短释义',definition='详细释义',variants='形式与变体',form='形式',pronunciation='读音',readings='读音',conditions='出现条件',condition_types='条件类型',variation='变体关系',status='分析状态',name='名称',source='研究依据',kind='形式类型',orthographies='自定义书写',label='名称',text='内容',type='类型',value='值',note='说明',relation='条目关系',base_id='基本条目',word_structure='形态分析与语素构成',memberships='形态类与主要部分',class_id='形态类',usage_id='所属用法',parts='主要部分',title='标题',variant_id='关联变体',writings='组分书写',analyses='分析方案',level='分析层面',default='默认分析',components='组分',role='角色',gloss='标注',lexeme_id='关联词条',sense_id='关联义项',form_id='关联形式',segments='不连续片段',semantic_classes='语义类',media='媒体',caption='说明',creator='创作者',speakers='发言人',examples='例句与例证',ipa='IPA',translation='自由翻译',words='词格',punctuation='标点',start_ms='起始毫秒',end_ms='结束毫秒',target_id='关联形式',type_id='书写类型')
@@ -97,6 +97,21 @@ def needs_examples(spec,query=None):
     return any(not isinstance(f,str) or f in ('all','examples','media') or f.startswith(('examples.','media.','layer:')) for f in fields)
 
 
+def registered_names(row,body):
+    names={row['id']:row['headword']}
+    def register(value):
+        if isinstance(value,dict):
+            if value.get('id'):
+                name=value.get('form') or value.get('short_gloss') or value.get('definition') or ' / '.join(
+                    filter(None,[value.get('pos'),value.get('subclass')])) or value.get('label','')
+                if name:names[value['id']]=name
+            for item in value.values():register(item)
+        elif isinstance(value,list):
+            for item in value:register(item)
+    register(body)
+    return names
+
+
 def example_rows(db,rows,kind,index):
     """Validate cached documents before preparing their full render inputs."""
     if index is None:
@@ -117,35 +132,32 @@ def example_rows(db,rows,kind,index):
 
 
 class SearchIndex:
-    def __init__(self,db,lid,rows,catalog_only=False,search_spec=None,query=None):
+    def __init__(self,db,lid,rows,catalog_only=False,search_spec=None,query=None,*,names_only=False,evidence_context=None,
+                 evidence_kinds=None,literal_projection=False):
         if not db.in_transaction:db.execute('BEGIN')
+        self.evidence_context=evidence_context
+        self.evidence_kinds=evidence_kinds
+        self.literal_projection=literal_projection
         self.rows=rows;self.fields={p:label(p) for p in BASE_PATHS};self.paths={}
         self.classes=categories.listing(db,lid)
         self.classes += [{**dict(r),'kind':'semantic'} for r in db.execute("SELECT * FROM semantic_classes WHERE ?='all' OR language_id=? ORDER BY position,name",(lid,lid))]
         self.classmap={r['id']:r for r in self.classes}
-        self.tags={t['id']:t for t in grammar.listing(db,lid)}
+        self.tags={} if catalog_only else {t['id']:t for t in grammar.listing(db,lid)}
         self.names={r['id']:r['name'] for r in self.classes}
         self.types={r['id']:r['name'] for r in db.execute("SELECT id,name FROM writing_types WHERE ?='all' OR language_id=?",(lid,lid))}
         self.names.update(self.types)
-        self.people={r['id']:r['name'] for r in db.execute("SELECT id,name FROM timeline_speakers")}
-        for r in rows:
-            if catalog_only:continue
-            self.names[r['id']]=r['headword']
-            def register(v):
-                if isinstance(v,dict):
-                    if v.get('id'):
-                        name=v.get('form') or v.get('short_gloss') or v.get('definition') or ' / '.join(filter(None,[v.get('pos'),v.get('subclass')])) or v.get('label','')
-                        if name:self.names[v['id']]=name
-                    for sub in v.values():register(sub)
-                elif isinstance(v,list):
-                    for sub in v:register(sub)
-            register(paradigms.project(r['body']))
+        self.people={} if catalog_only else {r['id']:r['name'] for r in db.execute("SELECT id,name FROM timeline_speakers")}
+        if not catalog_only:
+            for r in rows:self.names.update(registered_names(r,paradigms.project(r['body'])))
         for key,name in self.types.items():self.fields['writing:'+key]='自定义书写 › '+name
         for c in self.classes:
             if c['kind']=='usage_tag':self.fields['tag:'+c['name']]='使用标签 › '+c['name']
         for c in self.classes:
             for slot in c.get('template',{}).get('slots',[]):self.fields['part:'+c['id']+':'+slot['label']]='主要部分 › '+c['name']+' / '+slot['label']
         self.extra=defaultdict(lambda:defaultdict(list));self.example_owners=defaultdict(set);self.layer_values=defaultdict(lambda:defaultdict(list))
+        self.word_values=OrderedDict();self.word_value_bytes=0
+        self.word_sequences=OrderedDict();self.word_sequence_bytes=0
+        self.word_sequence_probes=0;self.word_sequence_hits=0;self.word_sequences_enabled=True
         for layer in db.execute("SELECT id,name FROM annotation_layers WHERE ?='all' OR language_id=?",(lid,lid)):
             self.fields['layer:'+layer['id']]='例句附加标注 › '+layer['name']
         if catalog_only:
@@ -153,6 +165,7 @@ class SearchIndex:
             return
         # Association pickers search the target's own fields, never its evidence.
         # Exit before reading example bodies, annotation cells or attached media.
+        if names_only:return
         if (search_spec or {}).get('scope')=='entry':
             self.documents={r['id']:self.document(r,include_extra=False) for r in rows}
             return
@@ -169,9 +182,6 @@ class SearchIndex:
         result_key=evidence_index.result_key(db,lid,catalog,self.evidence_needle,self.evidence_case)
         projected=material_search_index.available(db) and sentence_search_index.available(db)
         cached_result=None if projected else evidence_index.load_result(result_key)
-        self.word_values=OrderedDict();self.word_value_bytes=0
-        self.word_sequences=OrderedDict();self.word_sequence_bytes=0
-        self.word_sequence_probes=0;self.word_sequence_hits=0;self.word_sequences_enabled=True
         # Only possible layer matches need a per-sentence identity check. A
         # negative Unicode-aware scan avoids thousands of empty unit lookups.
         layer_candidates=None
@@ -251,7 +261,7 @@ class SearchIndex:
         if needs_examples(search_spec,query) and cached_result is None:
             from contextlib import nullcontext
             with evidence_index.query(db,lid,catalog,self.evidence_needle,self.evidence_case) if self.evidence_needle is not None else nullcontext(None) as index:
-                for e,lookup in example_rows(db,db.execute("SELECT e.id,e.body,e.language_id,(SELECT json_group_array(DISTINCT json_extract(value,'$.lexeme_id')) FROM json_each(e.body,'$.targets')) owners FROM dictionary_examples e WHERE ?='all' OR e.language_id=?",(lid,lid)),'independent',index):
+                for e,lookup in example_rows(db,db.execute("SELECT e.id,e.body,e.language_id,(SELECT json_group_array(DISTINCT l.lexeme_id) FROM independent_links l WHERE l.example_id=e.id) owners FROM dictionary_examples_documents e WHERE ?='all' OR e.language_id=?",(lid,lid)),'independent',index):
                     add_example('independent',e['id'],e['body'],json.loads(e['owners']),e['language_id'],index,lookup)
                 # Build a narrow ID map before reading any sentence bodies. SQL
                 # aggregation/join plans can otherwise materialize/sort the wide
@@ -263,24 +273,33 @@ class SearchIndex:
                 ids=list(owners)
                 for start in range(0,len(ids),400):
                     batch=ids[start:start+400]
-                    for e,lookup in example_rows(db,db.execute('SELECT e.id,e.body,t.language_id FROM entries e JOIN texts t ON t.id=e.text_id WHERE e.id IN ('+','.join('?' for _ in batch)+')',batch),'corpus',index):
+                    for e,lookup in example_rows(db,db.execute('SELECT e.id,e.body,t.language_id FROM entries_documents e JOIN texts t ON t.id=e.text_id WHERE e.id IN ('+','.join('?' for _ in batch)+')',batch),'corpus',index):
                         add_example('corpus',e['id'],e['body'],owners[e['id']],e['language_id'],index,lookup)
             evidence_index.store_result(db,result_key,lid,catalog,self.evidence_needle,self.evidence_case,self.fields,self.evidence_hits,self.example_owners)
         for m in db.execute("SELECT m.kind,m.record_id,m.body,a.name FROM object_media m JOIN timeline_media a ON a.id=m.asset_id WHERE ?='all' OR m.language_id=?",(lid,lid)):
-            owners={m['record_id']} if m['kind']=='lexeme' else self.material_evidence.owners('independent',m['record_id']) if self.material_evidence is not None else self.example_owners.get(('independent',m['record_id']),set())
+            if m['kind']=='lexeme':
+                owners={m['record_id']}
+            elif self.literal_projection and self.material_evidence is None:
+                owners={r[0] for r in db.execute('''SELECT DISTINCT l.lexeme_id FROM independent_links l
+                  JOIN dictionary_examples e ON e.id=l.example_id WHERE l.example_id=? AND (?='all' OR e.language_id=?)''',
+                  (m['record_id'],lid,lid))}
+            else:
+                owners=self.material_evidence.owners('independent',m['record_id']) if self.material_evidence is not None else self.example_owners.get(('independent',m['record_id']),set())
             for xid in owners:
                 self.extra[xid]['media'].append({'name':m['name'],**(json.loads(m['body']) if m['kind']=='independent' else {})})
         for r in rows:
             rel=r['body'].get('relation') or {}
             if rel.get('base_id'):self.extra[rel['base_id']]['relation'].append({'type':rel['type'],'base_id':r['id']})
-        self.documents={r['id']:self.document(r) for r in rows}
+        self.documents={r['id']:self.document(r,all_only=self.literal_projection) for r in rows}
 
-    def discover(self,bodies):
+    def discover(self,bodies,*,fields=None,known=(),references=None):
         """Discover field paths without building thousands of searchable documents."""
+        if fields is None:
+            fields=self.fields
         def add(path):
             for n in range(1,len(path)+1):
                 key='.'.join(path[:n])
-                if key not in self.fields:self.fields[key]=label(key)
+                if key not in known and key not in fields:fields[key]=label(key)
         def walk(v,path=(),membership=''):
             key=path[-1] if path else ''
             if isinstance(v,list):
@@ -289,14 +308,17 @@ class SearchIndex:
             elif isinstance(v,dict):
                 if key=='memberships':membership=v.get('class_id','')
                 if key in ('orthographies','writings'):
-                    field='writing:'+(v.get('type_id') or v.get('label',''));self.fields[field]='自定义书写 › '+(self.types.get(v.get('type_id')) or v.get('label','未命名'))
+                    field='writing:'+(v.get('type_id') or v.get('label',''));fields[field]='自定义书写 › '+(self.types.get(v.get('type_id')) or v.get('label','未命名'))
                 if key=='tags':
-                    kind=categories.TAG_NAMES.get(v.get('type'),v.get('type',''));self.fields['tag:'+kind]='使用标签 › '+kind
-                if key=='parts':self.fields['part:'+membership+':'+v.get('label','')]='主要部分 › '+self.names.get(membership,'')+' / '+v.get('label','')
+                    kind=categories.TAG_NAMES.get(v.get('type'),v.get('type',''));fields['tag:'+kind]='使用标签 › '+kind
+                if key=='parts':fields['part:'+membership+':'+v.get('label','')]='主要部分 › '+self.names.get(membership,'')+' / '+v.get('label','')
                 for k,x in v.items():
                     if k in HIDDEN_KEYS:continue
                     if k.endswith('_id'):
-                        if k in LABELS and self.names.get(x):add(path+(k,))
+                        if k in LABELS:
+                            if references is not None and isinstance(x,str) and x:
+                                references.add(x)
+                            if self.names.get(x):add(path+(k,))
                     else:walk(x,path+(k,),membership)
             elif isinstance(v,(str,int,float,bool)) and v!='':add(path)
         for body in bodies:walk(body)
@@ -306,6 +328,9 @@ class SearchIndex:
         def add(path,value):
             if value is None or value=='':return
             values=value if isinstance(value,list) else [str(value)]
+            if self.literal_projection and all_only and field_catalog is None:
+                out['all'].extend(values)
+                return
             keys=self.paths.get(path)
             if keys is None:
                 keys=['.'.join(path[:n]) for n in range(1,len(path)+1)];self.paths[path]=keys
@@ -408,9 +433,9 @@ class SearchIndex:
                 add(path,value)
         walk({'headword':row['headword'],**(paradigms.project(row['body']) if project else row['body'])},prefix)
         if include_extra:
-            for k,v in self.extra[row['id']].items():walk(v,(k,))
+            for k,v in self.extra.get(row['id'],{}).items():walk(v,(k,))
             for field,values in getattr(self,'example_documents',{}).get(row['id'],{}).items():out[field].extend(values)
-            for field,values in self.layer_values[row['id']].items():out[field].extend(values);out['examples'].extend(values);out['all'].extend(values)
+            for field,values in self.layer_values.get(row['id'],{}).items():out[field].extend(values);out['examples'].extend(values);out['all'].extend(values)
         # Search predicates depend on membership, not repeated occurrence counts.
         return {key:list(dict.fromkeys(values)) for key,values in out.items()}
 
@@ -483,10 +508,16 @@ class SearchIndex:
 
 def catalog(db,lid):
     import dictionary_data
+    import record_sources
+    if record_sources.native(db):
+        import dictionary_option_catalog
+        return dictionary_option_catalog.read(db,'lexeme',lid)
     cached=material_search_index.catalog(db,'lexeme',lid)
     if cached is not None:return cached
     types={r['id']:r for r in db.execute('SELECT * FROM writing_types')}
-    rows=[{**dict(r),'body':dictionary_data.resolve(db,json.loads(r['body']),types)} for r in db.execute("SELECT * FROM lexemes WHERE ?='all' OR language_id=?",(lid,lid))]
+    scope,args=('',()) if lid=='all' else (' WHERE language_id=?',(lid,))
+    rows=record_sources.with_bodies(db,'lexemes',db.execute('SELECT * FROM lexemes'+scope+' ORDER BY rowid',args))
+    rows=[dict(row,body=dictionary_data.resolve(db,row['body'],types)) for row in long_tasks.steps(rows)]
     result=SearchIndex(db,lid,rows,catalog_only=True).catalog()
     material_search_index.catalog(db,'lexeme',lid,result)
     return result

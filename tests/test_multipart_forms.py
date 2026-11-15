@@ -114,7 +114,7 @@ class MultipartFormsTests(unittest.TestCase):
         dest=self.api('save-language',dict(name='Copy',metadata={}))['id']
         self.api('import-language',dict(bundle=bundle,_language=dest))
         with server.connect(audit=False) as db:
-            copies=[json.loads(r[0]) for r in db.execute('SELECT body FROM morphemes WHERE language_id=?',(dest,))]
+            copies=[json.loads(r[0]) for r in db.execute('SELECT body FROM morphemes_documents WHERE language_id=?',(dest,))]
             self.assertEqual(copies[0]['form_parts'],x['body']['form_parts'])
             self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
             self.assertFalse(db.execute('PRAGMA foreign_key_check').fetchall())

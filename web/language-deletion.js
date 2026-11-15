@@ -11,7 +11,7 @@
  dialog.addEventListener('cancel',e=>{if(busy)e.preventDefault();});
  dialog.addEventListener('close',()=>{pending=null;request++;});
  cancel.onclick=()=>dialog.close();
- remove.ondblclick=async()=>{
+ remove.ondblclick=()=>runSettingsEditorAction('language-dialog',async()=>{
   if(busy||opening||dialog.open||!editingLanguage)return;
   opening=true;remove.disabled=true;
   $('language-error').textContent='';
@@ -29,14 +29,17 @@
    confirm.disabled=!!result.blockers.length;
   }catch(e){if(dialog.open){$('language-delete-error').textContent=e.message;confirm.disabled=true;}else $('language-error').textContent=e.message;}
   finally{opening=false;remove.disabled=false;}
- };
+ });
  confirm.ondblclick=async()=>{
   if(busy||!pending||confirm.disabled)return;
+  const selectedLanguage=typeof activeLanguage==='string'?activeLanguage:null;
+  const removedLanguage=pending.id;
   lock(true);$('language-delete-error').textContent='';
   try{
    const result=await originalApi('delete-language',{id:pending.id,revision:pending.revision,token:pending.token,_language:pending.id,confirmed:true});
    pending=null;
-   try{localStorage.setItem(projectStorageKey('corpus-language'),result.next_language);sessionStorage.setItem('corporium-language-deleted',JSON.stringify({name:result.name,backup:result.backup}));}catch{}
+   const nextLanguage=selectedLanguage&&selectedLanguage!==removedLanguage?selectedLanguage:result.next_language;
+   try{localStorage.setItem(projectStorageKey('corpus-language'),nextLanguage);sessionStorage.setItem('corporium-language-deleted',JSON.stringify({name:result.name,backup:result.backup}));}catch{}
    // Reload all workspaces together; no stale detail, draft or saved query may
    // continue submitting the language that has just been removed.
    window.location.reload();

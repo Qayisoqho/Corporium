@@ -1,5 +1,6 @@
 import copy
 import unittest
+from unittest.mock import patch
 from urllib.parse import urlencode
 import server
 import test_lexicon
@@ -102,6 +103,41 @@ class TextToolsTests(unittest.TestCase):
         code,r=self.apply(b,p,keys=r['remaining_keys'],pending_keys=r['remaining_keys']);self.assertEqual(code,200,r)
         self.assertEqual(r['remaining_keys'],[]);self.assertEqual(self.entries()[0]['ipa'],'aa aa aa')
 
+    def test_continued_translation_returns_scoped_view_for_both_sources(self):
+        corpus=self.seed('#pass([a], (([x],[X]),), [𐐀 old old])')
+        code,independent=self.call('/api/example-save',dict(body=dict(ipa='a',translation='𐐀 old old',words=[dict(form='x',gloss='X')],targets=[])))
+        self.assertEqual(code,200,independent)
+        proof=self.word();proof['body']['notes']='prepared'
+        self.assertEqual(self.call('/api/lexeme-save',proof)[0],200)
+        for kind,owner in (('corpus',corpus),('independent',independent)):
+            with self.subTest(kind=kind):
+                args,preview=self.plan({'text_id':owner.get('text_id','')},'translation','old','oldold',owner_kind=kind,reuse_preview=True)
+                args['_view_revision']=self.call('/api/undo-state')[1]['workspace_revision']
+                old=self.draft(kind,owner)
+                with patch.object(server.text_replace,'plan',side_effect=AssertionError('preview reread')):
+                    code,result=self.apply(args,preview,keys=[preview['changes'][0]['key']]);self.assertEqual(code,200,result)
+                    self.assertEqual(result['_view_update']['values'],{'translation':'𐐀 oldold old'})
+                    self.assertEqual(result['_view_update']['id'],owner['id'])
+                    remaining=result['remaining_preview']
+                    self.assertEqual([c['key'] for c in remaining['changes']],result['remaining_keys'])
+                    self.assertEqual(len(remaining['changes']),1)
+                    code,result=self.apply(args,remaining);self.assertEqual(code,200,result)
+                fresh=self.draft(kind,owner)
+                self.assertEqual(fresh['body']['translation'],'𐐀 oldold oldold')
+                self.assertEqual(fresh['slot_ids'],old['slot_ids'])
+                self.assertEqual(self.undo()[0],200);self.assertEqual(self.undo()[0],200)
+                self.assertEqual(self.draft(kind,owner)['body']['translation'],old['body']['translation'])
+
+    def test_reviewed_exact_form_preview_keeps_unicode_matches_without_graph_hash(self):
+        self.seed('#pass([a], (([ſ],[G]),([s],[G]),([S],[G]),([x],[G])), [])')
+        with patch.object(server.text_replace,'scalar_token',side_effect=AssertionError('hashed all matched dependencies')):
+            args,preview=self.plan({'text_id':''},'form','s','other',mode='exact',case=False,reuse_preview=True)
+        self.assertEqual([row['before'] for row in preview['changes']],['ſ','s','S'])
+        code,result=self.apply(args,preview,keys=[preview['changes'][0]['key']]);self.assertEqual(code,200,result)
+        self.assertEqual(self.entries()[0]['words'][0]['form'],'other')
+        self.assertEqual(self.undo()[0],200)
+        self.assertEqual(self.entries()[0]['words'][0]['form'],'ſ')
+
     def test_protected_punctuation_and_replacement_layers(self):
         import test_annotations
         e=self.seed();x=self.word();self.link(e['words'][0]['unit_id'],x)
@@ -117,7 +153,7 @@ class TextToolsTests(unittest.TestCase):
 
     def test_replacement_atomic_on_invalid_export(self):
         e=self.seed('#pass([first], (([x],[X]),), [text])\n#pass([second], (([x],[X]),), [text])')
-        b,p=self.plan(e,'ipa','i','[')
+        b,p=self.plan(e,'ipa','i','[',reuse_preview=True)
         self.assertTrue(p['blocked'])
         generation=self.call('/api/undo-state')[1]['generation']
         self.assertEqual(self.apply(b,p)[0],400)

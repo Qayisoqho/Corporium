@@ -36,6 +36,8 @@ def converted(source):
     if kind in ('infix','circumfix'):body['entry_type']='affix';body['affix_position']=kind
     elif kind not in dictionary_targets.TYPES:body['entry_type']='unspecified'
     body['converted_from']=dict(id=source['id'],headword=source['headword'])
+    if body.get('headword_source'):
+        body['converted_from']['headword_source']=body.pop('headword_source')
     return body
 
 def convert(db,lid,b):
@@ -50,7 +52,9 @@ def convert(db,lid,b):
         if key in b:body[key]=b[key]
     body=dictionary_targets.normalize(db,lid,body)
     mid=source['id'];number=db.execute('SELECT COALESCE(MAX(number),0)+1 FROM morphemes WHERE language_id=? AND form=?',(lid,source['headword'])).fetchone()[0]
-    db.execute('INSERT INTO morphemes VALUES(?,?,?,?,?,?)',(mid,lid,source['headword'],number,encoded(body),source['revision']+1))
+    import dictionary_rows
+    dictionary_rows.write(db,'morpheme',mid,body,insert=True,
+                          columns=dict(language_id=lid,form=source['headword'],number=number,revision=source['revision']+1))
     db.execute('DELETE FROM lexemes WHERE id=?',(mid,))
     import homonyms
     homonyms.clear_singleton(db,lid,source['headword'])
@@ -128,15 +132,15 @@ def merge(db,lid,source,target):
         if ref:
             value=json.loads(ref[0]);_remap_ref(value,mapping,sid,tid)
             db.execute('UPDATE component_links SET body=? WHERE id=?',(encoded(value),row['id']))
-    for row in list(db.execute('SELECT * FROM dictionary_examples')):
-        value=json.loads(row['body']);changed=False
-        for ref in value.get('targets',[]):
-            if ref['lexeme_id']==sid:
-                ref['lexeme_id']=tid
-                for key in ('usage_id','sense_id','form_id'):ref[key]=mapping.get(ref.get(key),ref.get(key))
-                if ref.get('component_ref'):_remap_ref(ref['component_ref'],mapping,sid,tid)
-                changed=True
-        if changed:db.execute('UPDATE dictionary_examples SET body=?,revision=revision+1 WHERE id=?',(encoded(value),row['id']))
+    import independent_links
+    examples=set()
+    for row in db.execute('SELECT * FROM independent_links WHERE lexeme_id=?',(sid,)).fetchall():
+        ref=independent_links.target(independent_links.image(db,row));ref['lexeme_id']=tid
+        for key in ('usage_id','sense_id','form_id'):ref[key]=mapping.get(ref.get(key),ref.get(key))
+        if ref.get('component_ref'):_remap_ref(ref['component_ref'],mapping,sid,tid)
+        independent_links.put(db,row['example_id'],row['position'],ref)
+        examples.add(row['example_id'])
+    db.executemany('UPDATE dictionary_examples SET revision=revision+1 WHERE id=?',((rid,) for rid in examples))
     # Both links TO this morpheme and analyses OWNED by it survive.
     for row in list(db.execute('SELECT id,body FROM morpheme_components WHERE morpheme_id=?',(sid,))):
         value=json.loads(row['body'])
@@ -165,12 +169,13 @@ def merge(db,lid,source,target):
         value=json.loads(row['body'])
         if value.get('target_id'):value['target_id']=mapping[value['target_id']]
         db.execute('UPDATE object_media SET record_id=?,position=?,body=?,revision=revision+1 WHERE id=?',(tid,offset+i,encoded(value),row['id']))
-    db.execute('UPDATE morphemes SET body=?,revision=revision+1 WHERE id=?',(encoded(target['body']),tid))
+    import dictionary_rows
+    dictionary_rows.write(db,'morpheme',tid,target['body'])
     # Merging relocates the same meanings, rather than choosing a different
     # meaning for each example. Retain its inheritance pattern or local override
     # before the normal reconciliation observes the retargeted associations.
     import gloss_inheritance
-    saved=dict(db.execute('SELECT * FROM morphemes WHERE id=?',(tid,)).fetchone())
+    saved=dict(db.execute('SELECT * FROM morphemes_documents WHERE id=?',(tid,)).fetchone())
     gloss_inheritance.sync_meanings(db,{('morphemes',tid):(None,saved)})
     for meaning in db.execute('SELECT * FROM gloss_meanings WHERE target_id=?',(sid,)).fetchall():
         new=gloss_inheritance.meaning_id(tid,mapping.get(meaning['usage_id'],meaning['usage_id']),mapping.get(meaning['sense_id'],meaning['sense_id']))

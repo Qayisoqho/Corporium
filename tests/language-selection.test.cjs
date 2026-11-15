@@ -7,7 +7,7 @@ const source=fs.readFileSync(path.join(__dirname,'../web/languages.js'),'utf8');
 const selection=source.slice(source.indexOf('function projectStorageKey'),source.indexOf('function renderLanguage'));
 function context(rows,selected='deleted-language',project){
  const nodes={};const saved=new Map();
- const c={activeLanguage:selected,languageList:[],localStorage:{setItem:(k,v)=>saved.set(k,v)},
+ const c={activeLanguage:selected,languageList:[],initialLanguageCatalog:null,localStorage:{setItem:(k,v)=>saved.set(k,v)},
   api:async()=>rows,$:id=>nodes[id]||(nodes[id]={value:'',innerHTML:''}),languageOptions:()=>'',renderLanguage:()=>{}};
  if(project)c.desktopProjectKey=project;
  vm.createContext(c);vm.runInContext(selection,c);return {c,saved,nodes};

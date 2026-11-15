@@ -1,3 +1,4 @@
+import source_fixtures
 import unittest
 import unicodedata
 import json
@@ -116,7 +117,7 @@ class AutoUnicodeTests(unittest.TestCase):
             db.execute('DELETE FROM lexemes WHERE id=?',(template['id'],))
             for i,c in enumerate(letters):
                 spelling=c if i%2 else unicodedata.normalize('NFD',c)
-                db.execute('INSERT INTO lexemes(id,language_id,headword,body) VALUES(?,?,?,?)',(str(uuid.uuid4()),'ordos',spelling,json.dumps(template['body'])))
+                source_fixtures.seed(db,'lexemes',('id', 'language_id', 'headword', 'body'),(str(uuid.uuid4()), 'ordos', spelling, json.dumps(template['body'])))
         forms=[unicodedata.normalize('NFD',c) if i%2 else c for i,c in enumerate(letters)]
         self.seed('#pass([], ('+','.join('(['+f+'],[canonical])' for f in forms)+',), [])')
         p=self.plan(ignore_symbols='');self.assertEqual(len(p['matches']),len(letters));self.assertEqual(p['ambiguous'],[])

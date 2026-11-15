@@ -131,14 +131,16 @@ def profile(db, kind, rid, data=None, spans=None, codes=None):
                 words=layout, base_language=base, base_name=base_row['name'] if base_row else base)
 
 
-def attach(db, body, kind, rid, d=None):
+def attach(db, body, kind, rid, d=None, *, spans=None, codes=None):
     body.pop('code_profile', None)
     for w in body.get('words', []):
         for field in ('code_unit', 'code_mark', 'code_cells'): w.pop(field, None)
-    if not db.execute('SELECT 1 FROM code_spans WHERE owner_kind=? AND record_id=? LIMIT 1', (kind, rid)).fetchone():
+    if spans is None:
+        spans = rows(db, kind, rid)
+    if not spans:
         return body
     d = d or owner(db, kind, rid)
-    p = profile(db, kind, rid, d)
+    p = profile(db, kind, rid, d,spans=spans,codes=codes)
     body['code_profile'] = {k: p[k] for k in ('mixed', 'languages', 'review', 'has_annotations')}
     for w, unit in zip(body.get('words', []), d['words']):
         w['code_unit'] = unit['id']
@@ -295,14 +297,23 @@ def mutate(db, action, b, lid):
 
 
 def sync_changes(db, changes):
+    from independent_links import revision_only
     affected = set(); tables = {t for t, _ in changes}
     if not tables & {'entries', 'texts', 'dictionary_examples', 'corpus_units', 'code_spans', 'code_time_links', 'timeline_intervals', 'timeline_codes', 'languages'}: return
+    import save_validation
+    if (save_validation.trusted(db) and 'dictionary_examples' in tables and
+            tables <= {'dictionary_examples','annotation_cells','independent_links','independent_word_overrides','gloss_bindings'} and
+            all(before and after and before['id']==after['id'] for (table,_),(before,after) in changes.items()
+                if table=='dictionary_examples')):
+        refresh_changed_sentences(db,changes)
+        return
     # Deleting audio never deletes text annotations; deleting the original sentence does.
     db.execute("DELETE FROM code_spans WHERE (owner_kind='corpus' AND record_id NOT IN (SELECT id FROM entries)) OR (owner_kind='independent' AND record_id NOT IN (SELECT id FROM dictionary_examples))")
     db.execute('DELETE FROM code_time_links WHERE span_id NOT IN (SELECT id FROM code_spans) OR interval_id NOT IN (SELECT id FROM timeline_intervals)')
     indexed={tuple(r) for r in db.execute('SELECT owner_kind,record_id FROM code_sentence_index UNION SELECT owner_kind,record_id FROM code_spans')}
     for (table, _), (a, b) in list(changes.items()):
         if table=='entries' and a and b and a['body']==b['body'] and a['text_id']==b['text_id']:continue
+        if table=='dictionary_examples' and revision_only(a,b):continue
         for r in (a, b):
             if not r: continue
             if table == 'code_spans': affected.add((r['owner_kind'], r['record_id']))
@@ -366,6 +377,7 @@ def after_undo(db, changes):
     if any(c['table'] in ('timeline_codes','languages') or (c['table']=='texts' and c['before'] and c['after'] and c['before']['language_id']!=c['after']['language_id']) for c in changes):rebuild(db);return
     affected=set();indexed={tuple(r) for r in db.execute('SELECT owner_kind,record_id FROM code_sentence_index UNION SELECT owner_kind,record_id FROM code_spans')}
     for c in changes:
+        if c.get('revision_only'):continue
         if c['table']=='entries' and c['before'] and c['after'] and c['before']['body']==c['after']['body'] and c['before']['text_id']==c['after']['text_id']:continue
         for row in (c['before'],c['after']):
             if not row:continue
@@ -374,6 +386,19 @@ def after_undo(db, changes):
                 key=('corpus' if c['table']=='entries' else 'independent',row['id'])
                 if key in indexed:affected.add(key)
     for kind,rid in affected:update_index(db,kind,rid)
+
+
+def refresh_changed_sentences(db, changes):
+    """Only sentences with a live or previously indexed span can need work."""
+    from independent_links import revision_only
+    for (table,_),(before,after) in changes.items():
+        if table!='dictionary_examples' or not after or revision_only(before,after):
+            continue
+        rid=after['id']
+        if db.execute('''SELECT 1 FROM code_sentence_index WHERE owner_kind='independent' AND record_id=?
+                         UNION ALL SELECT 1 FROM code_spans WHERE owner_kind='independent' AND record_id=? LIMIT 1''',
+                      (rid,rid)).fetchone():
+            update_index(db,'independent',rid)
 
 
 def filter_sql(q, kind, rid):

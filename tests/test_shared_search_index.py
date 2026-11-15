@@ -43,24 +43,26 @@ class SharedSearchTests(unittest.TestCase):
                         self.compare(q);self.compare(dict(q,source='all'),True)
 
     def test_library_original_is_literal_and_stored_text_notes_keep_library_scope(self):
+        import record_sources
         ex=self.example([('home','家')]);e=self.seed()
         with server.connect(audit=False) as db:
             for table,rid in (('entries',e['id']),('dictionary_examples',ex['id'])):
-                body=json.loads(db.execute('SELECT body FROM '+table+' WHERE id=?',(rid,)).fetchone()[0])
+                body=record_sources.read(db,table,rid)
                 body.update(original='#sub[2] literal\\#',text_notes='stored-note-only')
-                db.execute('UPDATE '+table+' SET body=? WHERE id=?',(json.dumps(body),rid))
+                record_sources.write(db,table,rid,body,bump=False)
         for field,term in [('original','#sub[2] literal\\#'),('all','#sub[2] literal\\#'),('notes','stored-note-only'),('all','stored-note-only')]:
             for mode in ('contains','exact','prefix','suffix'):
                 self.compare(dict(field=field,q=term,mode=mode,source='all',language='ordos'),True)
         self.assertEqual(self.compare(dict(field='notes',q='stored-note-only',include_independent='true'))['total'],0)
 
     def test_word_parts_do_not_apply_dictionary_meaning_composition_to_sentence_fields(self):
+        import record_sources
         e,ex,x=self.fixture()
         with server.connect(audit=False) as db:
             for table,rid in (('entries',e['id']),('dictionary_examples',ex['id'])):
-                body=json.loads(db.execute('SELECT body FROM '+table+' WHERE id=?',(rid,)).fetchone()[0])
+                body=record_sources.read(db,table,rid)
                 body['words'][0]['gloss_addition']='PST'
-                db.execute('UPDATE '+table+' SET body=? WHERE id=?',(json.dumps(body),rid))
+                record_sources.write(db,table,rid,body,bump=False)
         self.assertEqual(self.dictionary('家.SG',field='examples.words.gloss')['total'],1)
         self.assertEqual(self.dictionary('PST',field='examples.words.gloss')['total'],0)
 
@@ -131,7 +133,7 @@ class SharedSearchTests(unittest.TestCase):
     def test_meaning_edit_refreshes_one_shared_recipe_without_occurrence_rewrites(self):
         self.seed('\n'.join('#pass([], (([home],[家.SG])), [])' for _ in range(24)))
         with server.connect(audit=False) as db:
-            records=[dict(r) for r in db.execute('SELECT id,body FROM entries ORDER BY position')]
+            records=[dict(r) for r in db.execute('SELECT id,body FROM entries_documents ORDER BY position')]
         x=self.word('home',['家']);self.link(records[0],x,'@word')
         with server.connect(audit=False) as db:
             binding=dict(db.execute('SELECT * FROM gloss_bindings LIMIT 1').fetchone())
@@ -157,12 +159,135 @@ class SharedSearchTests(unittest.TestCase):
         with patch.object(gloss_search_index,'refresh',side_effect=AssertionError('unlinked sources must not be prepared')):
             self.assertEqual(self.dictionary('LOCAL')['total'],1)
         with server.connect(audit=False) as db:
-            record=dict(db.execute('SELECT id,body FROM entries LIMIT 1').fetchone())
+            record=dict(db.execute('SELECT id,body FROM entries_documents LIMIT 1').fetchone())
         self.link(record,x,'@word')
         self.dictionary('家',field='examples.words.gloss')
         with server.connect(audit=False) as db:
             self.assertEqual(db.execute('SELECT count(*) FROM gloss_search_owners').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT count(*) FROM gloss_search_dirty').fetchone()[0],23)
+
+    def test_literal_evidence_refreshes_only_the_invalidated_record(self):
+        import dictionary_cold
+        self.enterContext(patch.object(dictionary_cold,'available',return_value=False))
+        import sentence_rows
+        import source_fixtures
+        _,example,target=self.fixture()
+        self.dictionary('家')
+        with server.connect(audit=False) as db:
+            source_fixtures.patch_values(db,'dictionary_examples',example['id'],
+                                         ((('translation',),'updated literal evidence'),))
+        with patch.object(sentence_rows,'headers',wraps=sentence_rows.headers) as headers:
+            result=self.api('lexemes?language=ordos&q=updated+literal+evidence&summary=1')
+            self.assertEqual([r['id'] for r in result['items']],[target['id']])
+            self.assertEqual([c.args[2] for c in headers.call_args_list],[[example['id']]])
+
+    def test_full_dictionary_edits_read_only_affected_owners_with_attachments(self):
+        import dictionary_rows
+        import dictionary_own_index
+        import sentence_rows
+        _,example,target=self.fixture()
+        other=self.word('unrelated',['Other'])
+        with server.connect(audit=False) as db:
+            db.execute("INSERT INTO timeline_media VALUES('fixture','ordos','recording title','','missing',?,1)",
+                       (json.dumps(dict(streams=[dict(type='audio')],duration_ms=1000)),))
+            db.executemany('INSERT INTO object_media VALUES(?,?,?,?,?,?,0,1)',(
+                ('attach-x','ordos','lexeme',target['id'],'fixture',json.dumps({'caption':'direct caption','end_ms':100})),
+                ('attach-e','ordos','independent',example['id'],'fixture',json.dumps({'caption':'example caption','end_ms':100})),
+                ('attach-y','ordos','lexeme',other['id'],'fixture',json.dumps({'caption':'other caption','end_ms':100}))))
+        self.assertEqual(self.dictionary('example caption')['total'],1)
+        self.assertEqual(self.dictionary('recording title')['total'],2)
+        # This is an entry-local definition change. No evidence words or other
+        # definitions need to be read before matching against the postings.
+        target=self.api('lexeme?id='+target['id'])
+        target['body']['usages'][0]['senses'][0]['definition']='unique changed definition'
+        self.api('lexeme-save',target)
+        with patch.object(dictionary_rows,'targets',wraps=dictionary_rows.targets) as definitions, \
+                patch.object(sentence_rows,'headers',side_effect=AssertionError('unrelated evidence was rebuilt')):
+            answer=self.api('lexemes?language=ordos&q=unique+changed+definition&summary=1')
+            self.assertEqual([r['id'] for r in answer['items']],[target['id']])
+            self.assertEqual([call.args[1] for call in definitions.call_args_list],[[target['id']]])
+        self.undo()
+        self.assertEqual(self.dictionary('unique changed definition')['total'],0)
+        self.assertEqual(self.dictionary('example caption')['total'],1)
+        with server.connect(audit=False) as db:
+            db.execute("UPDATE object_media SET body=json_set(body,'$.caption','changed example caption') WHERE id='attach-e'")
+        self.assertEqual(self.dictionary('changed example caption')['total'],1)
+        with server.connect(audit=False) as db:
+            args=dict(query='changed example caption',summary=True)
+            with patch.object(dictionary_own_index,'predicate',return_value=None):
+                expected=lexicon._list_lexemes(db,'ordos',**args)
+            self.assertEqual(lexicon._list_lexemes(db,'ordos',**args),expected)
+            db.execute("UPDATE timeline_media SET name='renamed recording' WHERE id='fixture'")
+        self.assertEqual(self.dictionary('recording title')['total'],0)
+        self.assertEqual(self.dictionary('renamed recording')['total'],2)
+
+    def test_full_dictionary_search_tracks_referenced_names_and_reverse_relations(self):
+        base=self.word('before rename',['Base'])
+        other=self.word('other base',['Other'])
+        derived=self.word('derived form',['Derived'])
+        derived['body']['relation']=dict(type='derivation',base_id=base['id'])
+        derived=self.api('lexeme-save',derived)
+
+        def ids(query):
+            return {item['id'] for item in self.dictionary(query)['items']}
+
+        self.assertEqual(ids('before rename'),{base['id'],derived['id']})
+        self.assertEqual(ids('derived form'),{base['id'],derived['id']})
+        base=self.api('lexeme?id='+base['id'])
+        base['headword']='after rename'
+        self.api('lexeme-save',base)
+        self.assertEqual(ids('before rename'),set())
+        self.assertEqual(ids('after rename'),{base['id'],derived['id']})
+        self.undo()
+        self.assertEqual(ids('before rename'),{base['id'],derived['id']})
+        derived=self.api('lexeme?id='+derived['id'])
+        derived['body']['relation']['base_id']=other['id']
+        self.api('lexeme-save',derived)
+        self.assertEqual(ids('derived form'),{other['id'],derived['id']})
+        self.undo()
+        self.assertEqual(ids('derived form'),{base['id'],derived['id']})
+
+    def test_full_dictionary_manual_annotation_edits_follow_undo(self):
+        import dictionary_cold
+        self.enterContext(patch.object(dictionary_cold,'available',return_value=False))
+        corpus_record,_,target=self.fixture()
+        layer=self.api('layer-save',dict(name='Analysis note',anchor='translation'))['id']
+
+        def write(value):
+            data=self.api('annotations?kind=corpus&id='+corpus_record['id'])
+            self.api('annotation-save',dict(kind='corpus',id=corpus_record['id'],
+                revision=data['revision'],before=data['cells'],layers=data['layers'],
+                cells=[dict(unit_id=annotations.SENTENCE,layer_id=layer,value=value)]))
+
+        def ids(query):
+            result=self.api('lexemes?language=ordos&summary=1&q='+query)
+            return [item['id'] for item in result['items']]
+
+        write('early-note-only')
+        self.assertEqual(ids('early-note-only'),[target['id']])
+        write('later-note-only')
+        with server.connect(audit=False) as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM material_search_manual_dirty').fetchone()[0],1)
+        self.assertEqual(ids('early-note-only'),[])
+        self.assertEqual(ids('later-note-only'),[target['id']])
+        self.undo()
+        self.assertEqual(ids('later-note-only'),[])
+        self.assertEqual(ids('early-note-only'),[target['id']])
+
+    def test_full_dictionary_search_updates_incoming_evidence_membership(self):
+        example=self.example([('evidence form','isolated-example-token')])
+        target=self.word('evidence form',['Target'])
+
+        def hits():
+            return self.dictionary('isolated-example-token')['total']
+
+        self.assertEqual(hits(),0)
+        self.link(example,target,'@word',kind='independent',sense=None)
+        self.assertEqual(hits(),1)
+        self.undo()
+        self.assertEqual(hits(),0)
+        self.undo('redo')
+        self.assertEqual(hits(),1)
 
     def test_nested_inheritance_searches_keep_precedence_and_frozen_children(self):
         e=self.seed('#pass([], (([home-n],[家-GEN])), [])');ex=self.example([('home-n','家-GEN')])
@@ -222,17 +347,72 @@ class SharedSearchTests(unittest.TestCase):
             db.row_factory=sqlite3.Row
             self.assertEqual(lexicon.list_lexemes(db,'ordos','家',page_size='all',summary=True),expected)
 
+    def test_search_options_update_only_touched_definition_and_follow_undo(self):
+        import dictionary_option_catalog as options
+        a=self.word('one',['first'])
+        self.word('two',['second'])
+        query='dictionary-search-options?language=ordos'
+        first=self.api(query)
+        writing=self.api('writing-save',dict(name='Search script',font='Junicode'))
+        a=self.api('lexeme?id='+a['id'])
+        a['body']['orthographies']=[dict(label=writing['name'],type_id=writing['id'],text='字',font='Junicode')]
+        self.api('lexeme-save',a)
+
+        with patch.object(options,'_shapes',wraps=options._shapes) as shapes:
+            changed=self.api(query)
+            self.assertEqual([list(call.args[2]) for call in shapes.call_args_list],[[a['id']]])
+        self.assertIn('orthographies.type_id',{field['id'] for field in changed['fields']})
+        self.undo()
+        self.assertNotIn('orthographies.type_id',{field['id'] for field in self.api(query)['fields']})
+        self.undo()
+        self.assertEqual(self.api(query),first)
+
+    def test_linked_translation_predicate_skips_dictionary_documents(self):
+        self.fixture()
+        spec=dict(field='examples.translation',case=False)
+        with server.connect(audit=False) as db:
+            query='translation'
+            import dictionary_own_index
+            with patch.object(dictionary_own_index,'evidence_translation',return_value=None):
+                expected=lexicon.list_lexemes(db,'ordos',query,search=spec,summary=True)
+            with patch.object(dictionary_search,'SearchIndex',side_effect=AssertionError('translation only needs headers')):
+                actual=lexicon.list_lexemes(db,'ordos',query,search=spec,summary=True)
+            self.assertEqual(actual,expected)
+
+    def test_bulk_manual_projection_agrees_with_per_owner_layer_reads(self):
+        e,ex,_=self.fixture()
+        with server.connect(audit=False) as db:
+            db.execute("INSERT INTO annotation_layers(id,language_id,name,font,anchor) VALUES('bulk','ordos','Bulk','Junicode','word')")
+            for kind,row in (('corpus',e),('independent',ex)):
+                unit=annotations.get(db,kind,row['id'])['words'][0]['id']
+                db.execute('INSERT INTO annotation_cells VALUES(?,?,?,?,?,?,1)',
+                           (kind,kind,row['id'],unit,'bulk','distinct annotation'))
+            db.execute('INSERT INTO annotation_cells VALUES(?,?,?,?,?,?,1)',
+                       ('stale','corpus',e['id'],'retired','bulk','do not find'))
+            material_search_index.refresh_custom(db)
+            query="SELECT kind,owner_id,field,word,origin,display FROM material_search_custom ORDER BY kind,owner_id,field,word"
+            before=[tuple(row) for row in db.execute(query)]
+            self.assertEqual(len(before),2)
+            db.execute('UPDATE material_search_dirty SET custom=1')
+            db.executemany('INSERT INTO material_search_dirty VALUES(?,?,0,1)',
+                           [('corpus',e['id']),('independent',ex['id'])])
+            material_search_index.refresh_manual_cells(db,'',material_search_index.Values(db))
+            self.assertEqual([tuple(row) for row in db.execute(query)],before)
+
     def test_dictionary_background_task_cancellation_rolls_back_derived_publication(self):
+        import dictionary_cold
+        self.enterContext(patch.object(dictionary_cold,'available',return_value=False))
         import long_tasks,journal
         self.fixture()
         with server.connect(audit=False) as db:
             revision=journal.workspace_revision(db)
-            before={table:db.execute('SELECT count(*) FROM '+table).fetchone()[0] for table in ('gloss_search_recipes','material_search_documents','material_search_keys')}
-        prepare=material_search_index.Evidence.prepare
-        def cancel(instance):
-            prepare(instance)
+            tables=('gloss_search_recipes','material_search_literal_records','dictionary_own_keys')
+            before={table:db.execute('SELECT count(*) FROM '+table).fetchone()[0] for table in tables}
+        prepare=material_search_index.literal_records
+        def cancel(*args):
+            prepare(*args)
             raise long_tasks.Cancelled()
-        with patch.object(material_search_index.Evidence,'prepare',cancel):
+        with patch.object(material_search_index,'literal_records',cancel):
             job=long_tasks.submit(server.DB,'dictionary',dict(language='ordos',q='家',summary='1'))
             long_tasks.JOBS[job]['future'].result(timeout=20)
         self.assertEqual(long_tasks.view(server.DB,job)['state'],'cancelled')

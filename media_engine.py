@@ -32,8 +32,10 @@ def probe(path):
         if duration<=0:raise ValueError('无法确定媒体时长，请使用具有完整时间索引的文件')
         return dict(duration_ms=duration,start_us=c.start_time or 0,fingerprint=fingerprint(path),streams=[dict(type=s.type,codec=s.codec_context.name,index=s.index,channels=getattr(s.codec_context,'channels',None),width=getattr(s.codec_context,'width',None),height=getattr(s.codec_context,'height',None)) for s in streams])
 
-def cache_root(dbpath):
-    root=Path(dbpath).parent/'media-cache';root.mkdir(parents=True,exist_ok=True);return root
+def cache_root(dbpath,*,create=True):
+    root=Path(dbpath).parent/'media-cache'
+    if create:root.mkdir(parents=True,exist_ok=True)
+    return root
 
 def resolve(dbpath,asset):
     if asset['storage']=='missing' or not asset['path']:raise ValueError('媒体尚未定位，请使用换源选择媒体文件')

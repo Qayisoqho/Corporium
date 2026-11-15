@@ -1,6 +1,7 @@
 """Read-only paired display ranges from actual segmentation and dictionary links."""
 import re
 from collections import defaultdict
+from functools import lru_cache
 
 STRIP=' \t\r\n«»“”".,;:!?…。，；：！？'
 COLORED_TYPES={'affix','clitic','infix','circumfix','connector','multipart'}
@@ -8,6 +9,14 @@ COLORED_TYPES={'affix','clitic','infix','circumfix','connector','multipart'}
 
 def plain_map(raw):
     """Mirror corpus.plain/clean while retaining source code-point positions."""
+    return _short_plain_map(raw) if len(raw)<=64 else _plain_map(raw)
+
+
+def _plain_map(raw):
+    if '#' not in raw and '\\' not in raw:
+        start=len(raw)-len(raw.lstrip(STRIP))
+        end=len(raw.rstrip(STRIP))
+        return raw[start:end],tuple((i,i+1) for i in range(start,end))
     text=[];positions=[];at=0
     for match in re.finditer(r'#(?:sub|sup|super)\[([^\[\]]*)\]',raw):
         text.extend(raw[at:match.start()]);positions.extend((i,i+1) for i in range(at,match.start()))
@@ -19,7 +28,10 @@ def plain_map(raw):
         out.append(match[1]);mapping.append((positions[match.start()][0],positions[match.end()-1][1]));at=match.end()
     out.extend(value[at:]);mapping.extend(positions[at:]);text=''.join(out)
     left=len(text)-len(text.lstrip(STRIP));right=len(text.rstrip(STRIP))
-    return text[left:right],mapping[left:right]
+    return text[left:right],tuple(mapping[left:right])
+
+
+_short_plain_map=lru_cache(maxsize=1024)(_plain_map)
 
 
 def ranges(fragments,mapping):
@@ -34,23 +46,35 @@ def tone(_unit,link):
     return entry_type if entry_type in COLORED_TYPES else 'base'
 
 
+def target_types(db,ids):
+    import record_sources
+    catalog={};targets=list(set(ids))
+    for start in range(0,len(targets),400):
+        batch=targets[start:start+400];marks=','.join('?' for _ in batch)
+        for table in ('lexemes','morphemes'):
+            kind=record_sources.KINDS[table]
+            if record_sources.native(db):
+                sql=f'''SELECT s.id,s.language_id,COALESCE(t.value,'unspecified') entry_type,p.value affix_position
+                  FROM {table} s LEFT JOIN dictionary_value_rows t ON t.target_kind=? AND t.target_id=s.id AND t.parent=0 AND t.slot='entry_type'
+                  LEFT JOIN dictionary_value_rows p ON p.target_kind=? AND p.target_id=s.id AND p.parent=0 AND p.slot='affix_position'
+                  WHERE s.id IN ({marks})'''
+                rows=db.execute(sql,[kind,kind,*batch])
+            else:
+                rows=db.execute("SELECT id,language_id,COALESCE(json_extract(body,'$.entry_type'),'unspecified') entry_type,json_extract(body,'$.affix_position') affix_position FROM "+table+' WHERE id IN ('+marks+')',batch)
+            for row in rows:catalog[row['language_id'],row['id']]=row
+    return catalog
+
+
 def prepare(db,ids):
     """Operation-local display data for at most one batch of sentence cards."""
-    rows=defaultdict(list);catalog={};targets=set()
-    if not ids:return dict(rows=rows,catalog=catalog)
+    rows=defaultdict(list);targets=set()
+    if not ids:return dict(rows=rows,catalog={})
     sql='''SELECT u.entry_id,COALESCE(p.position,u.position) word_position,u.position morph_position,u.kind,l.lexeme_id
         FROM corpus_units u LEFT JOIN corpus_units p ON p.id=u.parent_id JOIN lexical_links l ON l.unit_id=u.id
         WHERE u.entry_id IN ('''+','.join('?' for _ in ids)+''') AND u.active=1 AND (p.id IS NULL OR p.active=1)
         ORDER BY CASE WHEN u.kind='morpheme' THEN 1 ELSE 0 END,u.id'''
     for row in db.execute(sql,ids):rows[row['entry_id']].append(row);targets.add(row['lexeme_id'])
-    targets=list(targets)
-    for start in range(0,len(targets),400):
-        batch=targets[start:start+400];marks=','.join('?' for _ in batch)
-        # The display view changes usages/orthographies, not these source fields.
-        for table in ('lexemes','morphemes'):
-            for row in db.execute("SELECT id,language_id,COALESCE(json_extract(body,'$.entry_type'),'unspecified') entry_type,json_extract(body,'$.affix_position') affix_position FROM "+table+' WHERE id IN ('+marks+')',batch):
-                catalog[row['language_id'],row['id']]=row
-    return dict(rows=rows,catalog=catalog)
+    return dict(rows=rows,catalog=target_types(db,targets))
 
 
 def attach(db,body,kind,rid,lid,prepared=None):
@@ -62,14 +86,9 @@ def attach(db,body,kind,rid,lid,prepared=None):
         WHERE u.entry_id=? AND u.active=1 AND (p.id IS NULL OR p.active=1)
         ORDER BY CASE WHEN u.kind='morpheme' THEN 1 ELSE 0 END,u.id"""
         rows=prepared['rows'].get(rid,[]) if prepared is not None else list(db.execute(sql,(rid,)))
-        ids=[] if prepared is not None else list({r['lexeme_id'] for r in rows});catalog={}
-        # Fetch only types referenced by this card. Joining the union view above
-        # materialized every native morpheme body once per visible sentence.
-        for start in range(0,len(ids),400):
-            batch=ids[start:start+400]
-            catalog.update((r['id'],r) for r in db.execute("SELECT id,COALESCE(json_extract(body,'$.entry_type'),'unspecified') entry_type,json_extract(body,'$.affix_position') affix_position FROM dictionary_targets WHERE language_id=? AND id IN ("+','.join('?' for _ in batch)+')',(lid,*batch)))
+        catalog=prepared['catalog'] if prepared is not None else target_types(db,(r['lexeme_id'] for r in rows))
         for row in rows:
-            target=prepared['catalog'].get((lid,row['lexeme_id'])) if prepared is not None else catalog.get(row['lexeme_id'])
+            target=catalog.get((lid,row['lexeme_id']))
             if target is None:continue
             r={**dict(row),'entry_type':target['entry_type'],'affix_position':target['affix_position']}
             index=r['word_position']
@@ -80,12 +99,9 @@ def attach(db,body,kind,rid,lid,prepared=None):
             if 0<=pos<len(units):links[index,units[pos]['key']]=r
     else:
         targets=[t for t in body.get('targets',[]) if t.get('segmentation_ref') and not t.get('segmentation_review') and not t['segmentation_ref'].get('detached')]
-        ids=list({t['lexeme_id'] for t in targets});catalog={}
-        for start in range(0,len(ids),400):
-            batch=ids[start:start+400]
-            catalog.update((r['id'],r) for r in db.execute("SELECT id,COALESCE(json_extract(body,'$.entry_type'),'unspecified') entry_type,json_extract(body,'$.affix_position') affix_position FROM dictionary_targets WHERE language_id=? AND id IN ("+','.join('?' for _ in batch)+')',(lid,*batch)))
+        catalog=prepared['catalog'] if prepared is not None else target_types(db,(t['lexeme_id'] for t in targets))
         for t in targets:
-            ref=t['segmentation_ref'];index=ref['word'];link=catalog.get(t['lexeme_id'])
+            ref=t['segmentation_ref'];index=ref['word'];link=catalog.get((lid,t['lexeme_id']))
             if not link or not 0<=index<len(words):continue
             units=words[index].get('morphemes',[]);key=ref['key']
             if key=='@word':whole.add(index)

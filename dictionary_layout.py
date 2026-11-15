@@ -88,7 +88,7 @@ def tree(db, lid, path=None, page=1):
     path = path or []
     if not isinstance(path, list) or any(not isinstance(x, str) for x in path): raise ValueError('分类路径无效')
     cfg, revision = config(db, lid)
-    rows = sorted_rows(db, lid, [{**dict(r), 'body': json.loads(r['body'])} for r in db.execute('SELECT id,headword,body,revision FROM lexemes WHERE language_id=?', (lid,))])
+    rows = sorted_rows(db, lid, [{**dict(r), 'body': json.loads(r['body'])} for r in db.execute('SELECT id,headword,body,revision FROM lexemes_documents WHERE language_id=?', (lid,))])
     catalog=categories.listing(db,lid)+[{**r,'kind':'semantic'} for r in dictionary_organization.listing(db,lid)['classes']]
     signature = key([[[r['id'], r['revision'], r['sort_path']] for r in rows],[[r['id'],r['revision'],r['name'],r['parent_id']] for r in catalog]])
     token = hashlib.sha256(signature.encode()).hexdigest()
@@ -128,7 +128,7 @@ def mutate(db, lid, action, body):
         kind = body.get('kind'); xid = body.get('id'); before = body.get('before')
         if kind == 'groups': ids = [r['key'] for r in current['groups']]
         elif kind == 'entries':
-            rows = sorted_rows(db, lid, [{**dict(r), 'body': json.loads(r['body'])} for r in db.execute('SELECT id,headword,body,revision FROM lexemes WHERE language_id=?', (lid,))])
+            rows = sorted_rows(db, lid, [{**dict(r), 'body': json.loads(r['body'])} for r in db.execute('SELECT id,headword,body,revision FROM lexemes_documents WHERE language_id=?', (lid,))])
             ids = [r['id'] for r in rows if [n['key'] for n in r['sort_path']] == current['path']]
         else: raise ValueError('拖动类型无效')
         if xid not in ids or before is not None and before not in ids: raise ValueError('只能调整当前类内的同级顺序')

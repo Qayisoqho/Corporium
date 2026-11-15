@@ -73,6 +73,8 @@ class TimelineColorTests(unittest.TestCase):
         self.assertEqual(self.mutation('track',track_id=root['id'],name='旧记录')[0],200)
         # Simulate a pre-colour database and its undo payload without touching production.
         with server.connect(audit=False) as db:
+            import save_validation
+            save_validation.drop(db)
             db.execute('ALTER TABLE timeline_tracks DROP COLUMN color')
             for step in db.execute('SELECT id,changes FROM undo_steps').fetchall():
                 changes=undo_codec.decode(step['changes'])

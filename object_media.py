@@ -1,38 +1,131 @@
 """Images and recordings attached to dictionary entries and independent examples."""
 import base64
+from functools import lru_cache
 import json
 import shutil
 import uuid
 from pathlib import Path
 import media_engine
+import record_sources
 import timeline
 
 TABLES=('object_media',)
+OWNER_KINDS={'lexemes':'lexeme','morphemes':'morpheme','dictionary_examples':'independent'}
+SOURCES=frozenset((*OWNER_KINDS,'object_media','timeline_media','timeline_speakers'))
 IMAGE_EXT={'.jpg','.jpeg','.png','.webp','.gif','.bmp','.tif','.tiff'}
 AUDIO_EXT=media_engine.EXTENSIONS- {'.mp4','.mov','.mkv','.avi','.webm','.wmv','.m4v','.3gp'}
 
 def initialize(db):
-    db.executescript('''CREATE TABLE IF NOT EXISTS object_media(id TEXT PRIMARY KEY,language_id TEXT NOT NULL,kind TEXT NOT NULL,record_id TEXT NOT NULL,asset_id TEXT NOT NULL,body TEXT NOT NULL,position INTEGER NOT NULL,revision INTEGER NOT NULL DEFAULT 1);
-    CREATE INDEX IF NOT EXISTS object_media_owner ON object_media(kind,record_id,position);''')
+    record_sources.schema_sql(db, '''CREATE TABLE IF NOT EXISTS object_media(id TEXT PRIMARY KEY,language_id TEXT NOT NULL,kind TEXT NOT NULL,record_id TEXT NOT NULL,asset_id TEXT NOT NULL,body TEXT NOT NULL,position INTEGER NOT NULL,revision INTEGER NOT NULL DEFAULT 1);
+    CREATE INDEX IF NOT EXISTS object_media_owner ON object_media(kind,record_id,position);
+    CREATE INDEX IF NOT EXISTS object_media_asset ON object_media(asset_id);''')
+    install_validation(db)
+
+
+def install_validation(db):
+    existed=validation_available(db)
+    db.execute('CREATE TABLE IF NOT EXISTS object_media_validation_dirty(id TEXT PRIMARY KEY) WITHOUT ROWID')
+    if not existed:
+        db.execute('INSERT INTO object_media_validation_dirty SELECT id FROM object_media')
+
+    def queue(where):
+        return ('INSERT INTO object_media_validation_dirty SELECT m.id FROM object_media m WHERE '+where+
+                ' ON CONFLICT DO NOTHING;')
+
+    def watch(table,event,body,when=''):
+        record_sources.trigger(db,f'object_media_check_{table}_{event}',f'AFTER {event} ON {table}{when} BEGIN {body} END')
+
+    for event in ('INSERT','UPDATE'):
+        removed='DELETE FROM object_media_validation_dirty WHERE id=OLD.id AND OLD.id IS NOT NEW.id;' if event=='UPDATE' else ''
+        fields=('id','language_id','kind','record_id','asset_id','body')
+        when=' WHEN '+' OR '.join(f'OLD.{key} IS NOT NEW.{key}' for key in fields) if event=='UPDATE' else ''
+        watch('object_media',event,removed+queue('m.id=NEW.id'),when)
+    watch('object_media','DELETE','DELETE FROM object_media_validation_dirty WHERE id=OLD.id;')
+    for table,kind in OWNER_KINDS.items():
+        scope=f"m.kind='{kind}' AND m.record_id=OLD.id"
+        changed='OLD.id IS NOT NEW.id OR OLD.language_id IS NOT NEW.language_id'
+        if kind!='independent':changed+=' OR '+record_sources.change_sql(db,table)
+        watch(table,'INSERT',queue(f"m.kind='{kind}' AND m.record_id=NEW.id"))
+        watch(table,'UPDATE',queue(scope),f' WHEN {changed}')
+        watch(table,'DELETE',queue(scope))
+    # Direct changes to the value rows do not publish an owner revision.
+    # The normal writer queues the owner after publishing the complete set.
+    for event in ('INSERT','UPDATE','DELETE'):
+        refs=('OLD','NEW') if event=='UPDATE' else ('OLD',) if event=='DELETE' else ('NEW',)
+        body=''.join(queue(f"m.kind='{kind}' AND {ref}.target_kind='{kind}' AND m.record_id={ref}.target_id AND NOT "+
+                           record_sources.is_native(table,ref+'.target_id'))
+                     for ref in refs for table,kind in OWNER_KINDS.items() if kind!='independent')
+        watch('dictionary_value_rows',event,body," WHEN EXISTS(SELECT 1 FROM object_media LIMIT 1)")
+    watch('timeline_media','UPDATE',queue('m.asset_id=OLD.id'),
+          ' WHEN OLD.id IS NOT NEW.id OR OLD.language_id IS NOT NEW.language_id OR OLD.metadata IS NOT NEW.metadata')
+    watch('timeline_media','DELETE',queue('m.asset_id=OLD.id'))
+    speaker=queue("EXISTS(SELECT 1 FROM json_each(m.body,'$.speakers') p WHERE p.value=OLD.id)")
+    watch('timeline_speakers','UPDATE',speaker,' WHEN OLD.id IS NOT NEW.id')
+    watch('timeline_speakers','DELETE',speaker)
+
+
+def validation_available(db):
+    return db.execute("SELECT 1 FROM sqlite_master WHERE name='object_media_validation_dirty'").fetchone() is not None
+
+
+def drop_validation(db):
+    for name, in db.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name GLOB 'object_media_check_*'").fetchall():
+        db.execute('DROP TRIGGER '+name)
+    db.execute('DROP TABLE IF EXISTS object_media_validation_dirty')
 
 def owner(db,kind,rid):
     table={'lexeme':'lexemes','morpheme':'morphemes','independent':'dictionary_examples'}.get(kind)
     if not table:raise ValueError('请选择词条、语素或独立例句')
     row=db.execute('SELECT * FROM '+table+' WHERE id=?',(rid,)).fetchone()
     if not row:raise ValueError('请先保存条目或例句，再添加媒体')
-    return dict(row)
+    result=dict(row)
+    if kind in ('lexeme','morpheme'):result['body']=record_sources.read(db,table,rid)
+    return result
 
 def targets(row,kind):
     if kind not in ('lexeme','morpheme'):return []
-    body=json.loads(row['body']);out=[dict(id=v['id'],label=v['form'] or '未填写变体') for v in body.get('variants',[])]
+    body=record_sources.body(row,mutable=False);out=[dict(id=v['id'],label=v['form'] or '未填写变体') for v in body.get('variants',[])]
     out.extend(dict(id=p['id'],label=p.get('label','主要部分')+'：'+p.get('form','')) for m in body.get('word_structure',{}).get('memberships',[]) for p in m.get('parts',[]))
     return out
 
 def listing(db,kind,rid):
-    row=owner(db,kind,rid);items=[]
+    row=owner(db,kind,rid);items=[];assets={}
+    root=media_engine.cache_root(Path(db.execute('PRAGMA database_list').fetchone()[2]),create=False)
     for r in db.execute('SELECT * FROM object_media WHERE kind=? AND record_id=? ORDER BY position,id',(kind,rid)):
-        item=dict(r);item['body']=json.loads(item['body']);item['asset']=timeline.media_view(db,item['asset_id']);item['asset']['proxy']=(media_engine.cache_root(Path(db.execute('PRAGMA database_list').fetchone()[2]))/(media_engine.cache_key(item['asset'])+'.mp4')).is_file();items.append(item)
+        items.append(media_item(db,r,root,assets))
     return dict(language_id=row['language_id'],items=items,targets=targets(row,kind))
+
+
+def media_item(db,row,root,assets):
+    item=dict(row);item['body']=json.loads(item['body'])
+    key=item['asset_id']
+    if key not in assets:
+        asset=timeline.media_view(db,key)
+        if asset is None:raise ValueError('关联的媒体文件已不存在')
+        assets[key]={**asset,'proxy':(root/(media_engine.cache_key(asset)+'.mp4')).is_file()}
+    item['asset']=assets[key]
+    return item
+
+
+def independent_listings(db,ids):
+    ids=list(dict.fromkeys(ids))
+    if len(ids)>100:raise ValueError('例句数量超出范围')
+    if not ids:return {}
+    marks=','.join('?' for _ in ids)
+    results={r['id']:dict(language_id=r['language_id'],items=[],targets=[]) for r in
+             db.execute(f'SELECT id,language_id FROM dictionary_examples WHERE id IN ({marks})',ids)}
+    assets={}
+    root=media_engine.cache_root(Path(db.execute('PRAGMA database_list').fetchone()[2]),create=False)
+    for row in db.execute(f'''SELECT * FROM object_media WHERE kind='independent' AND record_id IN ({marks})
+                              ORDER BY record_id,position,id''',ids):
+        if row['record_id'] not in results:continue
+        try:
+            results[row['record_id']]['items'].append(media_item(db,row,root,assets))
+        except (ValueError,TypeError,OSError):
+            # Keep unrelated visible examples usable if an attachment is damaged.
+            results.pop(row['record_id'])
+    return results
+
 
 def validate_body(db,body,asset,row,kind):
     if not isinstance(body,dict):raise ValueError('媒体信息无效')
@@ -135,7 +228,7 @@ def audio_playable(dbpath,asset):
 
 def cleanup(db,changes):
     for (table,_),(before,after) in list(changes.items()):
-        kind={'lexemes':'lexeme','morphemes':'morpheme','dictionary_examples':'independent'}.get(table)
+        kind=OWNER_KINDS.get(table)
         if kind and before and not after:db.execute('DELETE FROM object_media WHERE kind=? AND record_id=?',(kind,before['id']))
 
 def backup_assets(db):
@@ -181,7 +274,34 @@ def restore_files(db,dbpath,files,created):
 
 
 def validate(db):
-    for record in db.execute('SELECT * FROM object_media'):
-        row=owner(db,record['kind'],record['record_id']);asset=timeline.media_view(db,record['asset_id'])
+    validate_rows(db,db.execute('SELECT * FROM object_media'))
+
+
+def validate_pending(db,*,full=False):
+    """Check affected relationships in the source transaction before publication."""
+    if not validation_available(db):
+        validate(db)
+        return
+    if full:
+        validate(db)
+    else:
+        if not db.execute('SELECT 1 FROM object_media_validation_dirty LIMIT 1').fetchone():return
+        validate_rows(db,db.execute('''SELECT m.* FROM object_media_validation_dirty d
+            CROSS JOIN object_media m ON m.id=d.id'''))
+    db.execute('DELETE FROM object_media_validation_dirty')
+
+
+def validate_rows(db,records):
+    import long_tasks
+
+    @lru_cache(maxsize=128)
+    def owner_row(kind,key):return owner(db,kind,key)
+
+    @lru_cache(maxsize=128)
+    def asset_row(key):return timeline.media_view(db,key)
+
+    for record in long_tasks.steps(records):
+        row=owner_row(record['kind'],record['record_id']);asset=asset_row(record['asset_id'])
+        if asset is None:raise ValueError('关联的媒体文件已不存在')
         if row['language_id']!=record['language_id'] or asset['language_id']!=record['language_id']:raise ValueError('媒体关联与材料所属语言不一致，请先移除或调整媒体关联')
         validate_body(db,json.loads(record['body']),asset,row,record['kind'])

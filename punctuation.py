@@ -120,9 +120,13 @@ def apply(db,b,lid):
                 old_index=ref['word'];ref['word']=mapping[old_index]
                 if old_index in edits:ref['form']=new[ref['word']]['form']
         analyze(body)
-        table='entries' if d['kind']=='corpus' else 'dictionary_examples'
-        db.execute('UPDATE '+table+' SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body,ensure_ascii=False),d['id']))
-        if d['kind']=='corpus':lexicon.sync_entry(db,d['id'],ids,morph_ids)
+        if d['kind']=='corpus':
+            import sentence_rows
+            sentence_rows.write(db,'corpus',d['id'],body)
+            lexicon.sync_entry(db,d['id'],ids,morph_ids,analyzed_body=body,stored_body=body)
+        else:
+            from independent_links import write_body
+            write_body(db,d['id'],body)
         changed+=1
     row=db.execute('SELECT metadata FROM languages WHERE id=?',(lid,)).fetchone();meta=json.loads(row[0])
     if meta.get('punctuation_settings')!=plan['settings']:

@@ -1,3 +1,4 @@
+import source_fixtures
 import copy
 import json
 import unittest
@@ -115,8 +116,8 @@ class DictionaryGlossSyncTests(unittest.TestCase):
         x=self.word('n',['GEN']);ex=self.example([('n','GEN')]);self.link(ex,x,'@word',kind='independent')
         whole=self.api('example-save',dict(body=dict(ipa='n',words=[dict(form='n',gloss='GEN')],targets=[dict(lexeme_id=x['id'],usage_id=x['body']['usages'][0]['id'],sense_id=x['body']['usages'][0]['senses'][0]['id'])])))
         with server.connect(audit=False) as db:
-            body=json.loads(db.execute('SELECT body FROM dictionary_examples WHERE id=?',(ex['id'],)).fetchone()[0]);body['words'][0]['gloss']='GEN.PL'
-            db.execute('UPDATE dictionary_examples SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body),ex['id']))
+            body=json.loads(db.execute('SELECT body FROM dictionary_examples_documents WHERE id=?',(ex['id'],)).fetchone()[0]);body['words'][0]['gloss']='GEN.PL'
+            source_fixtures.replace(db,'dictionary_examples',ex['id'],json.dumps(body),bump=True)
         x['body']['usages'][0]['senses'][0]['short_gloss']='POSS';self.api('lexeme-save',x)
         self.assertEqual(self.detail(ex,'independent')['body']['words'][0]['gloss'],'GEN.PL')
         self.assertEqual(self.detail(whole,'independent')['body']['words'][0]['gloss'],'GEN')

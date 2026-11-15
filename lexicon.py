@@ -8,6 +8,7 @@ import json
 import uuid
 import hashlib
 import re
+from copy import deepcopy
 import unicodedata
 import font_catalog
 import dictionary_data
@@ -23,6 +24,8 @@ import example_numbering
 import gloss_inheritance
 import paradigms
 import sense_gloss
+import independent_links
+import record_sources
 from collections import Counter,defaultdict,OrderedDict
 from contextvars import ContextVar
 from corpus import analyze, boundary_count, clean, gloss_relations
@@ -43,9 +46,9 @@ def initialize(db):
     annotations.initialize(db)
     grammar.initialize(db)
     morphology.initialize(db)
-    for r in db.execute('SELECT id,body FROM dictionary_examples').fetchall():
-        b=json.loads(r['body'])
-        if any(not w.get('annotation_id') for w in b.get('words',[])):
+    if independent_links.needed(db):
+        for r in db.execute("SELECT id,body FROM dictionary_examples e WHERE EXISTS (SELECT 1 FROM json_each(e.body,'$.words') w WHERE COALESCE(w.value->>'$.annotation_id','')='')"):
+            b=json.loads(r['body'])
             annotations.independent_ids({},b)
             db.execute('UPDATE dictionary_examples SET body=? WHERE id=?',(json.dumps(b,ensure_ascii=False),r['id']))
     db.executescript('''
@@ -59,7 +62,7 @@ def initialize(db):
     ''')
     import dictionary_targets
     dictionary_targets.initialize(db)
-    categories.initialize(db)
+    categories.initialize(db,repair=not record_sources.native(db))
     # Only old/unindexed sentences need migration; never rewrite their original body.
     for row in db.execute('SELECT id FROM entries WHERE id NOT IN (SELECT entry_id FROM corpus_units)').fetchall():
         sync_entry(db,row['id'])
@@ -70,7 +73,7 @@ def initialize(db):
         db.execute('PRAGMA user_version=3')
 
     if db.execute('PRAGMA user_version').fetchone()[0]<4:
-        for row in db.execute("SELECT id FROM entries WHERE body LIKE '%~%'").fetchall():
+        for row in db.execute("SELECT id FROM entries_documents WHERE body LIKE '%~%'").fetchall():
             sync_entry(db,row['id'])
         db.execute('PRAGMA user_version=4')
 
@@ -93,17 +96,13 @@ def match_units(old, specs):
 def prepare_sync(db,entry_ids,word_positions=None):
     """Bounded prefetch for an internal dictionary sync in one write transaction."""
     marks=','.join('?' for _ in entry_ids);result={eid:([],{}) for eid in entry_ids}
-    if word_positions is None:
-        units=db.execute('SELECT * FROM corpus_units WHERE entry_id IN ('+marks+') AND active=1 ORDER BY entry_id,position',entry_ids)
-    else:
-        # Every word slot is needed to verify the fixed structure. Only affected
-        # slots need child units and their potentially large segment snapshots.
-        selected=json.dumps({eid:list(word_positions[eid]) for eid in entry_ids})
-        units=db.execute('''WITH wanted AS (SELECT key entry_id,value positions FROM json_each(?))
-            SELECT u.* FROM wanted w JOIN corpus_units u ON u.entry_id=w.entry_id
-            LEFT JOIN corpus_units p ON p.id=u.parent_id
-            WHERE u.active=1 AND (u.kind='word' OR p.position IN (SELECT value FROM json_each(w.positions)))
-            ORDER BY u.entry_id,u.position''',(selected,))
+    units=db.execute('SELECT * FROM corpus_units WHERE entry_id IN ('+marks+') AND active=1 ORDER BY entry_id,position',entry_ids)
+    if word_positions is not None:
+        # Keep all word identities, fetching segment snapshots only for the
+        # selected slots. The unit scan stays on the native entry index.
+        rows=list(units)
+        parents={r['id']:r['position'] for r in rows if r['kind']=='word'}
+        units=(r for r in rows if r['kind']=='word' or parents.get(r['parent_id']) in word_positions[r['entry_id']])
     owners={}
     for row in units:
         result[row['entry_id']][0].append(dict(row))
@@ -116,8 +115,9 @@ def prepare_sync(db,entry_ids,word_positions=None):
     return result
 
 
-def sync_entry(db,eid,word_ids=None,morph_ids=None,preserve_complex=False,analyzed_body=None,preserve_slots=False,word_positions=None,stored_body=None,unit_state=None):
-    row=db.execute('SELECT body FROM entries WHERE id=?',(eid,)).fetchone()
+def sync_entry(db,eid,word_ids=None,morph_ids=None,preserve_complex=False,analyzed_body=None,preserve_slots=False,word_positions=None,stored_body=None,unit_state=None,source=None):
+    import sentence_rows
+    if source is None:source=sentence_rows.one(db,'corpus',eid)
     if unit_state is None:
         old=[dict(r) for r in db.execute('SELECT * FROM corpus_units WHERE entry_id=? AND active=1 ORDER BY position',(eid,))]
         previous_segments={r['id']:r['body'] for r in db.execute('SELECT s.id,s.body FROM unit_segments s JOIN corpus_units u ON u.id=s.id WHERE u.entry_id=?',(eid,))}
@@ -128,9 +128,10 @@ def sync_entry(db,eid,word_ids=None,morph_ids=None,preserve_complex=False,analyz
     if not preserve_slots:old=gloss_inheritance.previous_units(db,eid,old)
     # A synchronous meaning/form update has just analyzed and saved this exact
     # body. Reuse it only while the stored snapshot still matches.
-    if row and analyzed_body is not None and (stored_body if stored_body is not None else json.dumps(analyzed_body,ensure_ascii=False))==row['body']:
+    if source is not None and analyzed_body is not None and record_sources.same_body(
+            stored_body if stored_body is not None else analyzed_body,source):
         words=analyzed_body['words']
-    else:words=analyze(json.loads(row['body']))['words'] if row else []
+    else:words=analyze(record_sources.object_value(source))['words'] if source is not None else []
     children=defaultdict(list)
     for unit in old:
         if unit['kind']=='morpheme':children[unit['parent_id']].append(unit)
@@ -181,7 +182,7 @@ def sync_entry(db,eid,word_ids=None,morph_ids=None,preserve_complex=False,analyz
         encoded=json.dumps(data,ensure_ascii=False)
         if previous_segments.get(uid)==encoded:continue
         db.execute('INSERT INTO unit_segments VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body WHERE body<>excluded.body',(uid,encoded))
-    if synced_entries.get() is not None:synced_entries.get()[eid]=row['body'] if row else None
+    if synced_entries.get() is not None:synced_entries.get()[eid]=source
 
 
 def sync_changes(db, changes):
@@ -189,9 +190,10 @@ def sync_changes(db, changes):
         if table!='entries':continue
         eid=(after or before)['id']
         synced=synced_entries.get() or {}
-        if eid in synced and synced[eid]==(after['body'] if after else None):continue
+        if eid in synced and record_sources.same_body(synced[eid],after['body'] if after else None):continue
         # Metadata, sentence text and ordering do not change word/morpheme identities.
-        if before and after and (before['body']==after['body'] or json.loads(before['body'])['words']==json.loads(after['body'])['words']):continue
+        if before and after and (record_sources.same_body(before['body'],after['body']) or
+                record_sources.body(before,mutable=False)['words']==record_sources.body(after,mutable=False)['words']):continue
         sync_entry(db,eid)
 
 
@@ -200,25 +202,40 @@ def association_removals_only(changes):
 
     New/restored links (including undo) still take full reference validation.
     """
-    rows=[(t,a,b) for (t,_),(a,b) in changes.items() if a!=b]
-    if not rows:return False
-    removed={a['id'] for t,a,b in rows if t=='lexical_links' and a and b is None}
-    for table,before,after in rows:
+    pending=[]
+    removed=set()
+    changed=False
+    for (table,_),(before,after) in changes.items():
+        if before==after:continue
+        changed=True
         if table in ('lexical_links','morphology_analyses','component_links','lexical_reviews'):
-            if not before or after is not None or before['id'] not in removed:return False
+            if not before or after is not None:return False
+            if table=='lexical_links':removed.add(before['id'])
+            else:pending.append(before['id'])
+        elif table=='independent_links':
+            if not before or after is not None:return False
+        elif table in independent_links.TABLES or table in gloss_inheritance.TABLES:
+            continue
         elif table=='dictionary_examples' and before and after:
+            if independent_links.revision_only(before,after):continue
             if {k:v for k,v in before.items() if k not in ('body','revision')}!={k:v for k,v in after.items() if k not in ('body','revision')}:return False
-            a=json.loads(before['body']);b=json.loads(after['body'])
+            a=record_sources.body(before);b=record_sources.body(after)
             old=a.pop('targets',[]);new=b.pop('targets',[])
             if a!=b or len(new)>=len(old):return False
             remaining=iter(old)
             if not all(any(item==candidate for candidate in remaining) for item in new):return False
         else:return False
-    return True
+    return changed and all(key in removed for key in pending)
 
 
 def validate_changes(db,changes,association_removals=False):
     changed=[(t,a,b) for (t,_),(a,b) in changes.items() if a!=b and t!='history']
+    import save_validation
+    relationship_tables=set(independent_links.TABLES+gloss_inheritance.TABLES)
+    if changed and all(t in relationship_tables or (t=='dictionary_examples' and independent_links.revision_only(a,b))
+                       for t,a,b in changed):
+        independent_links.validate(db,links={b['id'] for t,_,b in changed if t=='independent_links' and b})
+        return
     import timeline
     # Timeline identities, time ranges and catalogs have their own validators.
     # They cannot change lexical units or sense/form references. Sentence
@@ -228,19 +245,38 @@ def validate_changes(db,changes,association_removals=False):
     changed=[(t,a,b) for t,a,b in changed if t not in timeline.TABLES+gloss_inheritance.TABLES and not numbering_only(t,a,b)]
     tables={t for t,_,_ in changed}
     if not tables:return
+    trusted=save_validation.trusted(db)
+    if save_validation.text_only(changed):
+        if trusted:return
+        if tables!={'entries'}:
+            validate_links(db)
+            return
+        # An untrusted corpus-only save keeps its existing annotation/unit checks.
+    if trusted and (tables=={'lexemes'} and save_validation.sense_text_only(changed)
+                    or save_validation.validate_research_text(db,changed)):return
     def glossary_only(before,after,fields=('glossary',)):
         if not before or not after:return False
         a={k:v for k,v in before.items() if k not in ('revision','metadata')};b={k:v for k,v in after.items() if k not in ('revision','metadata')}
         am=json.loads(before['metadata']);bm=json.loads(after['metadata'])
         for field in fields:am.pop(field,None);bm.pop(field,None)
         return a==b and am==bm
+    if tables=={'languages'} and all(glossary_only(a,b,('chinese_mode','lexeme_quick_edit')) for _,a,b in changed):
+        import quick_edit
+        for _,_,row in changed:
+            quick_edit.validate_preferences(db,row['id'],json.loads(row['metadata']))
+        return
     # Discovery preferences cannot change any formal definition or reference.
     import grammaticality
     if tables=={'languages'} and all(glossary_only(a,b,(grammaticality.KEY,)) for _,a,b in changed):
         grammaticality.validate(db,changes)
         return
-    if tables<= {'entries','dictionary_examples'} and all(a and b and {k:v for k,v in a.items() if k not in ('revision','body')}=={k:v for k,v in b.items() if k not in ('revision','body')} and {k:v for k,v in json.loads(a['body']).items() if k!=grammaticality.FIELD}=={k:v for k,v in json.loads(b['body']).items() if k!=grammaticality.FIELD} for _,a,b in changed):
+    if tables<= {'entries','dictionary_examples'} and all(a and b and {k:v for k,v in a.items() if k not in ('revision','body')}=={k:v for k,v in b.items() if k not in ('revision','body')} and {k:v for k,v in record_sources.body(a,mutable=False).items() if k!=grammaticality.FIELD}=={k:v for k,v in record_sources.body(b,mutable=False).items() if k!=grammaticality.FIELD} for _,a,b in changed):
         grammaticality.validate(db,changes)
+        return
+    if tables=={'languages'} and save_validation.trusted(db) and all(glossary_only(a,b,('homophone_phonology',)) for _,a,b in changed):
+        import phonology
+        for _,_,after in changed:
+            phonology.validate_stored(json.loads(after['metadata']).get('homophone_phonology',{}))
         return
     if tables=={'languages'} and all(glossary_only(a,b,(grammar.IGNORED,)) for _,a,b in changed):
         for _,_,b in changed:grammar.ignored_values(json.loads(b['metadata']))
@@ -270,9 +306,11 @@ def validate_changes(db,changes,association_removals=False):
                 if db.execute('SELECT 1 FROM '+table+' WHERE id=?',(link,)).fetchone():
                     raise ValueError('解除关联后仍有依赖记录，请刷新后重试')
         return
-    if tables <= {'entries','corpus_units','unit_segments','annotation_cells'}:
-        # These edits cannot alter lexeme definitions or morphology references.
-        # Check the dependencies they CAN remove; retain full validation otherwise.
+    corpus_only=tables <= {'entries','corpus_units','unit_segments','annotation_cells'}
+    if (not corpus_only or save_validation.trusted(db)) and save_validation.validate_structure(db,changed,affected):return
+    if corpus_only:
+        # Corpus-only changes keep their annotation and unit checks when the
+        # database has not yet established a dictionary validation baseline.
         annotations.validate(db)
         validate_unit_references(db,affected)
         return
@@ -304,6 +342,11 @@ def enrich(db, items):
     for item in items:
         gloss_inheritance.resolve(db,'corpus',item['id'],item)
     for item in items:annotations.enrich(db,item,'corpus',item['id'])
+    attach_units(db,items)
+
+
+def attach_units(db,items):
+    if not items:return
     by_entry={x['id']:x for x in items}
     units=list(db.execute('SELECT u.*,l.id link_id,l.lexeme_id FROM corpus_units u LEFT JOIN lexical_links l ON l.unit_id=u.id WHERE u.active=1 AND u.entry_id IN ('+','.join('?' for _ in items)+')',list(by_entry)))
     parents={}
@@ -371,7 +414,8 @@ def normalize(body):
             if not any(s[k].strip() for k in ('short_gloss','definition','notes')) and not s.get('gloss_addition') and not s['tags'] and not sense.get('features'): raise ValueError('请填写义项内容，或移除空白义项')
             u['senses'].append(s)
         result['usages'].append(u)
-    return paradigms.normalize(body,morphology.normalize(body,result))
+    import chinese_mode
+    return chinese_mode.normalize_body(body,paradigms.normalize(body,morphology.normalize(body,result)))
 
 
 def discard_empty_new_rows(body):
@@ -421,27 +465,62 @@ def validate_links(db,affected=None):
     if affected is None:
         import grammaticality
         grammaticality.validate(db)
-    targets={r['id']:{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT * FROM dictionary_targets')}
-    morpheme_registry.validate(db)
-    dictionary_organization.validate(db)
+    import dictionary_rows
+    identities=[r[0] for r in db.execute('SELECT id FROM lexemes UNION ALL SELECT id FROM morphemes')]
+    targets=dictionary_rows.targets(db,identities,prepare=False)
+    morpheme_registry.validate(db,targets)
+    dictionary_organization.validate(db,targets)
     dictionary_data.validate(db,targets)
     grammar.validate(db)
-    homonyms.validate(db)
+    homonyms.validate(db,(r for r in targets.values() if r['target_kind']=='lexeme'))
     morphology.validate(db,targets,affected)
     validate_unit_references(db,affected)
+    validate_link_selections(db,targets.get,affected)
+    if affected is None:
+        import save_validation
+        save_validation.full_checked(db)
+
+
+def validate_link_selections(db,lookup,affected):
     # Validate every relationship, but decode each dictionary body only once and
     # check identical meaning references once within this transaction snapshot.
     sql='SELECT DISTINCT l.lexeme_id,l.usage_id,l.sense_id,a.form_id FROM lexical_links l LEFT JOIN morphology_analyses a ON a.id=l.id'
     rows=db.execute(sql) if affected is None else scoped_rows(db,sql,[('l.id',affected['links']),('l.lexeme_id',affected['targets'])])
     for r in rows:
-        target=targets.get(r['lexeme_id'])
+        target=lookup(r['lexeme_id'])
         if target is None:
             raise ValueError('该操作会使已有词典关联失效；请先解除相关关联，再删除或撤销词条')
         selection(target['body'],r['usage_id'],r['sense_id'])
         paradigms.validate_selection(target['body'],r['usage_id'],r['sense_id'],r['form_id'])
 
 
-def list_lexemes(db,lid,query='',page=1,page_size=30,ids_only=False,category='',order='',search=None,summary=False,targets=False,counts=True):
+import read_views
+DICTIONARY_PAGES=read_views.Cache(20*1024**2)
+CORPUS_EVIDENCE=read_views.Cache(8*1024**2)
+
+
+def list_lexemes(db,lid,query='',page=1,page_size=30,ids_only=False,category='',order='',search=None,summary=False,targets=False,counts=True,focus=''):
+    if focus and not ids_only:
+        import dictionary_paging
+        ids=_list_lexemes(db,lid,query,1,page_size,True,category,order,search,summary,targets,False)
+        target=dictionary_paging.focused_page(ids,focus,page_size)
+        result=_list_lexemes(db,lid,query,target or page,page_size,False,category,order,search,summary,targets,counts)
+        return dict(result,focus_found=target is not None)
+    args=(lid,query,page,page_size,ids_only,category,order,search,summary,targets,counts)
+    if not isinstance(query,str) or not query.strip() or str(page_size)=='all' or ids_only:
+        return _list_lexemes(db,*args)
+    stamp=read_views.token(db,'dictionary')
+    key=(stamp,lid,query,str(page),str(page_size),category,order,json.dumps(search,ensure_ascii=False,sort_keys=True),summary,targets,counts) if stamp else None
+    saved=DICTIONARY_PAGES.get(key)
+    if saved is not None:return json.loads(saved)
+    result=_list_lexemes(db,*args)
+    if key:
+        raw=json.dumps(result,ensure_ascii=False,separators=(',',':')).encode('utf8')
+        DICTIONARY_PAGES.put(key,raw,len(raw)+len(query)*4+512)
+    return result
+
+
+def _list_lexemes(db,lid,query='',page=1,page_size=30,ids_only=False,category='',order='',search=None,summary=False,targets=False,counts=True):
     if not db.in_transaction:db.execute('BEGIN')
     import dictionary_paging
     dictionary_paging.paginate([],1,page_size)
@@ -452,22 +531,39 @@ def list_lexemes(db,lid,query='',page=1,page_size=30,ids_only=False,category='',
     simple=not search or search=={'field':'all','case':False,'combine':'all','class_id':'','conditions':[]}
     where='';params=()
     if lid!='all':where=' WHERE x.language_id=?';params=(lid,)
-    source='dictionary_targets' if targets else 'lexemes'
+    source='dictionary_targets' if targets else 'lexemes_documents'
     sql='SELECT x.*,l.name language_name FROM '+source+' x JOIN languages l ON l.id=x.language_id'+where+" ORDER BY x.headword COLLATE NOCASE,json_extract(x.body,'$.homonym_number'),x.rowid"
     if order in entry_dates.ORDERS:
         sql=sql[:sql.index(' ORDER BY ')]+ ' ORDER BY '+entry_dates.sql_order(order,'x')
-    plain=not query.strip() and simple and not category and (not order or order in entry_dates.ORDERS)
+    import dictionary_read
+    predicate=dictionary_read.predicate(db,lid,search,query,kinds=('lexeme','morpheme') if targets else ('lexeme',)) if not category and (not order or order in entry_dates.ORDERS) else None
+    if predicate is None and not category and (not order or order in entry_dates.ORDERS):
+        import dictionary_own_index
+        predicate=dictionary_own_index.predicate(db,lid,search,query,targets)
+    plain=predicate is not None
     if plain:
-        total=db.execute('SELECT count(*) FROM '+source+' x'+where,params).fetchone()[0]
-        size=max(1,total) if str(page_size)=='all' else int(page_size)
-        pages=max(1,(total+size-1)//size);page=max(1,min(int(page),pages))
-        if ids_only:return [r['id'] for r in db.execute(sql,params)]
-        rows=[{**dict(r),'body':json.loads(r['body'])} for r in db.execute(sql+' LIMIT ? OFFSET ?',params+(size,(page-1)*size))]
-        result=dict(items=rows,total=total,page=page,pages=pages)
+        result=dictionary_read.page(db,lid,page,page_size,targets=targets,summary=summary,ids_only=ids_only,order=order,predicate=predicate)
+        if ids_only:return result
     else:
         types={r['id']:r for r in db.execute('SELECT * FROM writing_types')}
-        rows=[{**dict(r),'body':dictionary_data.resolve(db,json.loads(r['body']),types)} for r in db.execute(sql,params)]
-    if query.strip() or not simple:
+        if record_sources.native(db):
+            import dictionary_rows
+            keys=dictionary_read.page(db,lid,1,'all',targets=targets,ids_only=True,
+                order=order if order in entry_dates.ORDERS else '')
+            rows=[]
+            for start in range(0,len(keys),200):
+                selected=keys[start:start+200]
+                batch=dictionary_rows.targets(db,selected)
+                for xid in long_tasks.steps(selected):
+                    row=batch[xid]
+                    dictionary_data.resolve(db,row['body'],types)
+                    if not targets:row.pop('rowid');row.pop('target_kind')
+                    rows.append(row)
+        else:
+            rows=[{**dict(r),'body':dictionary_data.resolve(db,json.loads(r['body']),types)} for r in db.execute(sql,params)]
+            if not targets:
+                for row in rows:row.pop('rowid',None)
+    if not plain and (query.strip() or not simple):
         index=dictionary_search.SearchIndex(db,lid,rows,search_spec=search or {},query=query).prepare(search or {})
         rows=[r for r in rows if index.matches(r,query)]
     if not plain:
@@ -484,8 +580,12 @@ def list_lexemes(db,lid,query='',page=1,page_size=30,ids_only=False,category='',
         types={r['id']:r for r in db.execute('SELECT * FROM writing_types')}
         independent=Counter()
         if counts:
-            for e in db.execute("SELECT body FROM dictionary_examples WHERE (?='all' OR language_id=?)",(lid,lid)):
-                for xid in {t['lexeme_id'] for t in json.loads(e['body'])['targets']}:independent[xid]+=1
+            ids=[r['id'] for r in result['items']]
+            for start in range(0,len(ids),400):
+                batch=ids[start:start+400];marks=','.join('?' for _ in batch)
+                independent.update(dict(db.execute(f"""SELECT p.lexeme_id,count(DISTINCT p.example_id) FROM independent_links p
+                     JOIN dictionary_examples e ON e.id=p.example_id WHERE p.lexeme_id IN ({marks})
+                     AND (?='all' OR e.language_id=?) GROUP BY p.lexeme_id""",[*batch,lid,lid])))
         for item in result['items']:
             dictionary_data.resolve(db,item['body'],types)
             if counts:item['example_count']=occurrence_count(db,item['id']);item['independent_count']=independent[item['id']]
@@ -494,31 +594,43 @@ def list_lexemes(db,lid,query='',page=1,page_size=30,ids_only=False,category='',
     return result
 
 
-def occurrence_count(db,lid,kind='all',form_id='all'):
+def occurrence_count(db,lid,kind='all',form_id='all',*,key_source=None):
     """One current semantic unit per occurrence; old links remain reviewable evidence."""
     seen=set()
-    target=db.execute('SELECT language_id FROM dictionary_targets WHERE id=?',(lid,)).fetchone()
+    target=independent_links.identity(db,lid)
     if not target:return 0
+    if key_source is None:
+        import sentence_rows
+        key_source=sentence_rows.corpus_keys(db,lid)
     # Resolve one target language once. Joining the union of dictionary bodies
     # into every occurrence needlessly scans/copies the same large paradigms.
     form_column='a.form_id' if form_id!='all' else 'NULL form_id'
     form_join=' LEFT JOIN morphology_analyses a ON a.id=l.id' if form_id!='all' else ''
-    sql="SELECT u.id,u.kind,u.form,u.gloss,u.parent_id,"+form_column+" FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id JOIN entries e ON e.id=u.entry_id JOIN texts t ON t.id=e.text_id"+form_join+" WHERE l.lexeme_id=? AND u.active=1 AND COALESCE(NULLIF(json_extract(e.body,'$.language_id'),''),t.language_id)=? AND (?='all' OR u.kind=?)"
-    for r in db.execute(sql,(lid,target['language_id'],kind,kind)):
+    sql="""SELECT u.id,u.form,"""+form_column+""",
+        CASE WHEN u.kind='morpheme' AND p.form=u.form AND p.gloss=u.gloss
+          AND NOT EXISTS(SELECT 1 FROM corpus_units s WHERE s.parent_id=p.id AND s.active=1 AND s.id<>u.id)
+          THEN p.id ELSE u.id END occurrence
+        FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id
+        LEFT JOIN corpus_units p ON p.id=u.parent_id
+        JOIN """+key_source+""" e ON e.id=u.entry_id JOIN texts t ON t.id=e.text_id"""+form_join+"""
+        WHERE l.lexeme_id=? AND u.active=1 AND (?='all' OR u.kind=?)
+        AND COALESCE(e.language_id,t.language_id)=?"""
+    for r in db.execute(sql,(lid,kind,kind,target['language_id'])):
         if boundary_count(r['form']):continue
         if form_id!='all':
             if (r['form_id'] or 'unassigned')!=form_id:continue
-        key=r['id']
-        if r['kind']=='morpheme':
-            parent=db.execute('SELECT * FROM corpus_units WHERE id=?',(r['parent_id'],)).fetchone()
-            if parent and (parent['form'],parent['gloss'])==(r['form'],r['gloss']) and db.execute("SELECT COUNT(*) FROM corpus_units WHERE parent_id=? AND active=1",(parent['id'],)).fetchone()[0]==1:key=parent['id']
-        seen.add(key)
+        seen.add(r['occurrence'])
     return len(seen)
 
-def get_lexeme(db,lid):
-    row=db.execute('SELECT x.*,l.name language_name FROM dictionary_targets x JOIN languages l ON l.id=x.language_id WHERE x.id=?',(lid,)).fetchone()
-    if not row: raise ValueError('词条不存在，请刷新词典')
-    value={**dict(row),'body':dictionary_data.resolve(db,json.loads(row['body']))}
+def get_lexeme(db,lid,*,relational=True):
+    if relational:
+        import dictionary_rows
+        value=dictionary_rows.targets(db,[lid]).get(lid)
+    else:
+        row=db.execute('SELECT x.*,l.name language_name FROM dictionary_targets x JOIN languages l ON l.id=x.language_id WHERE x.id=?',(lid,)).fetchone()
+        value={**dict(row),'body':json.loads(row['body'])} if row else None
+    if not value or value['language_name'] is None:raise ValueError('词条不存在，请刷新词典')
+    dictionary_data.resolve(db,value['body'])
     return value if value['target_kind']=='morpheme' else homonyms.decorate(db,value)
 
 
@@ -532,11 +644,15 @@ def segment_display_gloss(segment,fallback,field='gloss'):
 
 
 def unit_info(db,uid):
-    u=db.execute('SELECT u.*,e.revision entry_revision,e.body,e.text_id,e.position sentence_position,t.title,t.language_id FROM corpus_units u LEFT JOIN entries e ON e.id=u.entry_id LEFT JOIN texts t ON t.id=e.text_id WHERE u.id=?',(uid,)).fetchone()
+    u=db.execute('SELECT u.*,e.revision entry_revision,e.text_id,e.position sentence_position,t.title,t.language_id FROM corpus_units u LEFT JOIN entries e ON e.id=u.entry_id LEFT JOIN texts t ON t.id=e.text_id WHERE u.id=?',(uid,)).fetchone()
     if not u: raise ValueError('词或语素不存在，请重新打开句子')
     result=dict(u)
-    if u['body']:
-        body=analyze(gloss_inheritance.load(db,'corpus',u['entry_id'],u['body']))
+    raw=record_sources.read(db,'entries',u['entry_id'])
+    live=None
+    result['body']=None
+    if raw is not None:
+        body=analyze(gloss_inheritance.load(db,'corpus',u['entry_id'],deepcopy(raw)))
+        result['body']=json.dumps(raw,ensure_ascii=False)
         wi=u['position'] if u['kind']=='word' else db.execute('SELECT position FROM corpus_units WHERE id=?',(u['parent_id'],)).fetchone()[0]
         word=body['words'][wi] if 0<=wi<len(body['words']) else None
         live=word if u['kind']=='word' else word['morphemes'][u['position']] if word and 0<=u['position']<len(word['morphemes']) else None
@@ -545,12 +661,12 @@ def unit_info(db,uid):
             result['gloss_sources']=word.get('gloss_sources',[]);result['gloss_revision']=body.get('gloss_revision')
     detail=db.execute('SELECT body FROM unit_segments WHERE id=?',(uid,)).fetchone()
     result['segmentation']=json.loads(detail[0]) if detail else None
-    result['display_gloss']=live.get('display_gloss',result['gloss']) if u['body'] and live else segment_display_gloss(result['segmentation'],result['gloss'])
-    result['display_form']=live.get('display_form',live['form']) if u['body'] and live else segment_display_gloss(result['segmentation'],result['form'],'form')
+    result['display_gloss']=live.get('display_gloss',result['gloss']) if live else segment_display_gloss(result['segmentation'],result['gloss'])
+    result['display_form']=live.get('display_form',live['form']) if live else segment_display_gloss(result['segmentation'],result['form'],'form')
     result['unit_type']='phonological_boundary' if boundary_count(u['form']) else u['kind']
-    if u['body'] and u['kind']=='word' and u['active'] and json.loads(u['body'])['words'][u['position']].get('punctuation'):result['unit_type']='punctuation'
+    if raw and u['kind']=='word' and u['active'] and raw['words'][u['position']].get('punctuation'):result['unit_type']='punctuation'
     result['gloss_relations']=gloss_relations(result['gloss']) if not boundary_count(u['form']) else []
-    result['effective_language_id']=(json.loads(u['body']).get('language_id') or u['language_id']) if u['body'] else None
+    result['effective_language_id']=(raw.get('language_id') or u['language_id']) if raw is not None else None
     result['link']=dict(db.execute("SELECT *, 'confirmed' status FROM lexical_links WHERE unit_id=?",(uid,)).fetchone() or {})
     if result['link']:result['link'].update(morphology.analysis(db,result['link']['id']))
     if result['link'].get('component_ref'):
@@ -559,34 +675,119 @@ def unit_info(db,uid):
     return result
 
 
+CORPUS_EXAMPLE_COLUMNS="""SELECT l.*,u.entry_id,u.kind,u.active,u.form,u.gloss,u.position unit_position,
+        COALESCE(p.position,u.position) word_position,e.id record_id,e.text_id,e.position,t.title,t.language_id text_language
+        FROM {links} JOIN corpus_units u ON u.id=l.unit_id LEFT JOIN corpus_units p ON p.id=u.parent_id
+        LEFT JOIN {sentences} e ON e.id=u.entry_id LEFT JOIN texts t ON t.id=e.text_id"""
+
+
 def examples(db,lid,page=1,kind='all',form_id='all'):
+    import sentence_rows
+
     if kind not in ('all','word','morpheme'): raise ValueError('请选择全部、整词或语素例证')
-    lex=get_lexeme(db,lid)
-    if form_id not in ('all','unassigned'):morphology.form_selection(lex['body'],form_id)
+    if not db.in_transaction:db.execute('BEGIN')
+    lex=independent_links.identity(db,lid)
+    if not lex:raise ValueError('词条不存在，请刷新词典')
+    if form_id not in ('all','unassigned'):independent_links.validate_selection(db,lid,None,None,form_id)
     condition=" AND (?='all' OR EXISTS(SELECT 1 FROM morphology_analyses a WHERE a.id=l.id AND a.form_id=?) OR (?='unassigned' AND NOT EXISTS(SELECT 1 FROM morphology_analyses a WHERE a.id=l.id AND a.form_id IS NOT NULL)))"
     params=(lid,kind,kind,form_id,form_id,form_id)
-    total=db.execute("SELECT COUNT(*) FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id WHERE l.lexeme_id=? AND (?='all' OR u.kind=?)"+condition,params).fetchone()[0]
+    stamp=read_views.token(db,'dictionary')
+    cache_key=(stamp,lid,kind,form_id) if stamp is not None else None
+    filters=' WHERE l.lexeme_id=? AND (?=\'all\' OR u.kind=?)'+condition
+    order=' ORDER BY u.active DESC,t.rowid,e.position,u.position,l.id'
+    saved=CORPUS_EVIDENCE.get(cache_key) if cache_key else None
+    if saved is None:
+        key_source=sentence_rows.corpus_keys(db,lid)
+        source=""" FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id
+            LEFT JOIN """+key_source+""" e ON e.id=u.entry_id LEFT JOIN texts t ON t.id=e.text_id"""
+        # Cache narrow ordered identities and counts for subsequent page changes.
+        # Limit the retained ordering, with the same SQL page for larger sets.
+        candidates=tuple(r[0] for r in db.execute('SELECT l.id'+source+filters+order+' LIMIT 20001',params))
+        total=len(candidates)
+        if total>20000:
+            candidates=None
+            total=db.execute("SELECT COUNT(*) FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id"+filters,params).fetchone()[0]
+        reference_total=total if kind==form_id=='all' else db.execute('SELECT COUNT(*) FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id WHERE l.lexeme_id=?',(lid,)).fetchone()[0]
+        occurrences=occurrence_count(db,lid,kind,form_id,key_source=key_source)
+        CORPUS_EVIDENCE.put(cache_key,(candidates,total,reference_total,occurrences),256+80*(len(candidates) if candidates is not None else 0))
+    else:
+        candidates,total,reference_total,occurrences=saved
+        if candidates is None:key_source=sentence_rows.corpus_keys(db,lid)
     page=max(1,min(int(page),max(1,(total+19)//20)))
-    result=[]
-    for row in db.execute("SELECT l.*,u.entry_id,u.kind,u.active,u.form,u.gloss,u.position unit_position,COALESCE(p.position,u.position) word_position,e.body,e.text_id,e.position,t.title,t.language_id text_language FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id LEFT JOIN corpus_units p ON p.id=u.parent_id LEFT JOIN entries e ON e.id=u.entry_id LEFT JOIN texts t ON t.id=e.text_id WHERE l.lexeme_id=? AND (?='all' OR u.kind=?)"+condition+" ORDER BY u.active DESC,t.rowid,e.position,u.position,l.id LIMIT 20 OFFSET ?",(*params,(page-1)*20)):
-        e=dict(row);e['status']='confirmed';e['entry']=analyze(gloss_inheritance.load(db,'corpus',row['entry_id'],e.pop('body'))) if row['body'] else None
-        segment=db.execute('SELECT body FROM unit_segments WHERE id=?',(e['unit_id'],)).fetchone()
-        e['display_gloss']=segment_display_gloss(json.loads(segment[0]) if segment else None,e['gloss'])
-        e['display_form']=segment_display_gloss(json.loads(segment[0]) if segment else None,e['form'],'form')
+    if candidates is None:
+        sql=CORPUS_EXAMPLE_COLUMNS.format(sentences=key_source,links='lexical_links l')
+        rows=db.execute(sql+filters+order+' LIMIT 20 OFFSET ?',(*params,(page-1)*20)).fetchall()
+    else:
+        ids=candidates[(page-1)*20:page*20]
+        rows=_corpus_example_rows(db,lid,ids)
+    result=_corpus_example_items(db,lex,rows)
+    return {'items':result,'total':total,'reference_total':reference_total,'occurrences':occurrences,'page':page,'pages':max(1,(total+19)//20)}
+
+
+def _corpus_example_rows(db,target,ids):
+    if not ids:return []
+    keys='WITH requested(id) AS (VALUES '+','.join('(?)' for _ in ids)+') '
+    # Start with the page's primary keys even when a target has many occurrences.
+    sql=CORPUS_EXAMPLE_COLUMNS.format(sentences='entries',links='requested CROSS JOIN lexical_links l ON l.id=requested.id')
+    found={r['id']:r for r in db.execute(keys+sql+' WHERE l.lexeme_id=?',(*ids,target))}
+    return [found[xid] for xid in ids if xid in found]
+
+
+def _corpus_example_items(db,lex,rows):
+    bodies=annotations.evidence_cards(db,'corpus',[dict(id=r['record_id'],language_id=r['text_language']) for r in rows])
+    analyses={}
+    if rows:
+        ids=[r['id'] for r in rows]
+        marks=','.join('?' for _ in ids)
+        analyses={r['id']:r for r in db.execute("""SELECT l.id,a.form_id,a.features,c.body component_ref,
+            COALESCE(r.reason,'') review_reason,s.body segment FROM lexical_links l
+            LEFT JOIN morphology_analyses a ON a.id=l.id LEFT JOIN component_links c ON c.id=l.id
+            LEFT JOIN lexical_reviews r ON r.id=l.id LEFT JOIN unit_segments s ON s.id=l.unit_id
+            WHERE l.id IN ("""+marks+')',ids)}
+    result=[];definition=None
+    for row in rows:
+        e=dict(row);e['status']='confirmed';e['entry']=bodies.get(e.pop('record_id'))
+        if e['entry'] is None:e['body']=None
+        analysis=analyses[e['id']]
+        e.update(form_id=analysis['form_id'],features=json.loads(analysis['features']) if analysis['features'] else [],
+                 component_ref=json.loads(analysis['component_ref']) if analysis['component_ref'] else None,
+                 review_reason=analysis['review_reason'])
+        unit=None
         if e['entry'] and 0<=row['word_position']<len(e['entry']['words']):
             word=e['entry']['words'][row['word_position']]
             unit=word if row['kind']=='word' else word['morphemes'][row['unit_position']] if 0<=row['unit_position']<len(word['morphemes']) else None
-            if unit:e['gloss']=unit['gloss'];e['display_gloss']=unit.get('display_gloss',unit['gloss']);e['display_form']=unit.get('display_form',unit['form'])
-        e.update(morphology.analysis(db,e['id']))
-        if e['entry']:annotations.enrich(db,e['entry'],'corpus',e['entry_id'])
+        if unit:
+            e['gloss']=unit['gloss'];e['display_gloss']=unit.get('display_gloss',unit['gloss']);e['display_form']=unit.get('display_form',unit['form'])
+        else:
+            segment=json.loads(analysis['segment']) if analysis['segment'] else None
+            e['display_gloss']=segment_display_gloss(segment,e['gloss'])
+            e['display_form']=segment_display_gloss(segment,e['form'],'form')
         effective=(e['entry'].get('language_id') or e['text_language']) if e['entry'] else None
         e['needs_review']=not e['active'] or effective!=lex['language_id'] or bool(boundary_count(e['form']))
-        e['component_review']=morphology.component_links.review(lex['body'],e.get('component_ref'))
-        e['review_reason']=link_review.reason(db,e['id'])
+        if e['component_ref'] and definition is None:definition=get_lexeme(db,lex['id'],relational=True)['body']
+        e['component_review']=morphology.component_links.review(definition,e['component_ref'])
         e['needs_review']=e['needs_review'] or e['component_review'] or bool(e['review_reason'])
         result.append(e)
-    reference_total=db.execute('SELECT COUNT(*) FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id WHERE l.lexeme_id=?',(lid,)).fetchone()[0]
-    return {'items':result,'total':total,'reference_total':reference_total,'occurrences':occurrence_count(db,lid,kind,form_id),'page':page,'pages':max(1,(total+19)//20)}
+    return result
+
+
+def evidence_rows(db,lid,target,revision,corpus_ids,independent_ids):
+    """Refresh rows from an already displayed page within the committed snapshot."""
+    import journal
+    if any(not isinstance(ids,list) or len(ids)>20 or
+           any(not isinstance(key,str) or not key for key in ids) or len(ids)!=len(set(ids))
+           for ids in (corpus_ids,independent_ids)):
+        raise ValueError('请选择本页的例证')
+    lex=independent_links.identity(db,target)
+    if (not lex or lid not in ('all',lex['language_id']) or
+            journal.workspace_revision(db)!=revision):
+        return {'stale':True}
+    corpus_rows=_corpus_example_rows(db,target,corpus_ids)
+    standalone=dictionary_data.example_rows(db,lex,independent_ids)
+    if len(corpus_rows)!=len(corpus_ids) or len(standalone)!=len(independent_ids):
+        return {'stale':True}
+    history={**journal.state(db,lid),'workspace_revision':revision}
+    return dict(corpus=_corpus_example_items(db,lex,corpus_rows),independent=standalone,history=history)
 
 
 def duplicate(db,lid,request):
@@ -599,7 +800,7 @@ def duplicate(db,lid,request):
     if source['revision']!=request.get('revision'):raise ValueError('条目已变化，请刷新后复制')
     if request.get('confirmed') is not True:raise ValueError('请确认建立独立副本')
     table='lexemes' if kind=='lexeme' else 'morphemes'
-    data=json.loads(db.execute('SELECT body FROM '+table+' WHERE id=?',(source['id'],)).fetchone()[0]);identities={}
+    data=record_sources.read(db,table,source['id']);identities={}
     def collect(value):
         if isinstance(value,list):
             for child in value:collect(child)
@@ -616,8 +817,14 @@ def duplicate(db,lid,request):
         return {k:(copy.deepcopy(v) if k in ('merged_records','converted_from') else identities.get(v,v) if k in keys and isinstance(v,str) and not (external and k in ('usage_id','sense_id','form_id')) else remap(v)) for k,v in value.items()}
     data=remap(data);data['homonym_number']=None;data.pop('created_at',None)
     if kind=='lexeme':
+        source_form=data.pop('headword_source',None)
         confirmation=homonyms.plan(db,lid,source['headword'])['token']
         result=mutate(db,'lexeme-save',dict(headword=source['headword'],body=data,homonym_confirmation=confirmation),lid)
+        if source_form:
+            result['body']['headword_source']=source_form
+            import chinese_mode
+            chinese_mode.write_body(db,result,result['body'])
+            result=get_lexeme(db,result['id'])
     else:result=morpheme_registry.mutate(db,'morpheme-save',dict(form=source['headword'],body=data),lid)
     shared=set()
     for row in db.execute('SELECT * FROM morpheme_components WHERE lexeme_id=?',(source['id'],)).fetchall():
@@ -642,46 +849,19 @@ def duplicate(db,lid,request):
 
 def mutate(db,action,body,lid):
     if action=='lexeme-auto-link':
-        plan=auto_link_plan(db,lid,body.get('text_id',''),body.get('ignore_symbols','-=.'),body.get('ignore_position','edges'))
-        if body.get('token')!=plan['token']: raise ValueError('匹配结果已变化，请重新预览后关联')
-        items=plan['matches']
-        if body.get('mode','strict')=='candidates':
-            selected=body.get('selected',[])
-            if not isinstance(selected,list) or not selected or any(not isinstance(v,str) for v in selected) or len(set(selected))!=len(selected):raise ValueError('请勾选有效的候选')
-            available={r['candidate_id']:r for r in plan['suggestions']}
-            if any(v not in available for v in selected):raise ValueError('候选已变化，请重新预览')
-            items=[available[v] for v in selected]
-            if len({r['unit_id'] for r in items})!=len(items):raise ValueError('同一处语料只能选择一组词条、义项和形式')
-        elif body.get('mode','strict')!='strict':raise ValueError('关联模式无效')
-        import multipart_forms
-        occupied=set()
-        for item in items:
-            coverage=set(item.get('coverage',[]))
-            if coverage&occupied:raise ValueError('所选候选共用了片段，请为每个片段选择一种组合或关联')
-            occupied.update(coverage)
-        for item in long_tasks.steps(items):
-            if item.get('multipart_group'):
-                multipart_forms.apply(db,item,lid)
-                continue
-            if item.get('owner_kind')=='independent':
-                row=db.execute('SELECT body FROM dictionary_examples WHERE id=?',(item['entry_id'],)).fetchone()
-                data=json.loads(row['body'])
-                data.setdefault('targets',[]).append(dict(lexeme_id=item['lexeme_id'],usage_id=item['usage_id'],sense_id=item['sense_id'],form_id=item.get('form_id'),features=[],notes='',segmentation_ref=item['segmentation_ref']))
-                db.execute('UPDATE dictionary_examples SET body=?,revision=revision+1 WHERE id=?',(json.dumps(data,ensure_ascii=False),item['entry_id']))
-                continue
-            link_id=str(uuid.uuid4())
-            db.execute('INSERT INTO lexical_links(id,unit_id,lexeme_id,usage_id,sense_id,notes,language_id,revision) VALUES(?,?,?,?,?,?,?,1)',(link_id,item['unit_id'],item['lexeme_id'],item['usage_id'],item['sense_id'],'',lid))
-            if item.get('form_id'):morphology.set_analysis(db,link_id,{'form_id':item['form_id']},get_lexeme(db,item['lexeme_id']))
-        return {'ok':True,'count':len(items)}
+        import auto_link_update
+        return auto_link_update.apply(db,body,lid)
     if action=='lexeme-save':
+        import dictionary_rows
         headword=text(body.get('headword','')).strip()
-        if not headword: raise ValueError('请填写词形')
         xid=body.get('id')
         old=get_lexeme(db,xid) if xid else None
         if old and old['target_kind']=='morpheme':raise ValueError('请在语素列表中编辑此记录')
         import multipart_forms,dictionary_link_changes
-        link_fingerprint=dictionary_link_changes.token(db,old,body) if old else None
+        link_fingerprint=dictionary_link_changes.token(db,old,body) if old and body.get('link_change_token') else None
         data=normalize(multipart_forms.align_spellings(body.get('body',{}),headword,old,'headword'))
+        if old and 'headword_source' not in body.get('body',{}) and old['body'].get('headword_source'):
+            data['headword_source']=old['body']['headword_source']
         categories.register_usages(db,lid,data,True)
         if old and 'form_parts' not in body.get('body',{}) and old['body'].get('form_parts'):
             data['form_parts']=old['body']['form_parts']
@@ -695,22 +875,30 @@ def mutate(db,action,body,lid):
             data['paradigms']=old['body']['paradigms']
             paradigms.normalize(data,data)
         if old and old['revision']!=body.get('revision'):raise ValueError('词条已修改，请重新打开后编辑')
-        homonyms.prepare(db,lid,headword,data,old,body.get('homonym_confirmation'))
         registry_plan=None
         if 'morpheme_confirmation' in body:
             registry_plan=morpheme_registry.save_plan(db,lid,xid,data,body.get('morpheme_assignments'))
-            if registry_plan['token']!=body['morpheme_confirmation']:raise ValueError('语素或组分已变化，请再次保存并核对同形语素')
+            confirmation=body['morpheme_confirmation']
+            if registry_plan['token']!=confirmation and (confirmation!='@assigned' or registry_plan['items']):
+                raise ValueError('语素或组分已变化，请再次保存并核对同形语素')
+            if data.get('headword_source'):
+                morpheme_registry.project_save_plan(data,registry_plan,body.get('morpheme_choices',[]))
+        import chinese_mode
+        headword=chinese_mode.apply(db,lid,headword,data,old)
+        if not headword:raise ValueError('请填写词形')
+        if data.get('headword_source') and data.get('form_parts'):
+            raise ValueError('基本词形生成与不连续多部分形式须择一使用')
+        homonyms.prepare(db,lid,headword,data,old,body.get('homonym_confirmation'))
         if xid:
-            old=get_lexeme(db,xid)
-            if old['revision']!=body.get('revision'): raise ValueError('词条已修改，请重新打开后编辑')
             dictionary_link_changes.apply(db,old,data,body,link_fingerprint)
-            db.execute('UPDATE lexemes SET headword=?,body=?,revision=revision+1 WHERE id=?',(headword,json.dumps(data,ensure_ascii=False),xid))
+            dictionary_rows.write(db,'lexeme',xid,data,columns=dict(headword=headword))
             if old['headword']!=headword:homonyms.clear_singleton(db,lid,old['headword'])
         else:
             xid=str(uuid.uuid4())
-            db.execute('INSERT INTO lexemes(id,language_id,headword,body) VALUES(?,?,?,?)',(xid,lid,headword,json.dumps(data,ensure_ascii=False)))
+            dictionary_rows.write(db,'lexeme',xid,data,columns=dict(language_id=lid,headword=headword),insert=True)
         result=get_lexeme(db,xid)
-        if registry_plan is not None:morpheme_registry.apply_save_plan(db,result,lid,registry_plan,body.get('morpheme_choices',[]))
+        if registry_plan is None:return result
+        morpheme_registry.apply_save_plan(db,result,lid,registry_plan,body.get('morpheme_choices',[]))
         return get_lexeme(db,xid)
     if action=='lexeme-delete':
         old=get_lexeme(db,body['id'])
@@ -724,21 +912,18 @@ def mutate(db,action,body,lid):
         homonyms.clear_singleton(db,lid,old['headword'])
         return {'ok':True}
     if action=='lexeme-unlink' and body.get('all') is True:
-        target=get_lexeme(db,body.get('lexeme_id'))
-        if target['language_id']!=lid:raise ValueError('词条或语言范围已变化，请重新打开后操作')
+        target=independent_links.identity(db,body.get('lexeme_id'))
+        if not target or target['language_id']!=lid:raise ValueError('词条或语言范围已变化，请重新打开后操作')
         if body.get('revision')!=target['revision']:raise ValueError('词条已修改，请重新选择词条')
         if body.get('confirmed') is not True:raise ValueError('请确认解除全部句子关联')
-        rows=list(db.execute('SELECT id FROM lexical_links WHERE lexeme_id=?',(target['id'],)))
-        for table in ('component_links','lexical_reviews','morphology_analyses','lexical_links'):
-            db.executemany('DELETE FROM '+table+' WHERE id=?',[(r['id'],) for r in rows])
+        for table in ('component_links','lexical_reviews','morphology_analyses'):
+            db.execute('DELETE FROM '+table+' WHERE id IN (SELECT id FROM lexical_links WHERE lexeme_id=?)',
+                       (target['id'],))
+        corpus_count=db.execute('DELETE FROM lexical_links WHERE lexeme_id=?',(target['id'],)).rowcount
         count=0
-        for row in db.execute('SELECT * FROM dictionary_examples WHERE language_id=?',(lid,)).fetchall():
-            data=json.loads(row['body']);before=data.get('targets',[])
-            kept=[t for t in before if t['lexeme_id']!=target['id']]
-            if len(kept)==len(before):continue
-            data['targets']=kept;count+=len(before)-len(kept)
-            db.execute('UPDATE dictionary_examples SET body=?,revision=revision+1 WHERE id=?',(json.dumps(data,ensure_ascii=False),row['id']))
-        return {'ok':True,'count':len(rows)+count,'corpus':len(rows),'independent':count}
+        for rid,positions in independent_links.grouped_positions(db,target['id'],lid).items():
+            independent_links.remove(db,rid,positions);count+=len(positions)
+        return {'ok':True,'count':corpus_count+count,'corpus':corpus_count,'independent':count}
     if action=='lexeme-unlink':
         items=body.get('items',[body])
         if not isinstance(items,list) or not 1<=len(items)<=100:raise ValueError('请选择本页要解除的关联')
@@ -754,21 +939,20 @@ def mutate(db,action,body,lid):
             db.executemany('DELETE FROM '+table+' WHERE id=?',[(r['id'],) for r in rows])
         return {'ok':True,'count':len(rows)}
     if action=='dictionary-examples-unlink':
-        target=get_lexeme(db,body.get('lexeme_id'))
-        if target['language_id']!=lid:raise ValueError('语言范围已变化，请重新打开后操作')
+        target=independent_links.identity(db,body.get('lexeme_id'))
+        if not target or target['language_id']!=lid:raise ValueError('语言范围已变化，请重新打开后操作')
         items=body.get('items')
         if not isinstance(items,list) or not 1<=len(items)<=20 or any(not isinstance(i,dict) or not isinstance(i.get('id'),str) for i in items):raise ValueError('请选择本页要解除的例句')
         if len({i['id'] for i in items})!=len(items):raise ValueError('请勿重复选择同一例句')
+        positions=independent_links.grouped_positions(db,target['id'],lid,body.get('form_id','all'),ids=[i['id'] for i in items])
         updates=[]
         for item in items:
-            row=db.execute('SELECT * FROM dictionary_examples WHERE id=?',(item['id'],)).fetchone()
+            row=db.execute('SELECT id,language_id,revision FROM dictionary_examples WHERE id=?',(item['id'],)).fetchone()
             if not row or row['revision']!=item.get('revision'):raise ValueError('例句关联已变化，请刷新后重试')
             if row['language_id']!=lid:raise ValueError('例句所属语言不一致')
-            data=json.loads(row['body']);before=data['targets'];form=body.get('form_id','all')
-            data['targets']=[t for t in before if not (t['lexeme_id']==target['id'] and (form=='all' or (not t.get('form_id') if form=='unassigned' else t.get('form_id')==form)))]
-            if len(before)==len(data['targets']):raise ValueError('例句关联已变化，请刷新后重试')
-            updates.append((json.dumps(data,ensure_ascii=False),row['id']))
-        db.executemany('UPDATE dictionary_examples SET body=?,revision=revision+1 WHERE id=?',updates)
+            if row['id'] not in positions:raise ValueError('例句关联已变化，请刷新后重试')
+            updates.append(row['id'])
+        for rid in updates:independent_links.remove(db,rid,positions[rid])
         return {'ok':True,'count':len(updates)}
     if action=='lexeme-link':
         u=unit_info(db,body['unit_id'])
@@ -810,7 +994,7 @@ def export_bundle(db,lid,stream=False):
         if link['lexeme_id'] in rows:continue
         r=db.execute('SELECT * FROM dictionary_targets WHERE id=?',(link['lexeme_id'],)).fetchone()
         rows[r['id']]=dict(r)
-    extras=[{**gloss_inheritance.export_body(db,'independent',e),'library_number':e['library_number']} for e in gloss_inheritance.iter_rows(db,db.execute('SELECT d.*,n.number library_number FROM dictionary_examples d JOIN example_numbers n ON n.id=d.id AND n.language_id=d.language_id WHERE d.language_id=? ORDER BY n.ordering',(lid,)),'independent')]
+    extras=[gloss_inheritance.export_body(db,'independent',e) for e in gloss_inheritance.iter_rows(db,db.execute('SELECT d.id,d.language_id,d.revision,n.number library_number FROM dictionary_examples d JOIN example_numbers n ON n.id=d.id AND n.language_id=d.language_id WHERE d.language_id=? ORDER BY n.ordering',(lid,)),'independent',relational=True)]
     for e in extras:
         for target in json.loads(e['body'])['targets']:
             if target['lexeme_id'] in rows:continue
@@ -833,7 +1017,9 @@ def export_bundle(db,lid,stream=False):
     layer_ids={c['layer_id'] for c in cells}
     layer_defs=[dict(l) for l in db.execute('SELECT * FROM annotation_layers') if l['language_id']==lid or l['id'] in layer_ids]
     tag_languages=languages|{l['language_id'] for l in layer_defs}
-    tag_languages|={json.loads(r[0]).get('language_id') or lid for r in db.execute('SELECT e.body FROM entries e JOIN texts t ON t.id=e.text_id WHERE t.language_id=?',(lid,))}
+    source='corpus_sentence_keys' if record_sources.native(db) else 'entries'
+    field='e.language_id' if record_sources.native(db) else "json_extract(e.body,'$.language_id')"
+    tag_languages|={r[0] or lid for r in db.execute(f'SELECT DISTINCT {field} FROM {source} e JOIN texts t ON t.id=e.text_id WHERE t.language_id=?',(lid,))}
     link_ids={l['id'] for l in links}
     analyses=[dict(r) for r in db.execute('SELECT * FROM morphology_analyses') if r['id'] in link_ids]
     segments=streaming_json.Rows(db,'SELECT s.* FROM unit_segments s JOIN exchange_units u ON u.id=s.id',transform=lambda r:gloss_inheritance.export_segment(db,r)) if stream else [gloss_inheritance.export_segment(db,r) for r in db.execute('SELECT * FROM unit_segments') if r['id'] in units]
@@ -841,6 +1027,7 @@ def export_bundle(db,lid,stream=False):
 
 
 def import_bundle(db,bundle,language_map,entry_map,lid,layouts=None):
+    import dictionary_rows
     if layouts is None:
         layouts={}
         for target in language_map.values():
@@ -852,7 +1039,7 @@ def import_bundle(db,bundle,language_map,entry_map,lid,layouts=None):
     def remap_features(data):
         try:data['features']=[tagmap[t] for t in data.get('features',[])]
         except KeyError:raise ValueError('形态分析缺少语法标签定义')
-    relations={};structures={};linkmap={}
+    relations={};structures={};sources={};linkmap={}
     xmap={};submap={};umap={r['id']:str(uuid.uuid4()) for r in bundle.get('corpus_units',[])}
     type_map={}
     for t in long_tasks.steps(bundle.get('writing_types',[])):
@@ -868,6 +1055,7 @@ def import_bundle(db,bundle,language_map,entry_map,lid,layouts=None):
         try:data['semantic_classes']=[semantic_map[i] for i in data['semantic_classes']]
         except KeyError:raise ValueError('词条缺少语义分类定义')
         structures[x['id']]=data.pop('word_structure',{})
+        if data.get('headword_source'):sources[x['id']]=data.pop('headword_source')
         relations[x['id']]=data.pop('relation',None)
         remap_features(data)
         for part in long_tasks.steps([*data['variants'],*data['usages'],*(s for u in data['usages'] for s in u['senses'])]):remap_features(part)
@@ -890,10 +1078,11 @@ def import_bundle(db,bundle,language_map,entry_map,lid,layouts=None):
         if not relation:continue
         if relation['base_id'] not in xmap:raise ValueError('形态关系缺少所属基本条目')
         x=get_lexeme(db,xmap[old]);x['body']['relation']={**relation,'base_id':xmap[relation['base_id']]}
-        db.execute('UPDATE '+('morphemes' if x['target_kind']=='morpheme' else 'lexemes')+' SET body=? WHERE id=?',(json.dumps(x['body'],ensure_ascii=False),x['id']))
+        dictionary_rows.write(db,x['target_kind'],x['id'],x['body'],bump=False)
     for old,structure in long_tasks.steps(structures.items()):
         x=get_lexeme(db,xmap[old]);x['body']['word_structure']=morphology.word_structure.remap(structure,old,xmap,submap,classmap,type_map,tagmap)
-        db.execute('UPDATE '+('morphemes' if x['target_kind']=='morpheme' else 'lexemes')+' SET body=? WHERE id=?',(json.dumps(x['body'],ensure_ascii=False),x['id']))
+        if old in sources:x['body']['headword_source']=sources[old]
+        dictionary_rows.write(db,x['target_kind'],x['id'],x['body'],bump=False)
     missing_entries={}
     for u in long_tasks.steps(bundle.get('corpus_units',[])):
         if u['kind'] not in ('word','morpheme') or not isinstance(u['position'],int): raise ValueError('词或语素引用格式不正确')
@@ -1000,20 +1189,72 @@ def morpheme_citation_match(kind,source,spelling):
     return bool(key(source)) and key(source)==key(spelling)
 
 
-def auto_link_plan(db,lid,text_id='',ignore_symbols='-=.',ignore_position='edges'):
+def auto_match_options(text_id,ignore_symbols,ignore_position):
+    if not isinstance(ignore_symbols,str) or any(c not in '-=.' for c in ignore_symbols) or ignore_position not in ('edges','all'):
+        raise ValueError('忽略词形标记的设置无效')
+    return text_id,''.join(c for c in '-=.' if c in ignore_symbols),ignore_position
+
+
+def auto_definitions(target,lookup,tag_names):
+    """Generate the ordered dictionary senses and realizations used by both readers."""
+    import multipart_forms
+
+    body=target['body']
+    labels={(u['id'],s['id']):f'{ui}.{si}' for ui,u in enumerate(paradigms.usages(body),1)
+            for si,s in enumerate(u['senses'],1)}
+    gloss_key=lambda gloss,features:auto_gloss_key(gloss,lookup,features)
+    for usage,sense,form in paradigms.matching_candidates(body,target['headword'],gloss_key):
+        if not sense['short_gloss']:continue
+        spelling=form['form'] if form else target['headword']
+        features=list(dict.fromkeys([*body.get('features',[]),*usage.get('features',[]),*sense.get('features',[]),
+                                    *(form.get('features',[]) if form else [])]))
+        reason='词形一致；简短释义「'+sense['short_gloss']+'」'+('＋固有特征 '+', '.join(tag_names[f] for f in features) if features else '')+' 完整匹配'
+        if form:reason+='；使用已登记形式「'+spelling+'」'
+        yield gloss_key(sense['short_gloss'],features),multipart_forms.forms(form or body,spelling),dict(
+            target_kind=target['target_kind'],lexeme_id=target['id'],lexeme_revision=target['revision'],
+            headword=target['headword'],homonym_number=body.get('homonym_number'),usage_id=usage['id'],
+            pos=usage['pos'],sense_id=sense['id'],form_id=form['id'] if form else None,
+            match_reason=reason,matched_form=spelling,short_gloss=sense['short_gloss'],
+            sense_label=labels[usage['id'],sense['id']],definition=sense.get('definition',''))
+
+
+def auto_match_choices(candidates,relaxed):
+    identity=lambda c:(c['lexeme_id'],c['usage_id'],c['sense_id'],c['form_id'])
+    exact_ids={identity(c) for c in candidates}
+    possible=[c for c in relaxed if identity(c) not in exact_ids]
+    if not possible:
+        # Multiple exact realizations of one sense can yield a sense-only link.
+        grouped={}
+        for candidate in candidates:
+            key=(candidate['lexeme_id'],candidate['usage_id'],candidate['sense_id'])
+            if key in grouped:
+                candidate={**grouped[key],'form_id':None,'match_reason':'词形与完整标注唯一匹配此义项；具体形式有多个候选，未细分形式'}
+            grouped[key]=candidate
+        candidates=list(grouped.values())
+    return candidates,possible
+
+
+def auto_link_plan(db,lid,text_id='',ignore_symbols='-=.',ignore_position='edges',*,review=False,prepare_index=False):
     """Canonically equivalent forms plus complete gloss/features, scoped by language."""
+    if not db.in_transaction:db.execute('BEGIN')
     if not db.execute('SELECT 1 FROM languages WHERE id=?',(lid,)).fetchone():
         raise ValueError('请先选择一个语言，再批量关联')
     if text_id and text_id!='@independent' and not db.execute('SELECT 1 FROM texts WHERE id=? AND language_id=?',(text_id,lid)).fetchone():
         raise ValueError('文本不属于当前语言，请重新选择')
-    if not isinstance(ignore_symbols,str) or any(c not in '-=.' for c in ignore_symbols) or ignore_position not in ('edges','all'):raise ValueError('忽略词形标记的设置无效')
-    ignore_symbols=''.join(c for c in '-=.' if c in ignore_symbols)
+    options=auto_match_options(text_id,ignore_symbols,ignore_position)
+    _,ignore_symbols,ignore_position=options
     # Compare equivalent Unicode spellings (e.g. ǰ and j + combining caron)
     # without rewriting source forms, segmentation references or dictionary data.
+    from functools import lru_cache
+    import auto_match_sources
+    import replacement_preview
+    if review and (cached:=replacement_preview.latest_auto_match(db,lid,options)) is not None:return cached
+    @lru_cache(maxsize=4096)
     def form_key(value):return unicodedata.normalize('NFC',corpus.plain(value))
+    translation=str.maketrans('', '', ignore_symbols)
     def stripped(value):
         value=form_key(value)
-        return (value.strip(ignore_symbols) if ignore_position=='edges' else value.translate(str.maketrans('', '', ignore_symbols))) if ignore_symbols else value
+        return (value.strip(ignore_symbols) if ignore_position=='edges' else value.translate(translation)) if ignore_symbols else value
     import multipart_forms
     multipart_catalog=multipart_forms.Catalog()
     multipart_suggestions=[];multipart_warnings=[]
@@ -1023,35 +1264,42 @@ def auto_link_plan(db,lid,text_id='',ignore_symbols='-=.',ignore_position='edges
     lookups={}
     for t in tag_rows:
         for name in [t['symbol'],*t['aliases']]:lookups.setdefault(t['language_id'],{})[name.casefold()]=t['id']
-    def catalog():
-        cursor=db.execute('SELECT * FROM dictionary_targets ORDER BY id')
-        while batch:=cursor.fetchmany(200):
-            items=[{**dict(x),'body':json.loads(x['body'])} for x in batch]
-            homonyms.decorate_many(db,[x for x in items if x['target_kind']=='lexeme'])
-            yield from items
-    for x in catalog():
-        xb=x['body']
-        labels={(u['id'],s['id']):f'{ui}.{si}' for ui,u in enumerate(paradigms.usages(xb),1) for si,s in enumerate(u['senses'],1)}
-        for u,s,form in paradigms.matching_candidates(xb,x['headword'],lambda gloss,features:auto_gloss_key(gloss,lookups.get(x['language_id'],{}),features)):
-            if not s['short_gloss']:continue
-            features=list(dict.fromkeys([*xb.get('features',[]),*u.get('features',[]),*s.get('features',[]),*(form.get('features',[]) if form else [])]))
-            spelling=form['form'] if form else x['headword']
-            key=(x['language_id'],form_key(spelling),auto_gloss_key(s['short_gloss'],lookups.get(x['language_id'],{}),features))
-            reason='词形一致；简短释义「'+s['short_gloss']+'」'+('＋固有特征 '+', '.join(tag_names[f] for f in features) if features else '')+' 完整匹配'
-            if form:reason+='；使用已登记形式「'+spelling+'」'
-            index.setdefault(key,[]).append(dict(target_kind=x['target_kind'],lexeme_id=x['id'],lexeme_revision=x['revision'],headword=x['headword'],homonym_number=xb.get('homonym_number'),usage_id=u['id'],pos=u['pos'],sense_id=s['id'],form_id=form['id'] if form else None,match_reason=reason,matched_form=spelling,short_gloss=s['short_gloss'],sense_label=labels[(u['id'],s['id'])],definition=s.get('definition','')))
-            parts=multipart_forms.forms(form or xb,spelling)
+    word=auto_match_sources.word_cache()
+    native=record_sources.native(db)
+    indexed=None
+    if native and prepare_index:
+        import auto_match_index
+        indexed=auto_match_index.rows(db,lid,options,tag_rows,lookups,tag_names,word)
+    source_keys=auto_match_sources.source_forms(db,lid,text_id,word,stripped) if native and indexed is None else None
+    targets=auto_match_sources.catalog(db,source_keys,stripped,narrow=text_id in ('','@independent')) if indexed is None else ()
+    for target in targets:
+        language=target['language_id']
+        for gloss,parts,candidate in auto_definitions(target,lookups.get(language,{}),tag_names):
+            spelling=candidate['matched_form']
+            normalized=stripped(spelling)
+            if source_keys is not None and not parts and not any(normalized in scope.get(language,()) for scope in source_keys.values()):continue
+            key=(language,form_key(spelling),gloss)
+            index.setdefault(key,[]).append(candidate)
             if parts:
-                candidate=index[key][-1]
-                multipart_catalog.add(x['language_id'],key[2],parts,candidate,xb)
+                multipart_catalog.add(language,gloss,parts,candidate,target['body'])
                 alias=(key[0],form_key(multipart_forms.lookup(parts)),key[2])
                 if alias!=key:index.setdefault(alias,[]).append(candidate)
-            normalized=stripped(spelling)
-            if normalized:relaxed.setdefault((key[0],normalized,key[2]),[]).append(index[key][-1])
+            if normalized:relaxed.setdefault((key[0],normalized,key[2]),[]).append(candidate)
     matches=[];ambiguous=[];suggestions=[];linked=0
-    duplicates={}
-    def source_rows():
-        cursor=db.execute("SELECT e.id,e.revision entry_revision,e.body,e.position sentence_position,t.title FROM entries e JOIN texts t ON t.id=e.text_id WHERE t.language_id=? AND (?='' OR t.id=?) ORDER BY t.id,e.position",(lid,text_id,text_id))
+    candidate_forms=defaultdict(set)
+    if source_keys is not None and not multipart_catalog:
+        for language,form,_ in index:candidate_forms[language].add(stripped(form))
+        for language,form,_ in relaxed:candidate_forms[language].add(form)
+
+    @lru_cache(maxsize=8192)
+    def independent_form_may_match(language,form):
+        return bool(candidate_forms[language] & {stripped(form),stripped(clean(form))})
+
+    def has_matches(kind):
+        return source_keys is None or multipart_catalog or any(
+            candidate_forms[language]&forms for language,forms in source_keys[kind].items())
+    def legacy_corpus():
+        cursor=db.execute("SELECT e.id,e.revision entry_revision,e.body,e.position sentence_position,t.title FROM entries_documents e JOIN texts t ON t.id=e.text_id WHERE t.language_id=? AND (?='' OR t.id=?) ORDER BY t.id,e.position",(lid,text_id,text_id))
         while batch:=cursor.fetchmany(200):
             grouped=defaultdict(list)
             # Read only matching inputs, once per bounded batch, in the same
@@ -1069,89 +1317,87 @@ def auto_link_plan(db,lid,text_id='',ignore_symbols='-=.',ignore_position='edges
                     word=body['words'][parent['position']]
                     if '<' in word['form'] or '#' in word['form'] or '#' in word['gloss']:
                         semantic[parent['id']]=analyze(dict(ipa='',translation='',words=[dict(word)]))['words'][0].get('morphemes',[])
-                def meaning(u):
-                    if u['kind']=='word':return clean(u['form']),u['gloss']
-                    morphs=semantic.get(u['parent_id'],[])
-                    m=morphs[u['position']] if u['kind']=='morpheme' and u['position']<len(morphs) else {}
-                    return m.get('lookup_form',u['form']),m.get('display_gloss',u['gloss'])
-                duplicates.clear()
-                duplicates.update({u['parent_id']:u for u in units if u['kind']=='morpheme' and u['parent_id'] in parents and meaning(u)==meaning(parents[u['parent_id']])})
-                metadata={k:entry[k] for k in ('entry_revision','sentence_position','title')}
+                yield {**dict(entry),'effective_language_id':body.get('language_id') or lid},body,units,semantic
+
+    def independent_units(example,wi,w,refs,effective):
+        for unit,aliases in auto_match_sources.independent_slots(w):
+            key=unit['key'];whole=key=='@word'
+            match_form=unit.get('lookup_form',unit['form']);match_gloss=unit.get('display_gloss',unit['gloss'])
+            choices=matching(effective,match_form,match_gloss)
+            if not any(choices):continue
+            keys=(key,*aliases)
+            rid=example['id'];revision=example['revision']
+            extra={'coverage':[f'independent:{rid}:{wi}:'+k for k in unit.get('members',[key])]} if multipart_catalog and not whole else {}
+            yield dict(id=f'independent:{rid}:{wi}:{key}',entry_id=rid,entry_revision=revision,revision=revision,
+                kind='word' if whole else 'morpheme',parent_id=None,position=wi,form=unit['form'],gloss=unit['gloss'],
+                display_form=unit.get('display_form',unit['form']),match_form=match_form,match_gloss=match_gloss,
+                choices=choices,sentence_position=example['sentence_position'],
+                title='独立例句库',link_id=any((wi,k) in refs for k in keys),owner_kind='independent',
+                effective_language_id=effective,source_word=w,source_unit=unit,**extra)
+
+    def source_rows():
+        if text_id!='@independent' and has_matches('corpus'):
+            entries=auto_match_sources.corpus_batches(db,lid,text_id,word,bool(multipart_catalog)) if native else legacy_corpus()
+            for entry,body,units,semantic in entries:
+                metadata={k:entry[k] for k in ('entry_revision','sentence_position','title','effective_language_id')}
                 if multipart_catalog:
                     proposed,notes=multipart_forms.proposal_rows(db,'corpus',entry['id'],body,units,multipart_catalog,lid,
                         lambda lang,g:auto_gloss_key(g,lookups.get(lang,{})),metadata)
                     multipart_suggestions.extend(proposed);multipart_warnings.extend(notes)
-                for u in units:
-                    match_form,match_gloss=meaning(u)
-                    morphs=semantic.get(u['parent_id'],[])
-                    live=morphs[u['position']] if u['kind']=='morpheme' and u['position']<len(morphs) else {}
-                    yield {**u,**metadata,'body_data':body,'match_form':match_form,'match_gloss':match_gloss,'display_form':live.get('display_form',u['form'])}
-        duplicates.clear()
-        if text_id in ('','@independent'):
-            import segmentation
-            for number,example in enumerate(db.execute('SELECT * FROM dictionary_examples WHERE language_id=? ORDER BY rowid',(lid,)),1):
-                data=analyze(json.loads(example['body']))
+                for u,duplicate,(match_form,match_gloss,display_form) in auto_match_sources.corpus_slots(units,semantic,body if not native else None):
+                    choices=matching(entry['effective_language_id'],match_form,match_gloss)
+                    if not any(choices):continue
+                    yield {**u,**metadata,'match_form':match_form,'match_gloss':match_gloss,'choices':choices,
+                           'display_form':display_form,'link_id':u['link_id'] or duplicate and duplicate['link_id']}
+        if text_id in ('','@independent') and has_matches('independent'):
+            if native and not multipart_catalog:
+                for row,w,refs in auto_match_sources.independent_batches(db,lid,word,independent_form_may_match):
+                    yield from independent_units(row,row['position'],w,refs,row['effective_language_id'])
+                return
+            examples=auto_match_sources.independent_bodies(db,lid) if native else (
+                (row,independent_links.source_body(db,row['id'],json.loads(row['body'])))
+                for row in db.execute('SELECT * FROM dictionary_examples_documents WHERE language_id=? ORDER BY rowid',(lid,)))
+            for number,(example,data) in enumerate(long_tasks.steps(examples),1):
+                data=analyze(data)
+                refs={(r['word'],r['key']) for t in data['targets']
+                      if (r:=t.get('segmentation_ref')) and not r.get('detached')}
                 if multipart_catalog:
                     proposed,notes=multipart_forms.proposal_rows(db,'independent',example['id'],data,[],multipart_catalog,lid,
                         lambda lang,g:auto_gloss_key(g,lookups.get(lang,{})),dict(entry_revision=example['revision'],sentence_position=number,title='独立例句库'))
                     multipart_suggestions.extend(proposed);multipart_warnings.extend(notes)
+                example={**dict(example),'sentence_position':number}
                 for wi,w in enumerate(data['words']):
-                    if w.get('punctuation') or boundary_count(w['form']):continue
-                    lookup_form=w.get('analysis_form',w['form'])
-                    units=[dict(key='@word',form=w['form'],lookup_form=lookup_form,gloss=w['gloss'],fragments=[])]
-                    word_keys={'@word'}
-                    if not w.get('infix_ambiguous') and not w.get('group_reviews'):
-                        for u in w.get('morphemes',[]):
-                            if (u.get('lookup_form',u['form']),u.get('display_gloss',u['gloss']))==(lookup_form,w['gloss']):word_keys.add(u['key'])
-                            else:units.append(u)
-                    for unit in units:
-                        ref=segmentation.reference(w,wi,unit)
-                        keys=word_keys if unit['key']=='@word' else {unit['key']}
-                        linked_here=any(t.get('segmentation_ref',{}).get('word')==wi and t.get('segmentation_ref',{}).get('key') in keys and not t.get('segmentation_ref',{}).get('detached') for t in data.get('targets',[]))
-                        extra={'coverage':[f'independent:{example["id"]}:{wi}:'+k for k in unit.get('members',[unit['key']])]} if multipart_catalog and unit['key']!='@word' else {}
-                        yield dict(id='independent:'+example['id']+':'+str(wi)+':'+unit['key'],entry_id=example['id'],entry_revision=example['revision'],revision=example['revision'],kind='word' if unit['key']=='@word' else 'morpheme',parent_id=None,position=wi,form=unit['form'],gloss=unit['gloss'],display_form=unit.get('display_form',unit['form']),match_form=unit.get('lookup_form',unit['form']),match_gloss=unit.get('display_gloss',unit['gloss']),body_data=data,sentence_position=number,title='独立例句库',link_id=linked_here,owner_kind='independent',segmentation_ref=ref,**extra)
+                    yield from independent_units(example,wi,w,refs,data.get('language_id') or lid)
     choices=OrderedDict();choice_bytes=0
     def matching(effective,form,gloss):
         nonlocal choice_bytes
         key=(effective,form,gloss);saved=choices.get(key)
         if saved is not None:choices.move_to_end(key);return saved[:2]
         if not form.strip() or boundary_count(form):return [],[]
-        gloss_key=auto_gloss_key(gloss,lookups.get(effective,{}))
-        candidates=index.get((effective,form_key(form),gloss_key),[])
-        identity=lambda c:(c['lexeme_id'],c['usage_id'],c['sense_id'],c['form_id'])
-        exact_ids={identity(c) for c in candidates}
         normalized=stripped(form) if ignore_symbols else ''
-        possible=[c for c in relaxed.get((effective,normalized,gloss_key),[]) if identity(c) not in exact_ids] if normalized else []
-        if not possible:
-            # Multiple exact forms of one sense still permit a sense-only link.
-            # With marked alternatives, retain each actual form for selection;
-            # collapsing them could invent a primary-form candidate identity.
-            grouped={}
-            for c in candidates:
-                key_sense=(c['lexeme_id'],c['usage_id'],c['sense_id'])
-                if key_sense in grouped:
-                    grouped[key_sense]={**grouped[key_sense],'form_id':None,'match_reason':'词形与完整标注唯一匹配此义项；具体形式有多个候选，未细分形式'}
-                else:grouped[key_sense]=c
-            candidates=list(grouped.values())
+        if source_keys is not None and not multipart_catalog and stripped(form) not in candidate_forms[effective]:return [],[]
+        gloss_key=auto_gloss_key(gloss,lookups.get(effective,{}))
+        candidates,possible=auto_match_choices(index.get((effective,form_key(form),gloss_key),[]),
+            relaxed.get((effective,normalized,gloss_key),[]) if normalized else ())
         size=256+4*sum(map(len,key))+64*(len(candidates)+len(possible))
         if size<=4*1024**2:
             while choices and (len(choices)>=4096 or choice_bytes+size>4*1024**2):choice_bytes-=choices.popitem(last=False)[1][2]
             choices[key]=(candidates,possible,size);choice_bytes+=size
         return candidates,possible
-    for r in source_rows():
-        body=r.get('body_data')
-        if body is None:body=json.loads(r['body'])
-        if r['kind']=='word' and body['words'][r['position']].get('punctuation'): continue
-        if r['kind']=='morpheme' and r['parent_id'] in duplicates: continue
-        effective=body.get('language_id') or lid
-        candidates,possible=matching(effective,r.get('match_form',r['form']),r.get('match_gloss',r['gloss']))
-        if not candidates and not possible: continue
-        if r['link_id'] or duplicates.get(r['id'],{}).get('link_id'):
+    for r in indexed if indexed is not None else source_rows():
+        if isinstance(r,int):
+            linked+=r;continue
+        effective=r['effective_language_id']
+        candidates,possible=r['choices']
+        if r.get('link_id'):
             linked+=1;continue
         item={k:r[k] for k in ('entry_id','entry_revision','kind','form','gloss','title','sentence_position')}
         item.update(unit_id=r['id'],unit_revision=r['revision'],effective_language_id=effective,display_form=r.get('display_form',r['form']),display_gloss=r.get('match_gloss',r['gloss']))
         if r.get('coverage'):item['coverage']=r['coverage']
-        if r.get('owner_kind'):item.update(owner_kind=r['owner_kind'],segmentation_ref=r['segmentation_ref'])
+        if r.get('owner_kind'):
+            import segmentation
+            ref=r.get('segmentation_ref') or segmentation.reference(r['source_word'],r['position'],r['source_unit'])
+            item.update(owner_kind=r['owner_kind'],segmentation_ref=ref)
         if possible:
             # Exact forms must not hide eligible marked alternatives, or be
             # applied by the strict batch button while those remain unresolved.
@@ -1172,6 +1418,11 @@ def auto_link_plan(db,lid,text_id='',ignore_symbols='-=.',ignore_position='edges
     multipart_forms.finish_plan(matches,ambiguous,suggestions,multipart_suggestions)
     payload=dict(language_id=lid,text_id=text_id,matches=matches,ambiguous=ambiguous,already_linked=linked,suggestions=suggestions,ignore_symbols=ignore_symbols,ignore_position=ignore_position)
     if multipart_warnings:payload['multipart_warnings']=multipart_warnings
+    if review and replacement_preview.store(db,'auto-match',lid,payload,None,options):return payload
+    return sign_auto_plan(payload)
+
+
+def sign_auto_plan(payload):
     # Keep the exact canonical token while letting the native JSON encoder
     # handle each occurrence. Never allocate a second full preview document.
     digest=hashlib.sha256();encoder=json.JSONEncoder(sort_keys=True,ensure_ascii=False)

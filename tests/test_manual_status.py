@@ -1,3 +1,4 @@
+import source_fixtures
 import copy
 import json
 import unittest
@@ -21,9 +22,9 @@ class RetiredStatusTests(unittest.TestCase):
     def test_old_data_and_undo_migrate_without_touching_phonology(self):
         m=self.call('/api/morpheme-save',{'form':'a','body':{'notes':'田野笔记'}})[1]
         with server.connect(audit=False) as db:
-            row=dict(db.execute('SELECT rowid,* FROM morphemes WHERE id=?',(m['id'],)).fetchone())
+            row=dict(db.execute('SELECT rowid,* FROM morphemes_documents WHERE id=?',(m['id'],)).fetchone())
             old=json.loads(row['body']);old['status']='disputed';row['body']=json.dumps(old)
-            db.execute('UPDATE morphemes SET body=? WHERE id=?',(row['body'],m['id']))
+            source_fixtures.replace(db,'morphemes',m['id'],row['body'])
             db.execute('UPDATE undo_steps SET changes=? WHERE id=(SELECT max(id) FROM undo_steps)',(json.dumps([dict(table='morphemes',before=None,after=row)]),))
             metadata=json.loads(db.execute("SELECT metadata FROM languages WHERE id='ordos'").fetchone()[0])
             metadata['phonology_test']={'status':'pending','assignments':{'a':'confirmed'}}

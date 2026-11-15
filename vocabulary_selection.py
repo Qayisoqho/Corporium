@@ -4,6 +4,7 @@ import categories
 import dictionary_search
 import long_tasks
 import paradigms
+import sense_gloss
 
 CLASS_LABELS={'semantic':'语义类','morph':'形态类','pos':'词类与子类','form':'形式类型','usage_tag':'使用标签类型','grammar':'语法标签分类'}
 
@@ -105,7 +106,7 @@ class Selection:
             seen.add(identity);self.occurrences+=1;self.covered.add(index);self.seen_entries.add(r['id'])
             for gid,label,system in self.grouped(r):
                 key=json.dumps([r['language_id'],gid],ensure_ascii=False)
-                gloss=r['body'].get('gloss','') or next((s.get('short_gloss','') for u in r['body'].get('usages',[]) for s in u.get('senses',[]) if s.get('short_gloss')),'')
+                gloss=sense_gloss.effective(r['body'],'gloss') or next((value for u in r['body'].get('usages',[]) for s in u.get('senses',[]) if (value:=sense_gloss.effective(s))),'')
                 row=self.rows.setdefault(key,dict(key=key,form=label,gloss=gloss if self.value['group_by']=='entry' else '',language_id=r['language_id'],count=0,indices=set(),sentences=set(),texts=set(),forms=set(),entries=set(),system_label=system))
                 form=hits[index]['form'];row['count']+=1;row['indices'].add(index);row['sentences'].add(rid);row['entries'].add(r['id']);row['forms'].add(form if self.case else form.casefold())
                 if text_id:row['texts'].add(text_id)

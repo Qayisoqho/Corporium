@@ -88,7 +88,11 @@ class EditingClassTests(unittest.TestCase):
 
     def test_old_category_schema_is_backed_up_before_adding_order(self):
         self.create('Z');self.create('A')
-        with server.connect(audit=False) as db:db.execute('ALTER TABLE category_classes DROP COLUMN position')
+        with server.connect(audit=False) as db:
+            # A genuine legacy schema predates derived triggers referring to
+            # position. Remove those before constructing the old fixture.
+            server.sentence_search_index.drop(db)
+            db.execute('ALTER TABLE category_classes DROP COLUMN position')
         server.init()
         self.assertEqual([r['name'] for r in self.rows()],['A','Z'])
         import sqlite3

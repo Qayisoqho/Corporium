@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 import unittest
 import server
@@ -71,7 +72,7 @@ class CollaboratorTests(unittest.TestCase):
             m=json.loads(db.execute('SELECT metadata FROM timeline_speakers WHERE id=?',(pid,)).fetchone()[0]);self.assertNotEqual(m['fields'][0]['type_id'],t['id']);self.assertEqual(m['language_ids'],[lid,other]);collaborators.validate(db)
     def test_independent_example_multiple_speakers(self):
         with server.connect(audit=False) as db:
-            db.execute("INSERT INTO dictionary_examples(id,language_id,body) VALUES('standalone','ordos',?)",(json.dumps(dict(ipa='a',words=[],targets=[])),))
+            source_fixtures.seed(db,'dictionary_examples',('id', 'language_id', 'body'),('standalone', 'ordos', json.dumps(dict(ipa='a',words=[],targets=[]))))
         a,b=self.person(),self.person('乙');refs=[dict(person_id=a,role='发言人'),dict(person_id=b,role='发言人')]
         self.assertEqual(self.assign(refs,'independent','standalone')[0],200)
         self.assertEqual(self.links('independent','standalone')['effective'],refs)

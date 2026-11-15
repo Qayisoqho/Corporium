@@ -59,6 +59,21 @@ class GlossInheritanceTests(unittest.TestCase):
             delta=undo_codec.decode(db.execute('SELECT changes FROM undo_steps ORDER BY id DESC LIMIT 1').fetchone()[0])
             self.assertEqual({c['table'] for c in delta},{'lexemes','gloss_meanings'})
 
+    def test_replace_matches_live_gloss_and_rejects_a_changed_meaning(self):
+        import sentence_rows
+        _,example,target=self.fixture()
+        eid=example['id']
+        target=self.change(target,'住所')
+        with server.connect(audit=False) as db:
+            self.assertNotIn('住所',sentence_rows.one(db,'independent',eid)['words'][0]['gloss'])
+        args=dict(owner_kind='independent',field='gloss',find='住所',replacement='住处')
+        plan=self.api('text-replace-preview',args)
+        self.assertEqual([(c['id'],c['word'],c['before']) for c in plan['changes']],[(eid,0,'住所.SG')])
+        self.change(target,'居所')
+        code,_=self.call('/api/text-replace-apply',{**args,'token':plan['token'],'keys':[plan['changes'][0]['key']]})
+        self.assertEqual(code,400)
+        self.assertEqual(self.detail(example,'independent')['body']['words'][0]['gloss'],'居所.SG')
+
     def test_blank_override_and_return_to_inherit(self):
         e,ex,x=self.fixture()
         for kind,row in [('corpus',e),('independent',ex)]:self.mode(kind,row,'override','')
@@ -74,7 +89,25 @@ class GlossInheritanceTests(unittest.TestCase):
         d=self.detail(ex,'independent');self.api('segmentation-link',dict(kind='independent',id=ex['id'],revision=d['revision'],remove_target=0))
         self.change(x,'房屋')
         self.assertEqual(self.labels(e,ex),['住所.SG','住所.SG'])
+        self.assertIn('住所.SG',self.api('export?id='+e['text_id']))
         with server.connect(audit=False) as db:self.assertEqual(db.execute('SELECT count(*) FROM gloss_bindings').fetchone()[0],0)
+
+    def test_fixed_form_replacement_keeps_the_binding_live_across_undo(self):
+        e,ex,x=self.fixture('家')
+        uid=self.detail(e)['body']['words'][0]['unit_id']
+        args=dict(field='form',find='home',replacement='house',text_id=e['text_id'])
+        plan=self.api('text-replace-preview',args)
+        self.api('text-replace-apply',dict(args,token=plan['token'],keys=[change['key'] for change in plan['changes']]))
+        word=self.detail(e)['body']['words'][0]
+        self.assertEqual((word['form'],word['gloss'],word['unit_id']),('house','家',uid))
+        x=self.change(x,'住所')
+        self.assertEqual(self.labels(e,ex),['住所','住所'])
+        self.assertEqual(self.undo()[0],200)
+        self.assertEqual(self.undo()[0],200)
+        word=self.detail(e)['body']['words'][0]
+        self.assertEqual((word['form'],word['gloss'],word['unit_id']),('home','家',uid))
+        self.assertEqual(self.undo('redo')[0],200)
+        self.assertEqual(self.detail(e)['body']['words'][0]['form'],'house')
 
     def test_search_and_export_read_current_gloss(self):
         e,ex,x=self.fixture();self.change(x,'住所')
@@ -101,18 +134,19 @@ class GlossInheritanceTests(unittest.TestCase):
 
     def test_migration_replaces_linked_only_and_is_idempotent(self):
         import gloss_inheritance
+        import record_sources
         e,ex,x=self.fixture()
         with server.connect(audit=False) as db:
             db.execute('DELETE FROM gloss_bindings');db.execute('DELETE FROM gloss_migrations')
             for kind,row in [('corpus',e),('independent',ex)]:
                 table='entries' if kind=='corpus' else 'dictionary_examples'
-                b=json.loads(db.execute('SELECT body FROM '+table+' WHERE id=?',(row['id'],)).fetchone()[0]);b['words'][0]['gloss']='手写'
-                db.execute('UPDATE '+table+' SET body=? WHERE id=?',(json.dumps(b,ensure_ascii=False),row['id']))
+                b=record_sources.read(db,table,row['id']);b['words'][0]['gloss']='手写'
+                record_sources.write(db,table,row['id'],b,bump=False)
                 if kind=='corpus':server.lexicon.sync_entry(db,row['id'],preserve_complex=True,preserve_slots=True)
-            before=json.loads(db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0])['words'][1]
+            before=json.loads(db.execute('SELECT body FROM entries_documents WHERE id=?',(e['id'],)).fetchone()[0])['words'][1]
             result=gloss_inheritance.migrate(db);n=db.total_changes
             self.assertEqual(gloss_inheritance.migrate(db),result);self.assertEqual(n,db.total_changes)
-            after=json.loads(db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0])['words'][1]
+            after=json.loads(db.execute('SELECT body FROM entries_documents WHERE id=?',(e['id'],)).fetchone()[0])['words'][1]
             self.assertEqual(before,after)
         self.assertEqual(self.labels(e,ex),['家','家'])
 

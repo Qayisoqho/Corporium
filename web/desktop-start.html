@@ -4,7 +4,7 @@
 // No project catalogue is available yet. Read only local interface preferences.
 (()=>{try{
  const root=document.documentElement,t=localStorage.getItem('ordos-theme');
- if(['docoid','dawoid','ivory','night','forest'].includes(t))root.dataset.theme=t;
+ if(['docoid','docoid-crimson','dawoid','ivory','night','forest'].includes(t))root.dataset.theme=t;
  const scale=localStorage.getItem('ordos-text-scale');
  if(['0.9','1','1.1','1.2','1.3','1.5'].includes(scale))root.style.setProperty('--text-scale',scale);
  if(localStorage.getItem('corporium-density')==='compact')root.dataset.density='compact';

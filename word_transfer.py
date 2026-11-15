@@ -1,6 +1,7 @@
 """Atomic same-language word transfers, preserving per-word analyses and links."""
 import copy
 import json
+import sentence_rows
 import uuid
 import annotations
 import lexicon
@@ -77,10 +78,11 @@ def apply(db,b,lid):
             if not db.execute('SELECT 1 FROM texts WHERE id=? AND language_id=?',(tid,lid)).fetchone():raise ValueError('目标文本不存在或语言不一致')
             position=db.execute('SELECT position FROM entries WHERE id=?',(s['id'],)).fetchone()[0] if s['kind']=='corpus' and tid==s['text_id'] else db.execute('SELECT COALESCE(MAX(position),0) FROM entries WHERE text_id=?',(tid,)).fetchone()[0]
             db.execute('UPDATE entries SET position=position+1 WHERE text_id=? AND position>?',(tid,position))
-            db.execute('INSERT INTO entries(id,text_id,position,body) VALUES(?,?,?,?)',(rid,tid,position+1,dump(analyze(empty))))
+            sentence_rows.write(db,'corpus',rid,analyze(empty),
+                                columns=dict(text_id=tid,position=position+1),insert=True)
         else:
             empty.update(original='',targets=[],source='')
-            db.execute('INSERT INTO dictionary_examples VALUES(?,?,?,1)',(rid,lid,dump(analyze(empty))))
+            sentence_rows.write(db,'independent',rid,analyze(empty),columns=dict(language_id=lid),insert=True)
         target={**target,'id':rid};t=snapshot(db,target['kind'],rid);target['token']=t['transfer_token']
     else:t=snapshot(db,target['kind'],target['id'])
     if s['owner_language']!=lid or t['owner_language']!=lid or s['language_id']!=t['language_id']:raise ValueError('词格转移仅支持同一语言的句子')
@@ -161,7 +163,11 @@ def apply(db,b,lid):
 
 def write(db,d,body,ids):
     analyze(body)
-    table='entries' if d['kind']=='corpus' else 'dictionary_examples'
-    if d['kind']=='corpus':body['edited']=True
-    db.execute('UPDATE '+table+' SET body=?,revision=revision+1 WHERE id=?',(dump(body),d['id']))
-    if d['kind']=='corpus':lexicon.sync_entry(db,d['id'],ids)
+    if d['kind']=='independent':
+        from independent_links import write_body
+        gloss_inheritance.clear_metadata(body)
+        write_body(db,d['id'],body)
+    else:
+        body['edited']=True
+        sentence_rows.write(db,'corpus',d['id'],body)
+        lexicon.sync_entry(db,d['id'],ids,analyzed_body=body,stored_body=body)

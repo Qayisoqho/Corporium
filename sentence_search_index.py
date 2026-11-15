@@ -7,6 +7,8 @@ writes; dirty work and its publication share the caller's transaction.
 """
 import copy
 import json
+import record_sources
+import sentence_rows
 import sqlite3
 from collections import OrderedDict, defaultdict
 
@@ -39,12 +41,39 @@ def drop_triggers(db):
 
 def drop(db):
     """Portable snapshots omit all regenerable search data and trusted triggers."""
+    import home_candidates
+    home_candidates.drop(db)
+    import sentence_scope_index
+    sentence_scope_index.drop(db)
+    import analysis_counts, dictionary_relations, example_groups, object_media, statistics_facts
+    analysis_counts.drop(db)
+    dictionary_relations.drop(db)
+    example_groups.drop_validation(db)
+    object_media.drop_validation(db)
+    statistics_facts.drop(db)
+    import sentence_hit_blocks, read_views
+    sentence_hit_blocks.drop(db)
+    import homophone_index
+    homophone_index.drop(db)
+    import grammar_usage
+    grammar_usage.drop(db)
+    import evidence_owners
+    evidence_owners.drop(db)
+    import example_numbering
+    example_numbering.drop_queue(db)
+    import dictionary_own_index
+    dictionary_own_index.drop(db)
+    read_views.drop(db)
     drop_triggers(db)
     db.execute('DROP TABLE IF EXISTS sentence_search_fts')
     for table in TABLES:
         db.execute('DROP TABLE IF EXISTS ' + table)
     material_search_index.drop(db)
     gloss_search_index.drop(db)
+    import dictionary_read
+    dictionary_read.drop(db)
+    import save_validation
+    save_validation.drop(db)
     db.execute('DROP TABLE IF EXISTS projection_search_fts')
     db.execute('DROP TABLE IF EXISTS projection_search_values')
 
@@ -77,7 +106,9 @@ def initialize(db):
         # Existing fields keep their meaning. Only the newly supported literal
         # original/text-note keys need refreshing; preserve prepared large keys.
         for table,kind in (('entries','corpus'),('dictionary_examples','independent')):
-            affected=f"SELECT id FROM {table} WHERE COALESCE(json_extract(body,'$.original'),'')!='' OR COALESCE(json_extract(body,'$.text_notes'),'')!=''"
+            affected = (f"SELECT owner_id id FROM sentence_text_rows WHERE kind='{kind}' AND "
+                        "(COALESCE(original,'')!='' OR COALESCE(text_notes,'')!='')" if record_sources.native(db) else
+                        f"SELECT id FROM {table} WHERE COALESCE(json_extract(body,'$.original'),'')!='' OR COALESCE(json_extract(body,'$.text_notes'),'')!=''")
             db.execute('INSERT OR IGNORE INTO sentence_search_dirty SELECT ?,id,1,0 FROM ('+affected+')',(kind,))
             db.execute('UPDATE sentence_search_dirty SET basic=1 WHERE kind=? AND owner_id IN ('+affected+')',(kind,))
         db.execute('DELETE FROM sentence_search_version')
@@ -100,12 +131,34 @@ def initialize(db):
     except sqlite3.OperationalError as exc:
         if 'no such module' not in str(exc) and 'tokenizer' not in str(exc):
             raise
+    install_source_triggers(db)
+    gloss_search_index.initialize(db)
+    material_search_index.initialize(db)
+    import dictionary_read
+    dictionary_read.initialize(db)
+    import sentence_hit_blocks
+    sentence_hit_blocks.initialize(db)
+    import sentence_scope_index
+    sentence_scope_index.initialize(db)
+    import homophone_index
+    homophone_index.initialize(db)
+    import grammar_usage
+    grammar_usage.initialize(db)
+    import statistics_facts
+    statistics_facts.initialize(db)
+    import evidence_owners
+    evidence_owners.initialize(db)
+    import dictionary_own_index
+    dictionary_own_index.initialize(db)
+
+
+def install_source_triggers(db):
     drop_triggers(db)
     for table, kind, identity in SOURCES:
         for event in ('INSERT', 'UPDATE', 'DELETE'):
             ref = 'OLD' if event == 'DELETE' else 'NEW'
-            changed = (' WHEN OLD.' + ('metadata' if kind == 'text' else 'body') + ' IS NOT NEW.' +
-                       ('metadata' if kind == 'text' else 'body') + f' OR OLD.{identity} IS NOT NEW.{identity}') if event == 'UPDATE' else ''
+            content = 'OLD.metadata IS NOT NEW.metadata' if kind == 'text' else record_sources.change_sql(db,table)
+            changed = f' WHEN {content} OR OLD.{identity} IS NOT NEW.{identity}' if event == 'UPDATE' else ''
             previous = f'''INSERT INTO sentence_search_dirty SELECT '{kind}',OLD.{identity},1,{int(kind != 'text')}
                   WHERE OLD.{identity} IS NOT NEW.{identity} AND NOT EXISTS(SELECT 1 FROM sentence_search_dirty WHERE kind='{kind}' AND owner_id=OLD.{identity});
                 UPDATE sentence_search_dirty SET basic=1,morph={int(kind != 'text')}
@@ -129,16 +182,16 @@ def initialize(db):
                 WHERE NOT EXISTS(SELECT 1 FROM sentence_search_dirty WHERE kind={ref}.owner_kind AND owner_id={ref}.owner_id);
                 UPDATE sentence_search_dirty SET morph=1 WHERE kind={ref}.owner_kind AND owner_id={ref}.owner_id;''')
         db.execute(f'CREATE TRIGGER sentence_search_bindings_{event} AFTER {event} ON gloss_bindings BEGIN ' + ''.join(statements) + ' END')
-    db.execute('''CREATE TRIGGER sentence_search_meaning AFTER UPDATE OF gloss ON gloss_meanings
+    install_meaning_trigger(db)
+
+
+def install_meaning_trigger(db):
+    record_sources.trigger(db,'sentence_search_meaning','''AFTER UPDATE OF gloss ON gloss_meanings
         WHEN OLD.gloss IS NOT NEW.gloss BEGIN
         INSERT INTO sentence_search_dirty SELECT DISTINCT b.owner_kind,b.owner_id,0,1 FROM gloss_bindings b
-          WHERE b.meaning_id=NEW.id AND b.mode='inherit' AND NOT EXISTS(
-            SELECT 1 FROM sentence_search_dirty d WHERE d.kind=b.owner_kind AND d.owner_id=b.owner_id);
-        UPDATE sentence_search_dirty SET morph=1 WHERE EXISTS(SELECT 1 FROM gloss_bindings b
-          WHERE b.meaning_id=NEW.id AND b.mode='inherit' AND b.owner_kind=sentence_search_dirty.kind AND b.owner_id=sentence_search_dirty.owner_id);
+          WHERE b.meaning_id=NEW.id AND b.mode='inherit'
+          ON CONFLICT(kind,owner_id) DO UPDATE SET morph=1 WHERE morph<>1;
         END''')
-    gloss_search_index.initialize(db)
-    material_search_index.initialize(db)
 
 
 def available(db):
@@ -148,22 +201,34 @@ def available(db):
 def pending(db, field):
     if not supports(field) or not available(db):
         return 0
+    import sentence_hit_blocks
+    import sentence_scope_index
+    blocks=min(201,sentence_hit_blocks.pending(db,field)+sentence_scope_index.pending(db))
     if field == 'gloss':
-        return gloss_search_index.pending(db)
+        return min(201,blocks+gloss_search_index.pending(db))
     if field == 'all' or field in ('layers','writings') or field.startswith(('layer:','writing:')):
-        return min(201,gloss_search_index.pending(db)+material_search_index.pending(db)+
+        return min(201,blocks+gloss_search_index.pending(db)+material_search_index.pending(db)+
                    (pending(db,'form') if field=='all' else 0))
     flag = 'morph' if field == 'morpheme' else 'basic'
-    return db.execute(f'SELECT COUNT(*) FROM (SELECT 1 FROM sentence_search_dirty WHERE {flag}=1 LIMIT 201)').fetchone()[0]
+    return min(201,blocks+db.execute(f'SELECT COUNT(*) FROM (SELECT 1 FROM sentence_search_dirty WHERE {flag}=1 LIMIT 201)').fetchone()[0])
 
 
 def refresh(db, field):
+    """Publish the original and compact postings together in the preparation task."""
+    refresh_sources(db,field)
+    import sentence_hit_blocks
+    if sentence_hit_blocks.available(db):sentence_hit_blocks.refresh(db,field)
+    import sentence_scope_index
+    if sentence_scope_index.available(db):sentence_scope_index.refresh(db)
+
+
+def refresh_sources(db, field):
     """Refresh bounded dirty batches; ordinary meaning edits never dirty scalars."""
     if field == 'gloss':
         return gloss_search_index.refresh(db)
     if field == 'all' or field in ('layers','writings') or field.startswith(('layer:','writing:')):
         if field=='all':
-            refresh(db,'form')
+            refresh_sources(db,'form')
         return material_search_index.refresh_custom(db)
     morph = field == 'morpheme'
     flag = 'morph' if morph else 'basic'
@@ -173,6 +238,7 @@ def refresh(db, field):
     analysis = corpus.WordAnalysisCache()
     total = db.execute(f'SELECT COUNT(*) FROM sentence_search_dirty WHERE {flag}=1').fetchone()[0]
     completed = 0
+    cold = db.execute('SELECT 1 FROM sentence_search_postings LIMIT 1').fetchone() is None
 
     def intern(text):
         nonlocal value_bytes
@@ -208,18 +274,26 @@ def refresh(db, field):
             marks = ','.join('?' for _ in ids)
             table = 'entries' if kind == 'corpus' else 'dictionary_examples' if kind == 'independent' else 'text_info'
             identity = 'text_id' if kind == 'text' else 'id'
-            rows = {r['rid']: r for r in db.execute(f'SELECT {identity} rid,' + ('metadata' if kind == 'text' else 'body') + f' body FROM {table} WHERE {identity} IN ({marks})', ids)}
+            if kind != 'text' and record_sources.native(db):
+                rows = sentence_rows.read(db,kind,ids) if morph else sentence_rows.search_values(db,kind,ids)
+            else:
+                column = 'metadata' if kind == 'text' else 'body'
+                rows = {r[0]:json.loads(r[1]) for r in db.execute(
+                    f'SELECT {identity},{column} FROM {table} WHERE {identity} IN ({marks})',ids)}
             unit_ids = {(r['entry_id'], r['position']): r['id'] for r in db.execute(f"SELECT entry_id,position,id FROM corpus_units WHERE kind='word' AND active=1 AND entry_id IN ({marks})", ids)} if kind == 'corpus' else {}
             if morph:
                 gloss_inheritance.prefetch(db, kind, list(rows))
             long_tasks.checkpoint(100 * completed / max(1, total), '正在更新句子检索索引…')
+            relevant = "field='morpheme'" if morph else "field!='morpheme'"
+            old = set()
+            if not cold:
+                scope = f' WHERE kind=? AND owner_id IN ({marks}) AND {relevant}'
+                old.update(r[0] for r in db.execute('SELECT DISTINCT value_id FROM sentence_search_postings'+scope,[kind,*ids]))
+                db.execute('DELETE FROM sentence_search_postings'+scope,[kind,*ids])
             for rid in long_tasks.steps(ids):
-                old = {r[0] for r in db.execute('SELECT value_id FROM sentence_search_postings WHERE kind=? AND owner_id=? AND ' + ("field='morpheme'" if morph else "field!='morpheme'"), (kind, rid))}
-                db.execute('DELETE FROM sentence_search_postings WHERE kind=? AND owner_id=? AND ' + ("field='morpheme'" if morph else "field!='morpheme'"), (kind, rid))
-                row = rows.get(rid)
                 postings = set()
-                if row:
-                    body = gloss_inheritance.load(db, kind, rid, row['body'], metadata=False, lightweight=True) if morph else json.loads(row['body'])
+                if rid in rows:
+                    body = gloss_inheritance.load(db,kind,rid,rows[rid],metadata=False,lightweight=True) if morph else rows[rid]
                     def add(name, word, value, uid=None):
                         if value:
                             postings.add((kind, rid, name, word, intern(value), uid))
@@ -240,23 +314,22 @@ def refresh(db, field):
                             for unit in one['words'][0]['morphemes']:
                                 add('morpheme', i, unit['form'], unit_ids.get((rid, i), word.get('annotation_id')))
                     db.executemany('INSERT INTO sentence_search_postings VALUES(?,?,?,?,?,?)', postings)
-                    db.execute('INSERT INTO sentence_search_owners SELECT ?,? WHERE NOT EXISTS(SELECT 1 FROM sentence_search_owners WHERE kind=? AND owner_id=?)', (kind, rid, kind, rid))
-                else:
-                    db.execute('DELETE FROM sentence_search_owners WHERE kind=? AND owner_id=?', (kind, rid))
-                db.execute(f'UPDATE sentence_search_dirty SET {flag}=0 WHERE kind=? AND owner_id=?', (kind, rid))
-                db.execute('DELETE FROM sentence_search_dirty WHERE kind=? AND owner_id=? AND basic=0 AND morph=0', (kind, rid))
-                # Remove obsolete values, without rescanning the full value table.
-                for vid in old:
-                    if db.execute('SELECT 1 FROM sentence_search_postings WHERE value_id=? LIMIT 1', (vid,)).fetchone():
-                        continue
-                    value = db.execute('SELECT value,folded FROM sentence_search_values WHERE id=?', (vid,)).fetchone()
-                    if value:
-                        if values.pop(value['value'], None) is not None:
-                            value_bytes -= 128 + 4 * len(value['value'])
-                        if fts:
-                            db.execute("INSERT INTO sentence_search_fts(sentence_search_fts,rowid,value,folded) VALUES('delete',?,?,?)", (vid, value['value'], value['folded']))
-                        db.execute('DELETE FROM sentence_search_values WHERE id=?', (vid,))
-                completed += 1
+            db.executemany('INSERT OR IGNORE INTO sentence_search_owners VALUES(?,?)',((kind,rid) for rid in rows))
+            db.executemany('DELETE FROM sentence_search_owners WHERE kind=? AND owner_id=?',((kind,rid) for rid in ids if rid not in rows))
+            db.execute(f'UPDATE sentence_search_dirty SET {flag}=0 WHERE kind=? AND owner_id IN ({marks})',[kind,*ids])
+            db.execute(f'DELETE FROM sentence_search_dirty WHERE kind=? AND owner_id IN ({marks}) AND basic=0 AND morph=0',[kind,*ids])
+            # Remove obsolete values once per batch, after all new postings exist.
+            for vid in old:
+                if db.execute('SELECT 1 FROM sentence_search_postings WHERE value_id=? LIMIT 1', (vid,)).fetchone():
+                    continue
+                value = db.execute('SELECT value,folded FROM sentence_search_values WHERE id=?', (vid,)).fetchone()
+                if value:
+                    if values.pop(value['value'], None) is not None:
+                        value_bytes -= 128 + 4 * len(value['value'])
+                    if fts:
+                        db.execute("INSERT INTO sentence_search_fts(sentence_search_fts,rowid,value,folded) VALUES('delete',?,?,?)", (vid, value['value'], value['folded']))
+                    db.execute('DELETE FROM sentence_search_values WHERE id=?', (vid,))
+            completed += len(ids)
 
 
 def value_query(db, query, case, mode):
@@ -288,6 +361,13 @@ def value_query(db, query, case, mode):
     return sql + f'instr({key},?)>0', args + [needle]
 
 
+def collected_ids(deliver, ids):
+    if callable(deliver):
+        deliver(ids)
+        return {}
+    return {'ids':list(ids)}
+
+
 def search(db, scope, args, field, query, case=False, mode='contains', page=1, size=20,
            text_notes=False, ids_only=False, custom_language='all', include_original=False):
     """Return None for unsupported/old databases; all normal hits stay in SQL."""
@@ -298,11 +378,23 @@ def search(db, scope, args, field, query, case=False, mode='contains', page=1, s
             return None
     if not db.in_transaction:
         db.execute('BEGIN')
+    import sentence_hit_blocks
+    compact=sentence_hit_blocks.available(db)
+    if compact and sentence_hit_blocks.MATCHES.get(sentence_hit_blocks.match_key(db,field,query,case,mode,text_notes,custom_language,include_original)) is not None:
+        return sentence_hit_blocks.search(db,scope,args,field,query,case,mode,page,size,text_notes,ids_only,custom_language,include_original)
     try:
         with material_search_index.preparing(db):
-            refresh(db, field)
+            refresh_sources(db, field)
     except material_search_index.Unavailable:
         return None
+    if compact:
+        try:
+            with material_search_index.preparing(db):
+                sentence_hit_blocks.refresh(db,field)
+            return sentence_hit_blocks.search(db,scope,args,field,query,case,mode,page,size,
+                                              text_notes,ids_only,custom_language,include_original)
+        except material_search_index.Unavailable:
+            pass
     if field == 'gloss':
         if not gloss_search_index.available(db):
             return None
@@ -344,7 +436,7 @@ def search(db, scope, args, field, query, case=False, mode='contains', page=1, s
     db.execute('CREATE TEMP TABLE sentence_query_matches AS SELECT id,kind,text_id,position,ordering,source_order FROM sentence_query_hits GROUP BY kind,id')
     db.execute('CREATE INDEX sentence_query_order ON sentence_query_matches(source_order,ordering,position)')
     if ids_only:
-        result = {'ids': [r[0] for r in db.execute('SELECT id FROM sentence_query_matches' + order)]}
+        result = collected_ids(ids_only,(r[0] for r in db.execute('SELECT id FROM sentence_query_matches' + order)))
         db.execute('DROP TABLE sentence_query_hits');db.execute('DROP TABLE sentence_query_matches')
         return result
     total = db.execute('SELECT COUNT(*) FROM sentence_query_matches').fetchone()[0]

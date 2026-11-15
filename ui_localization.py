@@ -96,6 +96,8 @@ def present(value,path,locale):
     if path in {'/api/entries','/api/example-library','/api/example-groups-library','/api/survey-detail','/api/dictionary-examples'}:
         result={**result,'items':[annotations(item) for item in result.get('items',[])]}
     if path in {'/api/entry','/api/independent-example','/api/annotations','/api/segmentation','/api/example-group'}:result=annotations(result)
+    if path=='/api/inline-save' and isinstance(result.get('_view_update',{}).get('record'),dict):
+        result={**result,'_view_update':annotations(result['_view_update'])}
     if path in {'/api/timeline','/api/timeline-detail'} and isinstance(result.get('media'),dict):result={**result,'media':fields(result['media'],'unavailable')}
     if path=='/api/lexeme-examples':result={**result,'items':[annotations(fields(item,'review_reason')) for item in result.get('items',[])]}
     if path=='/api/unit-dictionary' and isinstance(result.get('link'),dict):result={**result,'link':fields(result['link'],'review_reason')}
@@ -105,10 +107,13 @@ def present(value,path,locale):
                 'pending':[homophone_group(g) for g in result.get('pending',[])]}
         if 'blocks' in result:
             result['blocks']=[{**b,'rows':[{**r,'cells':[{**c,'groups':[homophone_group(g) for g in c.get('groups',[])]} for c in r.get('cells',[])]} for r in b.get('rows',[])]} for b in result['blocks']]
-    if path in {'/api/punctuation-preview','/api/dictionary-replace-preview','/api/dictionary-replace-apply','/api/text-replace-preview'}:
-        result=fields(result,'message')
+    if path in {'/api/punctuation-preview','/api/dictionary-replace-preview','/api/dictionary-replace-apply',
+                '/api/text-replace-preview','/api/text-replace-apply'}:
+        result=fields(result,'message','preview_error')
         for name in ['blocked','conflicts']:
             if isinstance(result.get(name),list):result={**result,name:[fields(r,'reason') for r in result[name]]}
+        if isinstance(result.get('remaining_preview'),dict):
+            result={**result,'remaining_preview':present(result['remaining_preview'],path,locale)}
     if path=='/api/sentence-gloss-preview':
         result={**result,'rows':[{**r,'candidates':[fields(c,'reason') for c in r.get('candidates',[])]} for r in result.get('rows',[])],
                 'skipped':[fields(r,'reason') for r in result.get('skipped',[])]}
@@ -118,6 +123,15 @@ def present(value,path,locale):
         for name in ['matches','suggestions','ambiguous']:
             if isinstance(result.get(name),list):result[name]=[{**fields(r,'match_reason'),**({'candidates':[fields(c,'match_reason') for c in r['candidates']]} if 'candidates' in r else {})} for r in result[name]]
         if isinstance(result.get('multipart_warnings'),list):result['multipart_warnings']=[fields(r,'message','reason') for r in result['multipart_warnings']]
+    if path=='/api/lexeme-auto-link':
+        result=fields(result,'preview_error')
+        if isinstance(result.get('remaining_plan'),dict):
+            result={**result,'remaining_plan':present(result['remaining_plan'],'/api/lexeme-auto-preview',locale)}
+        if isinstance(result.get('_view_update'),dict):
+            update=result['_view_update']
+            update={**update,'records':[annotations(row) for row in update['records']]}
+            if 'history' in update:update['history']=present(update['history'],'/api/undo-state',locale)
+            result={**result,'_view_update':update}
     if path in {'/api/timeline-replacement-preview','/api/timeline-replace-preview'}:result=fields(result,'warnings')
     if path=='/api/undo-state':
         def step(item):

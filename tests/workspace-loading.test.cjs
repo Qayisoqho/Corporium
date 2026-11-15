@@ -25,6 +25,14 @@ test('repeated reads share a request within one render and receive independent v
  await c.showLexeme();assert.equal(calls.length,2); // No data cache survives the render.
  await c.api('lexeme?id=x');await c.api('lexeme?id=x');assert.equal(calls.length,4);
 });
+test('dictionary detail preparation requests catalogs without fetching all evidence',async()=>{
+ const {c,calls}=setup();
+ await c.window.corporiumPrepareLexeme({id:'x',language_id:'one',body:{}});
+ assert.deepEqual(calls.map(([path])=>path.split('?')[0]),['morpheme-components','synonyms','object-media','collaborators']);
+ calls.length=0;
+ await c.window.corporiumPrepareLexeme({id:'x',language_id:'one',body:{semantic_classes:['a']}});
+ assert.ok(calls.some(([path])=>path==='dictionary-organization?lexical_language=one'));
+});
 test('small catalogs reuse a revision, isolate returned values, and invalidate after writes or external revisions',async()=>{
  const {c,calls}=setup();const path='dictionary-search-options';
  const first=await c.api(path);first.items[0].value=99;

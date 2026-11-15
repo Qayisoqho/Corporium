@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 import unittest
 import server
@@ -14,8 +15,8 @@ class DictionaryPagingTests(unittest.TestCase):
     def seed(self):
         with server.connect() as db:
             body=json.dumps(lexicon.normalize({}))
-            db.executemany('INSERT INTO lexemes VALUES(?,?,?,?,?)',[(f'x{i}','ordos',f'word-{i:04}',body,1) for i in range(1207)])
-            db.executemany('INSERT INTO morphemes VALUES(?,?,?,?,?,?)',[(f'm{i}','ordos',f'part-{i:04}',1,json.dumps({'gloss':'选中' if i%2 else '其他','notes':''}),1) for i in range(1207)])
+            source_fixtures.seed_many(db,'lexemes',('id', 'language_id', 'headword', 'body', 'revision'),((row[0], row[1], row[2], row[3], row[4]) for row in [(f'x{i}','ordos',f'word-{i:04}',body,1) for i in range(1207)]))
+            source_fixtures.seed_many(db,'morphemes',('id', 'language_id', 'form', 'number', 'body', 'revision'),((row[0], row[1], row[2], row[3], row[4], row[5]) for row in [(f'm{i}','ordos',f'part-{i:04}',1,json.dumps({'gloss':'选中' if i%2 else '其他','notes':''}),1) for i in range(1207)]))
 
     def test_extended_sizes_and_all_in_both_lists(self):
         self.seed()

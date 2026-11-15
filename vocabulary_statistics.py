@@ -6,6 +6,8 @@ from collections import defaultdict
 import corpus
 import component_links
 import long_tasks
+import record_sources
+import sense_gloss
 
 
 def category(body,role=''):
@@ -20,20 +22,21 @@ def category(body,role=''):
 
 
 class Collector:
-    def __init__(self,db,case=True,selection=None):
+    def __init__(self,db,case=True,selection=None,*,prepared=False):
         self.selection=selection
         self.db=db;self.case=case;self.hits=[];self.forms={};self.morphemes={};self.row_types=defaultdict(set)
         self.native={}
-        sql="""SELECT id,language_id,form,json_object('entry_type',COALESCE(json_extract(body,'$.entry_type'),'unspecified'),
-          'role',COALESCE(json_extract(body,'$.role'),''),'gloss',COALESCE(json_extract(body,'$.gloss'),''),
-          'variants',json(COALESCE(json_extract(body,'$.variants'),'[]')),
-          'usages',json(COALESCE(json_extract(body,'$.usages'),'[]')),
-          'paradigms',json(COALESCE(json_extract(body,'$.paradigms'),'[]')),
-          'senses',json(COALESCE(json_extract(body,'$.senses'),'[]'))) body FROM morphemes"""
-        for r in long_tasks.steps(db.execute(sql)):
-            m={**dict(r),'body':json.loads(r['body'])};usages=m['body'].pop('usages',[])
-            m['senses']={u['id']:{s['id'] for s in u.get('senses',[])} for u in usages} if usages else {'@morpheme':{'@main',*(s['id'] for s in m['body'].pop('senses',[]))}}
-            for table in m['body'].pop('paradigms',[]):
+        self.morpheme_words=set();self.root_words=set()
+        if prepared:return
+        rows=record_sources.with_bodies(db,'morphemes',db.execute('SELECT id,language_id,form FROM morphemes'))
+        for r in long_tasks.steps(rows):
+            raw=r['body']
+            m={**r,'body':{key:raw.get(key) or default for key,default in
+                          (('entry_type','unspecified'),('role',''),('gloss',''),('variants',[]))}}
+            m['body']['gloss']=sense_gloss.effective(raw,'gloss')
+            usages=raw.get('usages') or []
+            m['senses']={u['id']:{s['id'] for s in u.get('senses',[])} for u in usages} if usages else {'@morpheme':{'@main',*(s['id'] for s in (raw.get('senses') or []))}}
+            for table in raw.get('paradigms') or []:
                 for row in table.get('rows',[]):
                     if row.get('state')=='filled':
                         for form in row.get('realizations',[]):m['senses'].setdefault(table['usage_id'],set()).update(s['id'] for s in form.get('meanings',[]))
@@ -100,12 +103,12 @@ class Collector:
             row['indices'].append(index);row['sentences'].add(rid)
             if text_id:row['texts'].add(text_id)
         if rid.startswith('independent:'):
-            import copy,segmentation
+            import segmentation
             # Sentence-level citations cannot produce word/morpheme occurrences.
             # Only structural references need parsing and detachment checks.
             targets=body.get('targets',[]);links=[]
             if any(t.get('segmentation_ref') for t in targets):
-                parsed=corpus.analyze(copy.deepcopy(body),cache=self.analysis_cache)
+                parsed=corpus.analyze(json.loads(json.dumps(body,ensure_ascii=False)),cache=self.analysis_cache)
                 segmentation.decorate_refs(parsed)
             else:parsed={'targets':[]}
             for target in parsed.get('targets',[]):
@@ -144,6 +147,34 @@ class Collector:
             form=self.hits[index]['form'];row['forms'].add(form if self.case else form.casefold())
             if text_id:row['texts'].add(text_id)
         return len(positions)
+
+    def record_facts(self,rid,facts,language,text_id):
+        """Merge prevalidated record facts using the ordinary profile identities."""
+        indices=[]
+        for position,form in facts['words']:
+            index=len(self.hits);indices.append(index)
+            self.hits.append(dict(entry_id=rid,word=position,form=form,value=form,unit_id=''))
+            key=(language,form if self.case else form.casefold())
+            self.row_types[text_id or '@independent'].add(key)
+            row=self.forms.get(key)
+            if row is None:
+                row=dict(key=json.dumps(key,ensure_ascii=False),form=key[1],language_id=language,indices=[],sentences=set(),texts=set())
+                self.forms[key]=row
+            row['indices'].append(index);row['sentences'].add(rid)
+            if text_id:row['texts'].add(text_id)
+        for source in facts['morphemes']:
+            positions={indices[index] for index in source['indices']}
+            self.morpheme_words.update(positions)
+            if source['kind']=='root':self.root_words.update(positions)
+            key=(source['id'],source['kind'])
+            row=self.morphemes.get(key)
+            if row is None:
+                row=dict(key=source['key'],id=source['id'],form=source['form'],gloss=source['gloss'],language_id=language,kind=source['kind'],count=0,indices=set(),sentences=set(),texts=set(),forms=set())
+                self.morphemes[key]=row
+            row['count']+=source['count'];row['indices'].update(positions);row['sentences'].add(rid)
+            row['forms'].update(self.hits[index]['form'] if self.case else self.hits[index]['form'].casefold() for index in positions)
+            if text_id:row['texts'].add(text_id)
+        return len(indices)
 
     def finish(self,stats):
         for row in stats['rows']:row['types']=len(self.row_types[row['id'] if row['kind']!='independent' else '@independent'])

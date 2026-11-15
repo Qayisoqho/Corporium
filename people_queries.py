@@ -19,14 +19,22 @@ def includes(actual,wanted,mode):
     return not wanted or (set(wanted)<=set(actual) if mode=='all' else bool(set(wanted)&set(actual)))
 
 class Context:
-    def __init__(self,db):
+    def __init__(self,db,*,sentence_ids=None):
         self.people={r['id']:r['name'] for r in db.execute('SELECT id,name FROM timeline_speakers')}
         self.manual={};self.texts={};self.inherited={}
-        for r in db.execute('SELECT kind,record_id,mode,people FROM collaborator_assignments'):
+        if sentence_ids is None:
+            assignments='';intervals='';args=()
+        else:
+            args=(*sentence_ids,)
+            marks=','.join('?' for _ in args)
+            assignments=f" WHERE kind IN ('corpus','independent') AND record_id IN ({marks})"
+            intervals=f' AND i.entry_id IN ({marks})'
+        assignment_ids=tuple(key.removeprefix('independent:') for key in args)
+        for r in db.execute('SELECT kind,record_id,mode,people FROM collaborator_assignments'+assignments,assignment_ids):
             refs=json.loads(r['people'])
             if r['kind']=='text':self.texts[r['record_id']]=refs
             elif r['mode']=='manual':self.manual[(r['kind'],r['record_id'])]=list(dict.fromkeys(p['person_id'] for p in refs))
-        for r in db.execute("SELECT DISTINCT i.entry_id,t.speaker_id FROM timeline_intervals i JOIN timeline_tracks t ON t.id=i.track_id WHERE i.entry_id IS NOT NULL AND t.kind='sentence' AND t.speaker_id IS NOT NULL"):
+        for r in db.execute("SELECT DISTINCT i.entry_id,t.speaker_id FROM timeline_intervals i JOIN timeline_tracks t ON t.id=i.track_id WHERE i.entry_id IS NOT NULL AND t.kind='sentence' AND t.speaker_id IS NOT NULL"+intervals,args):
             self.inherited.setdefault(r['entry_id'],set()).add(r['speaker_id'])
 
     def attribution(self,kind,rid,interval_speaker=None,local=False):

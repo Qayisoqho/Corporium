@@ -14,9 +14,11 @@ POSITIONS=('unspecified','prefix','suffix','infix','circumfix')
 IDENTITIES='(SELECT id,language_id FROM lexemes UNION ALL SELECT id,language_id FROM morphemes)'
 
 def initialize(db):
+    import record_sources
+    record_sources.views(db)
     db.execute('DROP VIEW IF EXISTS dictionary_targets')
     db.execute('''CREATE VIEW dictionary_targets AS
-    SELECT id,language_id,headword,body,revision,rowid rowid,'lexeme' target_kind FROM lexemes
+    SELECT id,language_id,headword,body,revision,rowid rowid,'lexeme' target_kind FROM lexemes_documents
     UNION ALL
     SELECT m.id,m.language_id,m.form,
     json_set(m.body,
@@ -40,12 +42,13 @@ def initialize(db):
         FROM json_each(m.body,'$.writings') w LEFT JOIN writing_types t ON t.id=json_extract(w.value,'$.type_id')),'[]')),
       '$.word_structure',json(COALESCE(json_extract(m.body,'$.word_structure'),'{}')),
       '$.variants',json(COALESCE(json_extract(m.body,'$.variants'),'[]'))),
-    m.revision,m.rowid,'morpheme' FROM morphemes m''')
+    m.revision,m.rowid,'morpheme' FROM morphemes_documents m''')
 
 def common(db,mid):
-    row=db.execute('SELECT body FROM dictionary_targets WHERE id=?',(mid,)).fetchone()
+    from dictionary_rows import targets
+    row=targets(db,[mid]).get(mid)
     if not row:raise ValueError('词典条目不存在')
-    return json.loads(row[0])
+    return row['body']
 
 def normalize(db,lid,data,old=None):
     """Native compact fields plus stable meanings used by both association paths."""
@@ -95,12 +98,16 @@ def normalize(db,lid,data,old=None):
     return data
 
 def write_body(db,row,body):
-    table='morphemes' if row['target_kind']=='morpheme' else 'lexemes'
-    db.execute('UPDATE '+table+' SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body,ensure_ascii=False),row['id']))
+    if row['target_kind']=='lexeme' and body.get('headword_source'):
+        import chinese_mode
+        if chinese_mode.write_body(db,row,body):return
+    import dictionary_rows
+    dictionary_rows.write(db,row['target_kind'],row['id'],body)
 
 def references(db,mid):
+    independent=db.execute('SELECT count(DISTINCT example_id) FROM independent_links WHERE lexeme_id=?',(mid,)).fetchone()[0]
     return dict(corpus=db.execute('SELECT count(*) FROM lexical_links WHERE lexeme_id=?',(mid,)).fetchone()[0],
-        independent=db.execute("SELECT count(*) FROM dictionary_examples e WHERE EXISTS(SELECT 1 FROM json_each(e.body,'$.targets') t WHERE json_extract(t.value,'$.lexeme_id')=?)",(mid,)).fetchone()[0])
+        independent=independent)
 
 def reference_state(db,mid,lid='all'):
     row=db.execute('SELECT id,language_id,target_kind,revision FROM dictionary_targets WHERE id=?',(mid,)).fetchone()

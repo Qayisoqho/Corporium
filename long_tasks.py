@@ -69,12 +69,15 @@ def cancel_all():
         for job in list(JOBS.values()):
             if job['state'] in ('queued','running'):cancel(job['project'],job['id'])
 
-def view(project,jid):
+def view(project,jid,*,wait=False):
     with LOCK:
         j=JOBS.get(jid)
         if not j or j['project']!=str(Path(project).resolve()):raise ValueError('任务已过期或不属于当前项目')
-        result={k:v for k,v in j.items() if k not in ('project','cancel','request','future','resource_error','staged','created','backup_folders')}
+    if wait:j['ready'].wait(.20)
+    with LOCK:
+        result={k:v for k,v in j.items() if k not in ('project','cancel','ready','request','future','resource_error','staged','created','backup_folders')}
         if j['kind']=='operation':result['operation']=j['request'].get('operation')
+        if wait:result['waited']=True
         return result
 
 def cancel(project,jid):
@@ -85,6 +88,7 @@ def cancel(project,jid):
             j['cancel'].set();j['message']='正在取消并清理临时文件…'
             if j['state']=='queued' and j['future'].cancel():
                 j.update(state='cancelled',finished=time.time(),message='任务已取消，未修改原数据')
+                j['ready'].set()
     return view(project,jid)
 
 def submit(project,kind,request):
@@ -96,7 +100,7 @@ def submit(project,kind,request):
             if j['state'] not in ACTIVE and now-j['finished']>60:del JOBS[key]
         if sum(j['state'] in ACTIVE for j in JOBS.values())>=4:raise ValueError('已有多个任务等待处理，请等待或取消任务')
         jid=secrets.token_urlsafe(24)
-        job=dict(id=jid,project=project,kind=kind,request=request,state='queued',message='等待前一个任务完成',progress=None,cancel=threading.Event(),finished=0)
+        job=dict(id=jid,project=project,kind=kind,request=request,state='queued',message='等待前一个任务完成',progress=None,cancel=threading.Event(),ready=threading.Event(),finished=0)
         JOBS[jid]=job
         job['future']=POOL.submit(run,job)
     return jid
@@ -140,22 +144,44 @@ def run(job):
                 result=lexicon.list_lexemes(search_db,r.get('lexical_language',lid),r.get('q',''),r.get('page',1),r.get('page_size',30),category=r.get('semantic_class',''),order=r.get('sort_order',''),search=r.get('search'),summary=r.get('summary')=='1',targets=r.get('targets')=='all',counts=r.get('counts')!='0')
             with LOCK:job.update(state='done',progress=100,message='已完成',result=result)
             return
-        db=sqlite3.connect(Path(job['project']).as_uri()+'?mode=ro',uri=True)
+        if job['kind']=='auto-match':
+            import server,lexicon
+            r=job['request'];lid=r.get('language','ordos')
+            with server.connect(path=job['project'],audit=False,cancellable=True,deferred=True) as match_db:
+                match_db.execute('PRAGMA cache_size=-65536')
+                result=lexicon.auto_link_plan(match_db,lid,r.get('text_id',''),r.get('ignore_symbols','-=.'),
+                    r.get('ignore_position','edges'),review=r.get('reuse_preview') in (True,'1'),prepare_index=True)
+            with LOCK:job.update(state='done',progress=100,message='已完成',result=result)
+            return
+        if job['kind']=='homophones' or (job['kind']=='grammar-audit' and job['request'].get('view')=='registry'):
+            # These preparations publish disposable projections. A read-only
+            # worker repeatedly falls back to scanning without clearing the queue.
+            import server,grammar,homophones,languages
+            r=job['request'];lid=r.get('language','ordos')
+            with server.connect(path=job['project'],audit=False,cancellable=True) as registry_db:
+                if lid!='all':languages.require(registry_db,lid)
+                if job['kind']=='homophones':
+                    checkpoint(None,'正在整理同音语素表…');result=homophones.table(registry_db,lid,r)
+                else:
+                    checkpoint(None,'正在检查句子、语素与词典关联…');result=grammar.audit(registry_db,r)
+            with LOCK:job.update(state='done',progress=100,message='已完成',result=result)
+            return
+        import record_sources
+        db=sqlite3.connect(Path(job['project']).as_uri()+'?mode=ro',uri=True,factory=record_sources.Connection)
         db.row_factory=sqlite3.Row
+        record_sources.configure(db)
         if job['kind']=='grammar-audit':
             import grammar_audit_cache
             audit_observer=grammar_audit_cache.Snapshot(db)
             audit_token=grammar_audit_cache.CURRENT.set(audit_observer)
-        db.execute('PRAGMA temp_store=FILE');db.execute('PRAGMA cache_size=-8192')
+        db.execute('PRAGMA temp_store=FILE')
+        db.execute('PRAGMA cache_size=-8192')
         db.set_progress_handler(lambda:int(job['cancel'].is_set()),5000)
         db.execute('BEGIN')
         r=job['request'];lid=r.get('language','ordos');kind=job['kind']
         import languages,lexicon,timeline,language_exchange,project_backup
         if lid!='all':languages.require(db,lid)
-        if kind=='auto-match':
-            checkpoint(None,'正在逐句匹配词典…')
-            result=lexicon.auto_link_plan(db,lid,r.get('text_id',''),r.get('ignore_symbols','-=.'),r.get('ignore_position','edges'))
-        elif kind=='timeline':
+        if kind=='timeline':
             checkpoint(None,'正在读取时间轴区间…');result=timeline.detail(db,lid,r)
         elif kind=='grammar-audit':
             import grammar
@@ -169,9 +195,6 @@ def run(job):
         elif kind=='analysis-export':
             import analysis_workspace
             checkpoint(None,'正在导出完整分析…');result=analysis_workspace.export_file(db,job['project'],lid,r)
-        elif kind=='homophones':
-            import homophones
-            checkpoint(None,'正在整理同音语素表…');result=homophones.table(db,lid,r)
         elif kind=='backup':result=project_backup.prepare(db,job['project'],r.get('include_media') is True,checkpoint)
         elif kind=='language-preview':
             path=language_exchange.staged(job['project'],r.get('token'),'import')
@@ -193,7 +216,9 @@ def run(job):
             grammar_audit_cache.CURRENT.reset(audit_token)
             audit_observer.close()
         if db is not None:db.close()
-        with LOCK:job['finished']=time.time()
+        with LOCK:
+            job['finished']=time.time()
+            job['ready'].set()
         def expire():
             with LOCK:JOBS.pop(job['id'],None)
         timer=threading.Timer(60,expire);timer.daemon=True;timer.start()

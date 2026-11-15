@@ -8,7 +8,7 @@ function setup(options={}){
  }
  const get=id=>nodes[id]||(nodes[id]=node(id));
  const pending={id:'target',name:'测试语言',revision:7,token:'proof',blockers:options.blockers||[],counts:{texts:1,entries:2,dictionary_examples:3,lexemes:4,morphemes:5,timeline_sessions:0,survey_nodes:0}};
- const ctx={document:{createElement:()=>node()},$:get,makeDialog:id=>get(id),openLanguage(lang){ctx.editingLanguage=lang;},editingLanguage:{id:'target',name:'测试语言',revision:7},infoDirty:false,inlineDrafts:new Map(),lexemeDirty:false,
+ const ctx={document:{createElement:()=>node()},$:get,makeDialog:id=>get(id),runSettingsEditorAction:(_id,action)=>action(),openLanguage(lang){ctx.editingLanguage=lang;},editingLanguage:{id:'target',name:'测试语言',revision:7},infoDirty:false,inlineDrafts:new Map(),lexemeDirty:false,activeLanguage:options.activeLanguage||'target',
   window:{location:{reload(){reloads++;}}},localStorage:{setItem:(k,v)=>storage.set(k,v)},sessionStorage:{setItem:(k,v)=>storage.set(k,v),getItem:()=>null,removeItem(){}},projectStorageKey:k=>'project:'+k,
   originalApi:async(path,body)=>{calls.push({path,body});if(path==='language-delete-preview')return options.preview?options.preview():pending;if(options.save)return options.save();return {name:'测试语言',backup:'before.sqlite3',next_language:'remaining'};}
  };
@@ -37,4 +37,9 @@ test('slow preview and deletion cannot be submitted twice',async()=>{
 });
 test('failed deletion retains the dialogs and requires a new preview',async()=>{
  const s=setup({save:()=>{throw Error('语言资料已变化');}});await s.get('delete-language').dblclick();await s.get('confirm-language-delete').dblclick();assert.equal(s.reloads(),0);assert.equal(s.get('language-delete-dialog').open,true);assert.equal(s.get('confirm-language-delete').disabled,true);assert.match(s.get('language-delete-error').textContent,/已变化/);
+});
+test('deleting a different language from settings keeps the workspace selection',async()=>{
+ const s=setup({activeLanguage:'workspace-language'});
+ await s.get('delete-language').dblclick();await s.get('confirm-language-delete').dblclick();
+ assert.equal(s.storage.get('project:corpus-language'),'workspace-language');
 });

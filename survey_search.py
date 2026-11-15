@@ -101,7 +101,7 @@ def iter_sources(db, lid, evidence, query='', field='all'):
         ids = list(dict.fromkeys(e['record_id'] for e in evidence if e['kind'] == kind))
         for start in long_tasks.steps(range(0, len(ids), 400)):
             chunk = ids[start:start + 400]; marks = ','.join('?' for _ in chunk)
-            sql = ('SELECT e.id,e.body FROM entries e JOIN texts t ON t.id=e.text_id WHERE t.language_id=? AND e.id IN (' + marks + ')' if kind == 'corpus' else 'SELECT id,body FROM dictionary_examples WHERE language_id=? AND id IN (' + marks + ')')
+            sql = ('SELECT e.id,e.body FROM entries_documents e JOIN texts t ON t.id=e.text_id WHERE t.language_id=? AND e.id IN (' + marks + ')' if kind == 'corpus' else 'SELECT id,body FROM dictionary_examples_documents WHERE language_id=? AND id IN (' + marks + ')')
             for r in long_tasks.steps(db.execute(sql, [lid, *chunk])):
                 body = gloss_inheritance.load(db,kind,r['id'],r['body'],metadata=False,lightweight=True)
                 if (body.get('language_id') or lid) == lid:

@@ -18,8 +18,15 @@
   $('dr-page').textContent=(page+1)+' / '+pages;$('dr-prev').disabled=page===0;$('dr-next').disabled=page+1>=pages;$('dr-all').disabled=!!plan.find_only||!plan.changes.length||!!plan.blocked.length;
  }
  function lock(value){busy=value;$('dictionary-replace-dialog').querySelectorAll('button,input,textarea,select').forEach(e=>e.disabled=value);if(!value){controls?.updateDisabled?.();if(plan)draw();else $('dr-all').disabled=$('dr-prev').disabled=$('dr-next').disabled=true;}}
- async function preview(keepScope=false,findOnly=false){const ids=keepScope?request?.scope_ids:null;request=payload(findOnly);if(ids)request.scope_ids=ids;plan=await api('dictionary-replace-preview',request);if(plan.scope_ids)request.scope_ids=plan.scope_ids;page=0;draw();}
- async function run(findOnly){if(busy)return;reset();lock(true);$('dr-status').textContent=(globalThis.CorporiumI18n?.f("fdef1c0be2277e",()=>[])??'正在查找并核对…');try{await preview(false,findOnly);}catch(e){$('dr-status').textContent='';$('dr-error').textContent=e.message;}finally{lock(false);}}
+ async function run(findOnly){
+  if(busy)return;
+  reset();lock(true);$('dr-status').textContent=(globalThis.CorporiumI18n?.f("fdef1c0be2277e",()=>[])??'正在查找并核对…');
+  try{
+   request={...payload(findOnly),reuse_preview:true};plan=await api('dictionary-replace-preview',request);
+   if(plan.scope_ids)request.scope_ids=plan.scope_ids;
+  }catch(e){$('dr-status').textContent='';$('dr-error').textContent=e.message;}
+  finally{lock(false);}
+ }
  button.onclick=dictSafe(async()=>{
   if(activeLanguage==='all')throw Error((globalThis.CorporiumI18n?.f("ef8bdff2b8e8d4",()=>[])??'请先选择一个语言工作区'));if(inlineDrafts.size||infoDirty||($('lexeme-editor').open&&lexemeDirty)||window.corporiumMorphemeDirty?.())throw Error((globalThis.CorporiumI18n?.f("9be147a057b05f",()=>[])??'请先保存或取消正在编辑的内容'));
   const scope=window.dictionarySearchScope();language=activeLanguage;kind=scope.kind;selectedId=(kind==='morpheme'?window.dictionaryMorphemeSelection?.():dictionarySelection)||'';reset();
@@ -28,15 +35,76 @@
   const count=()=>{$('dr-condition-count').textContent=controls?.count()?'（'+controls.count()+'）':'';reset();};controls=window.createDictionaryConditions($('dr-condition-controls'),{prefix:'dr-filter',catalog:scope.catalog,kind,value:scope.search,onchange:count,onclear:()=>{$('dr-query').value='';}});$('dr-condition-count').textContent=controls.count()?'（'+controls.count()+'）':'';$('dr-conditions').open=false;
   $('dr-find-search').innerHTML=window.dictionarySearchIcon;$('dictionary-replace-dialog').showModal();if(scope.query.trim())await run(true);
  });
+ $('dr-conditions').addEventListener('toggle',async()=>{
+  const panel=$('dr-conditions'),dialog=$('dictionary-replace-dialog'),current=controls,owner=language;
+  if(!panel.open||!dialog.open||!current)return;
+  const host=$('dr-condition-controls');
+  host.inert=true;host.setAttribute('aria-busy','true');
+  try{
+   const catalog=await window.corporiumLoadDictionarySearchCatalog();
+   if(catalog&&dialog.open&&owner===activeLanguage&&current===controls)current.refresh(catalog);
+  }catch(e){if(dialog.open&&current===controls)$('dr-error').textContent=e.message;}
+  finally{if(current===controls){host.inert=false;host.removeAttribute('aria-busy');}}
+ });
  for(const id of ['dr-scope','dr-field','dr-query','dr-find','dr-value','dr-mode','dr-case'])$(id).addEventListener('input',reset);
  $('dr-preview').onclick=()=>run(false);$('dr-find-search').onclick=()=>run(true);
  $('dictionary-replace-dialog').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('input')){e.preventDefault();run(true);}});
+ function confirmConflicts(conflicts){
+  const details=conflicts.slice(0,10).map(c=>c.title+'：'+c.reason).join('\n');
+  return corporiumConfirm(globalThis.CorporiumI18n?.f("447def6c168c4b",()=>[details])??details+'\n\n继续替换并保留独立记录？');
+ }
+ function captureReplacementView(match){
+  if(match.id===displayedLexeme?.id){
+   const view=captureLexemeView(displayedLexeme);
+   return view&&{base:view.base,apply:result=>updateSavedLexeme(view,result)};
+  }
+  // An ordinary note outside the current detail affects neither the unfiltered
+  // list's labels and ordering nor the example cards of the selected entry.
+  if(match.path.length!==2||match.path[0]!=='body'||match.path[1]!=='notes'||!window.corporiumReuseDictionary?.())return null;
+  const spec=JSON.parse(window.dictionarySearchParams?.().search||'{}');
+  if($('dictionary-query').value.trim()||spec.conditions?.length||spec.class_id)return null;
+  const key=dictionaryListKey(),sequence=dictionaryRequest,detail=exampleRequest,base=window.corporiumWorkspaceRevision;
+  const current=()=>workspace==='dictionary'&&dictionarySelection!==match.id&&sequence===dictionaryRequest&&detail===exampleRequest&&
+   $('dictionary-list').dataset.pageKey===key&&dictionaryListKey()===key;
+  if(!current())return null;
+  return {base,async apply(result){
+   const update=result._view_update;
+   if(!current()||update.kind!=='lexeme'||update.id!==match.id||update.base!==base||
+      update.sense_text||update.structure||!Object.hasOwn(update.values,'notes'))return false;
+   if(!await window.corporiumRefreshSavedHistory(update)||!current())return false;
+   window.dictionaryUpdateRowRevision?.(match.id,update.before_revision,update.revision);
+   window.corporiumMarkSavedView('dictionary');
+   return true;
+  }};
+ }
  async function apply(keys){
-  if(busy||!plan||plan.find_only)return;const args={...request,token:plan.token,keys,pending_keys:plan.changes.map(c=>c.key)};lock(true);$('dr-error').textContent='';let applied=null,message='';
+  if(busy||!plan||plan.find_only)return;
+  const selected=keys.length===1&&plan.changes.find(c=>c.key===keys[0]);
+  const view=request.kind==='lexeme'&&selected?captureReplacementView(selected):null;
+  const args={...request,token:plan.token,keys,pending_keys:plan.changes.map(c=>c.key),...(view?{_view_revision:view.base}:{})};
+  lock(true);$('dr-error').textContent='';let applied=null,message='';
+  $('dr-status').textContent=globalThis.CorporiumI18n?.ui('正在核对并替换…','Checking and replacing…')??'正在核对并替换…';
   try{
-   let result=await api('dictionary-replace-apply',args);if(result.needs_confirmation){if(!await corporiumConfirm((globalThis.CorporiumI18n?.f("447def6c168c4b",()=>[result.conflicts.slice(0,10).map(c=>c.title+'：'+c.reason).join('\n')])??result.conflicts.slice(0,10).map(c=>c.title+'：'+c.reason).join('\n')+'\n\n继续替换并保留独立记录？')))return;result=await api('dictionary-replace-apply',{...args,confirm_conflicts:true});}applied=result;
-   await refreshUndo();await loadDictionary();
-   if(result.remaining_keys.length){await preview(true);const remain=new Set(result.remaining_keys);plan.changes=plan.changes.filter(c=>remain.has(c.key));draw();}else{plan.changes=[];draw();}
+   if(selected&&plan.changes.length===1&&plan.conflicts.length&&!plan.blocked.length){
+    if(!await confirmConflicts(plan.conflicts))return;
+    args.confirm_conflicts=args.confirm_preview=true;
+   }
+   let result=await api('dictionary-replace-apply',args);
+   if(result.needs_confirmation){
+    if(!await confirmConflicts(result.conflicts))return;
+    result=await api('dictionary-replace-apply',{...args,confirm_conflicts:true,confirm_preview:false});
+   }
+   applied=result;
+   let updated=false;
+   if(view&&result._view_update){
+    try{updated=await view.apply(result);}catch{window.corporiumInvalidateViews?.();}
+   }
+   if(!updated){await window.corporiumRefreshUndoState({reloadLanguages:false});await loadDictionary();}
+   if(result.preview_error)throw Error(result.preview_error);
+   if(result.remaining_preview){
+    plan=result.remaining_preview;
+    if(plan.scope_ids)request.scope_ids=plan.scope_ids;
+   }else plan={...plan,changes:[],conflicts:[],blocked:[]};
    message=(globalThis.CorporiumI18n?.f("ccf44e1be5d447",()=>[result.replacements,result.records??result.lexemes,noun(),plan.changes.length])??`已替换 ${result.replacements} 处，涉及 ${result.records??result.lexemes} 个${noun()}，可撤销。剩余 ${plan.changes.length} 处。`);
   }catch(e){plan=null;$('dr-results').replaceChildren();$('dr-error').textContent=(globalThis.CorporiumI18n?.f("d89f3287917a8b",()=>[(applied?(globalThis.CorporiumI18n?.f("83214bfb582bb4",()=>[])??'替换已保存，但刷新失败：'):'')+e.message])??(applied?'替换已保存，但刷新失败：':'')+e.message+'；请重新预览。');}
   finally{lock(false);if(message)$('dr-status').textContent=message;}

@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 from pathlib import Path
 import test_lexicon
@@ -72,3 +73,25 @@ class DictionaryManagerTests(unittest.TestCase):
         code,y=self.call('/api/lexeme-save',dict(_language=other,headword='other',body=dict(orthographies=[dict(type_id=t['id'],label='IPA',text='a',font='serif')])));self.assertEqual(code,400)
         self.assertEqual(self.call('/api/example-save',dict(_language=other,body=dict(original='x',targets=[dict(lexeme_id=x['id'])])))[0],400)
         self.assertEqual(self.call('/api/example-save',dict(body=dict(original='x',targets=[dict(lexeme_id=x['id'],sense_id='missing')])))[0],400)
+
+    def test_paged_evidence_matches_legacy_order_filters_focus_and_page_clamp(self):
+        x=self.word();e=self.example(x)
+        with server.connect(audit=False) as db:
+            for i in range(24):
+                body=json.loads(json.dumps(e['body']))
+                body['targets'][0]['form_id']='variant' if i%2 else ''
+                body['targets'].append(dict(body['targets'][0]))
+                source_fixtures.seed(db,'dictionary_examples',('id', 'language_id', 'body', 'revision'),('paged-'+str(i), 'ordos', json.dumps(body), 1))
+        base='/api/dictionary-examples?id='+x['id']
+        legacy=self.call(base)[1]
+        second=self.call(base+'&paged=1&page=999')[1]
+        self.assertEqual((second['total'],second['page'],second['pages']),(25,2,2))
+        self.assertEqual(second['items'],legacy[20:])
+        self.assertEqual(self.call(base+'&paged=1&focus=paged-23')[1]['items'],legacy[20:])
+        self.assertFalse(self.call(base+'&paged=1&focus=missing')[1]['focus_found'])
+        for form in ('variant','unassigned'):
+            result=self.call(base+'&paged=1&form_id='+form)[1]
+            wanted=[item for item in legacy if any((t.get('form_id') or 'unassigned')==form for t in item['body']['targets'] if t['lexeme_id']==x['id'])]
+            self.assertEqual(result['items'],wanted)
+            self.assertEqual(result['total'],len(wanted))
+        self.assertFalse(self.call(base+'&paged=1&form_id=variant&focus=paged-0')[1]['focus_found'])

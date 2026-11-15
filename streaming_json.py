@@ -12,11 +12,16 @@ from pathlib import Path
 
 
 class Rows(list):
-    def __init__(self, db, sql, args=(), transform=None):
+    def __init__(self, db, sql, args=(), transform=None, *, source=None):
         self.db, self.sql, self.args, self.transform = db, sql, args, transform
+        self.source = source
+    def values(self, rows):
+        if self.source:
+            import record_sources
+            return record_sources.with_bodies(self.db,self.source,rows)
+        return map(dict,rows)
     def __iter__(self):
-        for row in self.db.execute(self.sql, self.args):
-            value = dict(row)
+        for value in self.values(self.db.execute(self.sql, self.args)):
             yield self.transform(value) if self.transform else value
     def __len__(self):
         return self.db.execute('SELECT COUNT(*) FROM ('+self.sql+')', self.args).fetchone()[0]
@@ -25,7 +30,7 @@ class Rows(list):
         if index < 0:index += len(self)
         row=self.db.execute('SELECT * FROM ('+self.sql+') LIMIT 1 OFFSET ?', (*self.args,index)).fetchone()
         if row is None:raise IndexError(index)
-        value=dict(row)
+        value=next(self.values((row,)))
         return self.transform(value) if self.transform else value
 
 
@@ -35,15 +40,16 @@ class TableRows(Rows):
     SQLite's JSON real-number rendering can round doubles. Those rows use the
     original Python encoder, preserving backup values exactly.
     """
-    def __init__(self,db,table):
+    def __init__(self,db,table,*,read_from=None):
         quote=lambda name:'"'+name.replace('"','""')+'"'
+        source=quote(read_from or table)
         name=quote(table)
-        super().__init__(db,'SELECT rowid AS rowid,* FROM '+name)
         columns=['rowid',*[r['name'] for r in db.execute('PRAGMA table_info('+name+')')]]
+        super().__init__(db,'SELECT '+','.join(map(quote,columns))+' FROM '+source)
         self.column_names=columns
         arguments=','.join('?, '+quote(c) for c in columns)
         special=' OR '.join("typeof("+quote(c)+") IN ('real','blob')" for c in columns)
-        self.encoded_sql='SELECT CASE WHEN '+special+' THEN NULL ELSE json_object('+arguments+') END,rowid FROM '+name
+        self.encoded_sql='SELECT CASE WHEN '+special+' THEN NULL ELSE json_object('+arguments+') END,rowid FROM '+source
 
     def encoded(self,encoder):
         for row in self.db.execute(self.encoded_sql,self.column_names):
@@ -51,6 +57,34 @@ class TableRows(Rows):
             else:
                 original=self.db.execute(self.sql+' WHERE rowid=?',(row[1],)).fetchone()
                 yield encoder.encode(dict(original))
+
+
+class SentenceBackupRows(Rows):
+    def __init__(self,db,kind):
+        import record_sources
+        import sentence_rows
+        table=sentence_rows.TABLES[kind]
+        columns=','.join(record_sources.META[table])
+        super().__init__(db,f'SELECT rowid,{columns} FROM {table}',
+                         transform=record_sources.portable_row,source=table)
+        self.kind=kind
+
+    def encoded(self,_encoder):
+        import sentence_rows
+        return sentence_rows.backup_json(self.db,self.kind)
+
+
+class IndependentBackupRows(Rows):
+    def __init__(self,db,table):
+        super().__init__(db,'SELECT rowid,* FROM '+table+' ORDER BY rowid')
+        self.table=table
+
+    def values(self,rows):
+        from itertools import islice
+        from independent_links import portable_rows
+        cursor=iter(rows)
+        while batch:=list(islice(cursor,400)):
+            yield from portable_rows(self.db,self.table,batch)
 
 
 class UnitMap:
@@ -79,7 +113,7 @@ def write(value, stream, update=lambda *a:None):
         if isinstance(v,(list,tuple)):return any(has_cursor(x) for x in v)
         return False
     def encode(v,row=False):
-        if isinstance(v,TableRows):
+        if isinstance(v,(TableRows,SentenceBackupRows)):
             yield '['
             for i,encoded in enumerate(v.encoded(encoder)):
                 if i:yield ', '

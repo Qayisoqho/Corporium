@@ -1,7 +1,10 @@
+import source_fixtures
 import unittest,json
 import server
 import test_lexicon
 import test_segmentation
+import categories
+from unittest.mock import patch
 
 class ClassTests(unittest.TestCase):
     setUp=test_lexicon.LexiconTests.setUp
@@ -16,6 +19,39 @@ class ClassTests(unittest.TestCase):
     def create(self,name,kind='pos',**kw):
         code,c=self.call('/api/class-save',dict(name=name,kind=kind,**kw));self.assertEqual(code,200,c)
         return next(x for x in self.call('/api/classes?language=all')[1] if x['id']==c['id'])
+
+    def test_initialization_uses_one_transaction_and_deduplicates_existing_names(self):
+        for word in ('a','b'):
+            self.assertEqual(self.call('/api/lexeme-save',dict(headword=word,body={'usages':[{'pos':'N','subclass':'II'}]}))[0],200)
+        with server.connect(audit=False) as db:
+            before=[tuple(r) for r in db.execute('SELECT * FROM category_classes ORDER BY id')]
+            sql=[];db.set_trace_callback(sql.append)
+            categories.initialize(db)
+            self.assertTrue(db.in_transaction)
+            self.assertEqual([tuple(r) for r in db.execute('SELECT * FROM category_classes ORDER BY id')],before)
+            lookups=[s for s in sql if s.startswith('SELECT * FROM category_classes WHERE')]
+            self.assertEqual(len(lookups),2)
+            db.rollback()
+
+    def test_initialization_failure_preserves_outer_work_without_partial_classes(self):
+        self.assertEqual(self.call('/api/lexeme-save',dict(headword='a',body={'usages':[{'pos':'N'}]}))[0],200)
+        original=categories.register_usages
+        def fail(db,*args,**kwargs):
+            original(db,*args,**kwargs)
+            raise RuntimeError('interrupted migration')
+        with server.connect(audit=False) as db:
+            db.execute("DELETE FROM category_classes WHERE kind='pos'");db.commit()
+            with patch.object(categories,'register_usages',side_effect=fail):
+                with self.assertRaises(RuntimeError):categories.initialize(db)
+            self.assertFalse(db.in_transaction)
+            self.assertEqual(db.execute("SELECT count(*) FROM category_classes WHERE kind='pos'").fetchone()[0],0)
+            db.execute("UPDATE languages SET name='outer work' WHERE id='ordos'")
+            with patch.object(categories,'register_usages',side_effect=fail):
+                with self.assertRaises(RuntimeError):categories.initialize(db)
+            self.assertTrue(db.in_transaction)
+            self.assertEqual(db.execute("SELECT name FROM languages WHERE id='ordos'").fetchone()[0],'outer work')
+            self.assertEqual(db.execute("SELECT count(*) FROM category_classes WHERE kind='pos'").fetchone()[0],0)
+            db.rollback()
 
     def test_hierarchy_rename_delete_references_and_undo(self):
         root=self.create('名词');child=self.create('II类',parent_id=root['id'])
@@ -73,9 +109,9 @@ class ClassTests(unittest.TestCase):
         code,x=self.call('/api/lexeme-save',dict(headword='old',body={'variants':[{'form':'older','kind':'inflected'}]}));self.assertEqual(code,200,x)
         with server.connect() as db:
             b=x['body'];b['variants'][0]['kind']='inflected';raw=json.dumps(b)
-            db.execute('UPDATE lexemes SET body=? WHERE id=?',(raw,x['id']))
+            source_fixtures.replace(db,'lexemes',x['id'],raw)
         server.init()
-        with server.connect() as db:self.assertEqual(db.execute('SELECT body FROM lexemes WHERE id=?',(x['id'],)).fetchone()[0],raw)
+        with server.connect() as db:self.assertEqual(db.execute('SELECT body FROM lexemes_documents WHERE id=?',(x['id'],)).fetchone()[0],raw)
         c=next(c for c in self.call('/api/classes?language=ordos')[1] if c['name']=='屈折形式')
         self.assertEqual(self.call('/api/class-delete',c)[0],200);self.undo();c=next(r for r in self.call('/api/classes')[1] if r['id']==c['id'])
         self.assertEqual(self.call('/api/class-save',{**c,'name':'屈折变形'})[0],200)

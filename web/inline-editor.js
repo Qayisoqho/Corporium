@@ -92,6 +92,138 @@ function clearInlineEditView(card){
  card.innerHTML=(globalThis.CorporiumI18n?.f("3e27a10e05d3bd",()=>[])??'<p class="muted" role="status">正在更新例句显示…</p>');
  return true;
 }
+function replaceSavedExample(card,next,preserveMedia=false){
+ if(!next?.matches('.editable-example'))return false;
+ for(const attr of next.attributes)if(card.getAttribute(attr.name)!==attr.value)card.setAttribute(attr.name,attr.value);
+ if(preserveMedia){
+  const media='.sentence-audio,.collaborator-badge';
+  const previous=[...card.querySelectorAll(media)],incoming=[...next.querySelectorAll(media)];
+  const direct=previous.every(node=>node.parentNode===card)&&incoming.every(node=>node.parentNode===next);
+  if(previous.length===incoming.length&&previous.every((node,i)=>node.className===incoming[i].className)){
+   if(direct){
+    // The display wrappers place these controls first in normal reading mode.
+    for(const node of incoming)node.remove();
+    const kept=new Set(previous);
+    for(const node of [...card.childNodes])if(!kept.has(node))node.remove();
+    card.append(...next.childNodes);
+   }else{
+    for(const [i,node] of incoming.entries())node.replaceWith(previous[i]);
+    card.replaceChildren(...next.childNodes);
+   }
+  }else card.replaceChildren(...next.childNodes);
+ }else card.replaceChildren(...next.childNodes);
+ delete card.dataset.inlineRefresh;
+ return true;
+}
+function changedExampleCodeSummary(before,after){
+ return !!after&&JSON.stringify(before.code_profile??null)!==JSON.stringify(after.code_profile??null);
+}
+function patchLinkedWords(card,source,record){
+ if(briefMode||inlineDrafts.has(inlineKey(source.kind,source.id))||
+    JSON.stringify(source.warnings)!==JSON.stringify(record.warnings)||
+    JSON.stringify(source.reduplication_info)!==JSON.stringify(record.reduplication_info)||
+    !!source.words.some(w=>w.gloss_sources?.length)!==!!record.words.some(w=>w.gloss_sources?.length))return false;
+ const words=[...card.querySelectorAll('.words>.word')];
+ if(words.length!==source.words.length||words.length!==record.words.length)return false;
+ const lid=record.language_id||record.text_language_id||activeLanguage,template=document.createElement('template');
+ for(const [i,word] of record.words.entries()){
+  if(JSON.stringify(source.words[i])===JSON.stringify(word))continue;
+  const markup=renderWord(word,lid,(record.hits||[]).includes(i));
+  template.innerHTML=markup;const next=template.content.firstElementChild;
+  if(!next)return false;
+  // Keep the live card, its controls and disclosure state around the word.
+  words[i].replaceWith(next);
+ }
+ window.CorporiumFormattedCopy?.updateSource(card,record);
+ return true;
+}
+function patchCorpusCard(source,record,replaceWarnings,preserveMedia=false){
+ const card=$('results').querySelector('.editable-example[data-example-kind="'+source.kind+'"][data-example-id="'+CSS.escape(source.id)+'"]');
+ if(!card)return false;
+ if(preserveMedia&&patchLinkedWords(card,source,record)){
+  items[items.indexOf(source)]=record;
+  return true;
+ }
+ const template=document.createElement('template');
+ template.innerHTML=corpusEntryCard(record);
+ const next=template.content.querySelector('.editable-example');
+ if(!replaceSavedExample(card,next,preserveMedia))return false;
+ items[items.indexOf(source)]=record;
+ if(replaceWarnings&&source.kind==='corpus'){
+  const article=card.closest('.entry'),previous=article.querySelector(':scope>details.warning');
+  const warning=template.content.querySelector('.entry>details.warning');
+  if(warning){warning.open=!!previous?.open;if(previous)previous.replaceWith(warning);else article.append(warning);}
+  else previous?.remove();
+ }
+ return true;
+}
+function captureCorpusLinkUpdate(){
+ const q=corpusPageQuery(),key=q.toString();
+ if(workspace!=='corpus'||!window.CorporiumViews?.current('corpus')||key!==corpusDisplayedQuery||
+    q.get('q')||q.get('warnings')==='true'||q.get('field')==='reduplication'||q.get('code_mode')||q.get('code_id')||
+    items.some(row=>row.kind!=='corpus'))return null;
+ const view=items,sequence=request,base=window.corporiumWorkspaceRevision,language=activeLanguage,brief=briefMode;
+ const current=()=>workspace==='corpus'&&view===items&&sequence===request&&language===activeLanguage&&
+  brief===briefMode&&key===corpusPageQuery().toString();
+ return {base,ids:view.map(row=>row.id),async apply(update){
+  if(!update||update.base!==base||!current())return false;
+  if(!await window.corporiumRefreshSavedHistory(update,update.history)||!current())return false;
+  const sources=new Map(items.map(row=>[row.id,row]));
+  for(const record of update.records){
+   const source=sources.get(record.id);
+   if(!source||changedExampleCodeSummary(source,record)||!patchCorpusCard(source,record,true,true))return false;
+  }
+  window.corporiumMarkSavedView('corpus');
+  return true;
+ }};
+}
+function captureCorpusTextUpdate(draft,{replacement=false}={}){
+ if(draft.isNew||draft.host||draft.onSaved||!window.CorporiumViews?.current('corpus'))return null;
+ const source=items.find(row=>row.id===draft.id&&row.kind===draft.kind);
+ if(!replacement&&(!source||source.revision!==draft.revision))return null;
+ const base=window.corporiumWorkspaceRevision,sequence=request,view=items,language=activeLanguage,brief=briefMode;
+ const current=()=>workspace==='corpus'&&sequence===request&&view===items&&activeLanguage===language&&brief===briefMode;
+ return {base,async apply(update){
+  if(!current()||update.kind!==draft.kind||update.id!==draft.id||update.base!==base||
+     (source&&update.before_revision!==source.revision))return false;
+  const q=corpusPageQuery();
+  const filtered=q.toString()!==corpusDisplayedQuery||q.get('q')||q.get('warnings')==='true'||q.get('field')==='reduplication';
+  // A local edit outside the page can keep the rows when their membership
+  // and the aggregate code summary are still current.
+  if(!source&&(filtered||(update.record&&!update.code_unchanged)))return false;
+  if(!await window.corporiumRefreshSavedHistory(update)||!current())return false;
+  if(!source){window.corporiumMarkSavedView('corpus');return true;}
+  const translated=Object.hasOwn(update.values,'translation');
+  const warningsMayChange=translated&&(!source.translation.trim()!==!update.values.translation.trim()||source.translation.includes('#')||update.values.translation.includes('#'));
+  if(filtered||warningsMayChange||changedExampleCodeSummary(source,update.record)){
+   await search();return true;
+  }
+  const record=!update.record?{...source,...update.values,revision:update.revision}:source.kind==='corpus'?update.record:
+    {...update.record,id:source.id,kind:source.kind,position:source.position,title:source.title,text_id:source.text_id,
+     text_language_id:source.text_language_id,text_notes:source.text_notes,hits:source.hits,revision:update.revision};
+  if(!patchCorpusCard(source,record,!!update.record))return false;
+  window.corporiumMarkSavedView('corpus');
+  return true;
+ }};
+}
+function captureDictionaryExampleUpdate(draft,card){
+ if(draft.isNew||draft.host||draft.onSaved)return null;
+ const section=card.closest('#corpus-examples-section,#standalone-examples');
+ if(!section?.refreshCurrentExamples)return null;
+ const view=captureLexemeView(displayedLexeme);
+ if(!view)return null;
+ const current=()=>view.current()&&section.isConnected&&card.isConnected;
+ return {base:view.base,async apply(update){
+  if(!current()||update.kind!==draft.kind||update.id!==draft.id||update.base!==view.base||update.before_revision!==draft.revision)return false;
+  if(!await window.corporiumRefreshSavedHistory(update)||!current())return false;
+  const expectedRequest=dictionaryRequest+1;
+  await Promise.all([section.refreshCurrentExamples({kind:draft.kind,id:draft.id,redraw:!!update.record}),
+                     view.requery&&refreshDictionaryListOnly(false)]);
+  if(view.sameDetail()&&(!view.requery||dictionaryRequest===expectedRequest&&$('dictionary-list').dataset.pageKey===dictionaryListKey())&&
+     window.corporiumWorkspaceRevision===update.current)window.corporiumMarkSavedView('dictionary');
+  return true;
+ }};
+}
 function finishInlineDraft(key){
  inlineOpening.delete(key);inlineDrafts.delete(key);
  // Hidden pages retain DOM as well as data. Retire every old editor before an
@@ -103,7 +235,7 @@ function finishInlineDraft(key){
 window.corporiumSyncInlineDrafts=()=>{let stale=false;for(const card of document.querySelectorAll('.editable-example'))if(card.getClientRects().length&&!inlineDrafts.has(card.dataset.exampleKey))stale=clearInlineEditView(card)||stale;if(stale)window.corporiumInvalidateViews?.();for(const key of inlineDrafts.keys())repaintInline(key,null,true);};
 async function refreshExampleViews(options={}){
  if(options.invalidate!==false)window.corporiumInvalidateViews?.();
- if(workspace==='corpus'){await loadTexts();await search();}
+ if(workspace==='corpus'){if(options.texts!==false)await loadTexts();await search();}
  if(workspace==='grammar')await loadGrammar();
  if(workspace==='library')await loadLibrary();
  if(workspace==='dictionary')await loadDictionary();
@@ -146,15 +278,35 @@ document.addEventListener('click',async e=>{
   if(d.splitSpaces)inlineSplitSpaces(d);
   // Send cleared existing slots as well: the server removes empty pairs atomically,
   // preserving their old identities and references for undo.
+  const viewUpdate=workspace==='corpus'?captureCorpusTextUpdate(d):workspace==='library'?window.corporiumCaptureLibraryTextUpdate?.(d):
+   workspace==='dictionary'?captureDictionaryExampleUpdate(d,card):null;
+  const restoreEditFocus=viewUpdate&&card.contains(document.activeElement);
   d.saving=true;d.error='';repaintInline(key);
   let saved;
-  try{saved=await originalApi(d.isNew?'sentence-create':'inline-save',{kind:d.kind,id:d.id,text_id:d.text_id,targets:d.targets,survey_node:d.survey_node,survey_version:d.survey_version,example_group:d.example_group,example_group_token:d.example_group_token,revision:d.revision,before:d.before,layers:d.layers,body:d.body,slot_ids:d.words.map(w=>w.id),delete_confirmed:!!d.deleteConfirmed,cells:d.cells.filter(c=>(c.unit_id==='@sentence'||d.words.some(w=>w.id===c.unit_id))&&d.layers.some(l=>l.id===c.layer_id)),_language:d.owner_language});}
+  try{saved=await originalApi(d.isNew?'sentence-create':'inline-save',{...(viewUpdate?{_view_revision:viewUpdate.base}:{}),kind:d.kind,id:d.id,text_id:d.text_id,targets:d.targets,survey_node:d.survey_node,survey_version:d.survey_version,example_group:d.example_group,example_group_token:d.example_group_token,revision:d.revision,before:d.before,layers:d.layers,body:d.body,slot_ids:d.words.map(w=>w.id),delete_confirmed:!!d.deleteConfirmed,cells:d.cells.filter(c=>(c.unit_id==='@sentence'||d.words.some(w=>w.id===c.unit_id))&&d.layers.some(l=>l.id===c.layer_id)),_language:d.owner_language});}
   catch(error){d.error=error.message;d.saving=false;repaintInline(key);return;}
   finishInlineDraft(key);
-  try{const inPlace=await d.onSaved?.(saved,d);d.host?.remove();await window.corporiumRefreshUndoState();if(!inPlace)await refreshExampleViews({invalidate:false});await window.corporiumSentenceInspector?.afterExampleSave?.({kind:d.kind,id:d.id});}
+  try{
+   let updated=false;
+   if(viewUpdate&&saved._view_update){
+    try{updated=await viewUpdate.apply(saved._view_update);}catch{window.corporiumInvalidateViews?.();}
+   }
+   if(!updated){
+    const moved=d.isNew&&d.workspace&&(workspace!==d.workspace||activeLanguage!==d.owner_language);
+    const inPlace=moved||await d.onSaved?.(saved,d);d.host?.remove();await window.corporiumRefreshUndoState();
+    if(!inPlace)await refreshExampleViews({invalidate:false});
+   }
+   if(updated&&restoreEditFocus&&card.isConnected&&document.activeElement===document.body)card.querySelector('[data-inline-start=""]')?.focus({preventScroll:true});
+   if(d.isNew&&workspace===d.workspace&&activeLanguage===d.language_id){
+    const root=document.querySelector('dialog:modal')||document;
+    const node=[...root.querySelectorAll('.editable-example[data-example-id="'+CSS.escape(saved.id)+'"]')].find(el=>el.getClientRects().length);
+    if(node)await revealCreatedRecord(node,()=>workspace===d.workspace&&activeLanguage===d.language_id);
+   }
+   await window.corporiumSentenceInspector?.afterExampleSave?.({kind:d.kind,id:saved.id||d.id});
+  }
   catch(error){d.host?.remove();window.corporiumInvalidateViews?.();$('notice').textContent=(globalThis.CorporiumI18n?.f("a5f2790f965cdc",()=>[error.message])??'例句已保存，但界面刷新失败：'+error.message+'。请刷新页面查看已保存内容。');}
  }catch(error){button.disabled=false;const msg=document.createElement('p');msg.className='inline-error';msg.textContent=error.message;card.append(msg);}};
- if(window.corporiumPreserveExampleLocation)await window.corporiumPreserveExampleLocation({kind:card.dataset.exampleKind,id:card.dataset.exampleId,card},run);else await run();
+ if(window.corporiumPreserveExampleLocation&&!inlineDrafts.get(key)?.isNew)await window.corporiumPreserveExampleLocation({kind:card.dataset.exampleKind,id:card.dataset.exampleId,card},run);else await run();
 });
 window.addEventListener('beforeunload',e=>{if([...inlineDrafts.values()].some(d=>d.saving||(d.dirty&&!(d.isNew&&sentenceDraftEmpty(d))))){e.preventDefault();e.returnValue='';}});
 

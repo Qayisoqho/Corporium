@@ -13,11 +13,12 @@ def needed(db):
 def recover(db,force=False):
     if not force and not needed(db):return
     import grammar
+    import record_sources
     spellings=defaultdict(set)
-    for sql in ('SELECT e.body,t.language_id FROM entries e JOIN texts t ON t.id=e.text_id',
-                'SELECT body,language_id FROM dictionary_examples'):
-        for r in db.execute(sql):
-            body=json.loads(r['body']);lid=body.get('language_id') or r['language_id']
+    for table,sql in (('entries','SELECT e.id,t.language_id FROM entries e JOIN texts t ON t.id=e.text_id'),
+                      ('dictionary_examples','SELECT id,language_id FROM dictionary_examples')):
+        for r in record_sources.with_bodies(db,table,db.execute(sql)):
+            body=r['body'];lid=body.get('language_id') or r['language_id']
             for word in body.get('words',[]):
                 for symbol in grammar.tokens(word.get('gloss',''),lid,{},lower=True,candidates=True):
                     if not SCRIPT.fullmatch(symbol):continue

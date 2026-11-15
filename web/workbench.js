@@ -425,8 +425,11 @@ createWorkbenchScrollRegions(document);
   const list=[],seen=new Set();
   const add=(label,group,run)=>{const key=group+'\0'+label;if(!label||seen.has(key))return;seen.add(key);list.push({label,group,run});};
   for(const tab of workspaceTabs.querySelectorAll('button'))if(visible(tab))add(labelOf(tab),ui('转到','Go to'),()=>tab.click());
-  const sources=['#workspace-toolbar button','#workspace-toolbar summary + .workbench-menu-items button','#management-entries button','#management-backup button','.sidebar-text-actions button','.brand-language-tools button','#global-settings'];
+  const sources=['#workspace-toolbar button','#workspace-toolbar summary + .workbench-menu-items button','#management-backup button','.sidebar-text-actions button','.brand-language-tools button','#global-settings'];
   for(const button of document.querySelectorAll(sources.join(',')))if(visible(button)&&!/删除|Delete/.test(labelOf(button))&&button!==command)add(labelOf(button),ui('命令','Command'),()=>button.click());
+  for(const button of document.querySelectorAll('[data-management-entry],[data-management-language-command]')){
+   if(!button.disabled)add(labelOf(button),ui('命令','Command'),()=>button.click());
+  }
   return list;
  }
  let options=[],active=0,entries=[],entryQuery='',entryTimer=0,entrySequence=0;
@@ -797,7 +800,12 @@ createWorkbenchScrollRegions(document);
    const headword=()=>$('lexeme-headword').closest('.multipart-form-editor')||$('lexeme-headword').closest('label');
    at(frame.title,headword);at(frame.commands,()=>$('lexeme-quick-open'),()=>$('save-lexeme'),frame.cancel);
    const meta=['lexeme-number','morph-entry-type','lexeme-language'].map(id=>()=>$(id)?.closest('label'));
-   const metadata=make('details','lx-entry-metadata');metadata.append(make('summary','',ui('条目信息','Entry information')));at(metadata,...meta);at(frame.info,metadata,frame.index);
+   const metadata=make('details','lx-entry-metadata ui-controls ui-controls--compact'),metadataFields=make('div','lx-metadata-fields');metadata.append(make('summary','',ui('条目信息','Entry information')),metadataFields);at(metadataFields,...meta);at(frame.info,metadata,frame.index);
+   for(const id of ['lexeme-number','morph-entry-type','lexeme-language']){
+    const label=$(id).closest('label'),caption=make('span','ui-label lx-metadata-caption');
+    for(const child of [...label.childNodes])if(child.nodeType===3||child.matches?.('ui-label,.ui-optical-label'))child.remove();
+    label.prepend(caption);label.classList.add('lx-metadata-field');
+   }
    // Written forms and variants | morphological identity.
    const writing=card(cards,'writing',ui('书写形式','Written forms')),variantHead=make('header','lx-card-head lx-subhead');variantHead.append(make('h3','',ui('变体','Variants')));
    at(writing.querySelector('.lx-card-head'),()=>$('add-orthography'));at(writing,()=>$('lexeme-orthographies'),variantHead,()=>$('lexeme-variants'));
@@ -860,7 +868,8 @@ createWorkbenchScrollRegions(document);
    if(arranged)return;arranged=true;
    form.prepend(frame.head);form.append(main,aside);
    plan.apply(rest,[frame.head,main,aside,$('lexeme-error')]);
-   caption($('lexeme-number').closest('label'),ui('同形号','Homograph'));caption($('morph-entry-type')?.closest('label'),ui('条目类型','Entry type'));caption($('lexeme-language').closest('label'),ui('语言','Language'));
+   for(const [id,text] of [['lexeme-number',ui('同形号','Homograph')],['morph-entry-type',ui('条目类型','Entry type')],['lexeme-language',ui('语言','Language')]])$(id).closest('label').querySelector('.lx-metadata-caption').textContent=text;
+   $('lexeme-number').placeholder=ui('自动','Auto');
    form.classList.add('lx-arranged');editor.classList.add('lx-editor');queue();
   }
   function unarrange(){
@@ -1107,7 +1116,7 @@ createWorkbenchScrollRegions(document);
   if(nav.dataset.key!==key){nav.dataset.key=key;nav.replaceChildren(...list.map(([id,label])=>{const b=document.createElement('button');b.type='button';b.className='reading-index-item';b.dataset.reading=id;b.textContent=label;return b;}));}
  }
  detail.addEventListener('morpheme-links-ready',arrange);
- let frame=0;new MutationObserver(()=>{if(!frame)frame=requestAnimationFrame(()=>{frame=0;arrange();});}).observe(detail,{childList:true,subtree:true});
+ let queued=false;new MutationObserver(()=>{if(!queued){queued=true;queueMicrotask(()=>{queued=false;arrange();});}}).observe(detail,{childList:true,subtree:true});
 })();
 
 /* Text corpus reading: the sentence in focus shows its commands; a single text does not repeat its title. */
@@ -1127,7 +1136,7 @@ createWorkbenchScrollRegions(document);
 /* Inline sentence editing: the long usage hint becomes the title's tooltip; tools stay on one compact row. */
 (()=>{
  const tidy=root=>{for(const tools of root.querySelectorAll('.inline-tools:has(>[data-inline-save],>strong)')){const hint=tools.querySelector(':scope>small');const title=tools.querySelector(':scope>strong');if(hint&&title&&!hint.hidden){title.title=hint.textContent.trim()+'\n'+(globalThis.CorporiumI18n?.ui('方向键：↑↓ 在同一词格的语素行、标注行和附加层之间切换；光标在字段两端时，←→ 移到相邻的语素或词格。','Arrow keys: ↑↓ switch between the morpheme, gloss and tier rows of one box; at either end of a field, ←→ move to the neighbouring piece or box.')??'方向键：↑↓ 在同一词格的语素行、标注行和附加层之间切换；光标在字段两端时，←→ 移到相邻的语素或词格。');title.classList.add('inline-hint-title');hint.hidden=true;}}};
- let frame=0;new MutationObserver(()=>{if(!frame)frame=requestAnimationFrame(()=>{frame=0;tidy(document.querySelector('main')||document);});}).observe(document.querySelector('main')||document.body,{childList:true,subtree:true});
+ let queued=false;new MutationObserver(()=>{if(!queued){queued=true;queueMicrotask(()=>{queued=false;tidy(document.querySelector('main')||document);});}}).observe(document.querySelector('main')||document.body,{childList:true,subtree:true});
 })();
 
 /* Tags and checks: the tag library and the annotation checks are two views of one module. */
@@ -1140,7 +1149,7 @@ createWorkbenchScrollRegions(document);
  for(const [view,label] of [['tags',ui('标签库','Label library')],['checks',ui('标注检查','Annotation checks')]]){const b=document.createElement('button');b.type='button';b.setAttribute('role','tab');b.dataset.grammarView=view;b.textContent=label;choice.append(b);}
  heading.append(choice);
  function show(view){root.dataset.grammarView=view;for(const b of choice.children){const on=b.dataset.grammarView===view;b.setAttribute('aria-selected',String(on));b.setAttribute('aria-pressed',String(on));}try{localStorage.setItem('corporium-grammar-view',view);}catch{}}
- choice.onclick=e=>{const b=e.target.closest('[data-grammar-view]');if(b)show(b.dataset.grammarView);};
+ choice.onclick=e=>{const b=e.target.closest('[data-grammar-view]');if(!b||root.dataset.grammarView===b.dataset.grammarView)return;show(b.dataset.grammarView);if(workspace==='grammar')void grammarSafe(()=>loadGrammar())();};
  // Viewing a tag's examples fills the check results.
  root.addEventListener('click',e=>{if(e.target.closest('[data-tag-uses]'))show('checks');},true);
  let saved='tags';try{saved=localStorage.getItem('corporium-grammar-view')||'tags';}catch{}show(saved==='checks'?'checks':'tags');
@@ -1166,7 +1175,7 @@ createWorkbenchScrollRegions(document);
  issue.addEventListener('change',renderTypes);renderTypes();
 })();
 
-/* Settings center: the management dialog groups settings by scope; appearance offers the two main
+/* Settings center: the management dialog groups settings by scope; appearance offers the featured
    themes as cards, the classic palettes, automatic switching and text size. */
 (()=>{
  const ui=(zh,en)=>globalThis.CorporiumI18n?.ui(zh,en)??zh;
@@ -1188,16 +1197,23 @@ createWorkbenchScrollRegions(document);
   const layout=document.createElement('div');layout.className='settings-layout';
   const nav=document.createElement('nav');nav.className='settings-nav';nav.setAttribute('aria-label',ui('设置分区','Settings sections'));
   const pages=document.createElement('div');pages.className='settings-pages';
-  const groups=[[ui('本机设置','This computer'),ui('外观与全局阅读设置','Appearance and global reading settings'),[['appearance',ui('外观','Appearance')],['fonts',ui('全局设置','Global settings')]]],[ui('项目与语言','Project and language'),ui('语言内容与项目共用资料','Language content and shared project data'),[['project',ui('项目内容','Project content')],['backup',ui('备份与关于','Backup and about')]]]];
+  const groups=[[ui('本机设置','This computer'),ui('外观与全局阅读设置','Appearance and global reading settings'),[['appearance',ui('外观','Appearance')],['fonts',ui('全局设置','Global settings')]]],[ui('项目与语言','Project and language'),ui('语言内容与项目共用资料','Language content and shared project data'),[['language',ui('语言','Languages')],['project',ui('项目共用资料','Shared project data')],['backup',ui('备份与关于','Backup and about')]]]];
   const page={};
   for(const [title,note,items] of groups){
    const scope=document.createElement('section');scope.className='settings-scope';scope.setAttribute('aria-label',title);
    const head=document.createElement('div');head.className='settings-group';head.append(Object.assign(document.createElement('strong'),{textContent:title}),Object.assign(document.createElement('small'),{textContent:note}));scope.append(head);nav.append(scope);
    for(const [id,label] of items){const b=document.createElement('button');b.type='button';b.dataset.settingsPage=id;b.textContent=label;scope.append(b);const section=document.createElement('section');section.className='settings-page';section.dataset.settingsPage=id;const h=document.createElement('h3');h.textContent=label;section.append(h);pages.append(section);page[id]=section;}
   }
+  page.language.id='management-language-page';
+  page.project.id='management-project-page';
   // Appearance: theme cards, classic palettes, automatic switching and text size.
   const cards=document.createElement('div');cards.className='theme-cards';cards.setAttribute('role','radiogroup');cards.setAttribute('aria-label',ui('界面主题','Interface theme'));
-  for(const [id,name,note] of [['docoid','Docoid',ui('日间 · 文档阅读','Day · document reading')],['dawoid','DAWoid',ui('夜间 · 工作站','Night · workstation')]]){const b=document.createElement('button');b.type='button';b.setAttribute('role','radio');b.dataset.themeChoice=id;b.innerHTML='<span class="theme-swatch" data-swatch="'+id+'"><i></i><i></i><i></i></span><strong></strong><small></small>';b.querySelector('strong').textContent=name;b.querySelector('small').textContent=note;cards.append(b);}
+  const featuredThemes=[
+   ['docoid','Docoid',ui('日间 · 文档阅读','Day · document reading')],
+   ['docoid-crimson',themeSelect.querySelector('[value="docoid-crimson"]').textContent,ui('日间 · 绛红与灰蓝','Day · crimson and slate blue')],
+   ['dawoid','DAWoid',ui('夜间 · 工作站','Night · workstation')]
+  ];
+  for(const [id,name,note] of featuredThemes){const b=document.createElement('button');b.type='button';b.setAttribute('role','radio');b.dataset.themeChoice=id;b.innerHTML='<span class="theme-swatch" data-swatch="'+id+'"><i></i><i></i><i></i></span><strong></strong><small></small>';b.querySelector('strong').textContent=name;b.querySelector('small').textContent=note;cards.append(b);}
   const classic=document.createElement('label');classic.className='settings-field';classic.append(ui('经典配色','Classic palettes'));
   const classicSelect=document.createElement('select');classicSelect.innerHTML='<option value=""></option>';for(const id of ['ivory','night','forest']){const o=themeSelect.querySelector('option[value="'+id+'"]');if(o)classicSelect.add(new Option(o.textContent,id));}
   classicSelect.options[0].textContent=ui('不使用','None');classic.append(classicSelect);
@@ -1227,7 +1243,6 @@ createWorkbenchScrollRegions(document);
     'classes-open':ui('词典：管理本语言的词类、子类及条目分类。','Lexicon: parts of speech, subclasses and entry classifications for this language.'),
     speaker:ui('项目共用：管理合作者姓名、研究编号及引用信息。','Shared project data: contributor names, research identifiers and references.'),
     code:ui('项目共用：管理正文与轨道使用的语言名称和简称。','Shared project data: language names and abbreviations used in texts and tracks.'),
-    'quick-edit-manager-open':ui('词典：选择本语言快捷编辑时显示的字段。','Lexicon: fields shown when quick-editing entries in this language.'),
     'paradigm-template-open':ui('词典：设置本语言的变形表模板与语法特征组合。','Lexicon: paradigm templates and grammatical feature combinations for this language.'),
     'judgment-manage-open':ui('例句：管理本语言的合法性判断符号与类型。','Examples: grammaticality judgment symbols and types for this language.')
    };
@@ -1241,16 +1256,41 @@ createWorkbenchScrollRegions(document);
   layout.append(nav,pages);content.append(layout);
   const leftovers=document.querySelector('#workbench-preferences .theme-panel');if(leftovers&&!leftovers.querySelector('button,select,input,details'))leftovers.hidden=true;
   $('workbench-preferences')?.classList.add('settings-moved');
-  function show(id){for(const b of nav.querySelectorAll('[data-settings-page]'))b.setAttribute('aria-current',String(b.dataset.settingsPage===id));for(const s of pages.children)s.hidden=s.dataset.settingsPage!==id;try{localStorage.setItem('corporium-settings-page',id);}catch{}if(id==='fonts'&&dialog.open)void window.CorporiumGlobalSettings.load();}
-  nav.onclick=e=>{const b=e.target.closest('[data-settings-page]');if(b)show(b.dataset.settingsPage);};
+  function show(id){
+   dialog.dataset.settingsPage=id;
+   for(const b of nav.querySelectorAll('[data-settings-page]'))b.setAttribute('aria-current',String(b.dataset.settingsPage===id));
+   for(const s of pages.children)s.hidden=s.dataset.settingsPage!==id;
+   try{localStorage.setItem('corporium-settings-page',id);}catch{}
+   if(dialog.open){
+    if(id==='fonts')void window.CorporiumGlobalSettings.load();
+    window.CorporiumManagement?.showPage(id);
+   }
+  }
+  function openPage(id=dialog.dataset.settingsPage){if(!dialog.open)dialog.showModal();show(id);}
+  const discardGlobalSettings=ui('放弃尚未保存的全局设置？','Discard unsaved global settings?');
+  async function closeForWorkspace(){
+   if(globalSettings.busy()||await window.CorporiumManagement?.canLeave()===false)return false;
+   if(globalSettings.dirty()&&!await corporiumConfirm(discardGlobalSettings))return false;
+   dialog.close();
+   return true;
+  }
+  window.CorporiumSettingsCenter={openPage,closeForWorkspace};
+  $('management-open').onclick=()=>openPage();
+  nav.onclick=safe(async e=>{
+   const b=e.target.closest('[data-settings-page]');
+   if(!b||b.dataset.settingsPage===dialog.dataset.settingsPage)return;
+   if(await window.CorporiumManagement?.canLeave()===false)return;
+   show(b.dataset.settingsPage);
+  });
   let start='appearance';try{start=localStorage.getItem('corporium-settings-page')||start;}catch{}show(page[start]?start:'appearance');
   const globalSettings=window.CorporiumGlobalSettings;
-  globalSettings.open=()=>{if(!dialog.open)dialog.showModal();show('fonts');void globalSettings.load();};
+  globalSettings.open=()=>openPage('fonts');
   dialog.addEventListener('close',()=>globalSettings.discard());
   new MutationObserver(()=>{if(dialog.open&&!page.fonts.hidden)void globalSettings.load();}).observe(dialog,{attributes:true,attributeFilter:['open']});
   const guardSettingsClose=event=>{
+   if(window.CorporiumManagement?.guardClose(event))return;
    if(globalSettings.busy()){event.preventDefault();return;}
-   if(globalSettings.dirty())guardDialogDiscard(event,true,ui('放弃尚未保存的全局设置？','Discard unsaved global settings?'));
+   if(globalSettings.dirty())guardDialogDiscard(event,true,discardGlobalSettings);
   };
   dialog.addEventListener('cancel',guardSettingsClose);
   dialog.querySelector('.dialog-top .close,form[method=dialog] .close')?.addEventListener('click',guardSettingsClose);
@@ -1287,7 +1327,7 @@ createWorkbenchScrollRegions(document);
    changed cards; offsets are relative to each card, not its page position. */
 function createSentenceMeasurements(lists,doc=document,win=window){
  const observed=new Map(),dirty=new Set();let frame=0,all=true,rebuild=true,cards=[];
- const queue=()=>{if(!frame)frame=win.requestAnimationFrame(sync);};
+ const queue=()=>{if(!frame){frame=1;win.queueMicrotask(sync);}};
  const invalidate=()=>{all=true;queue();};
  function sync(){
   frame=0;

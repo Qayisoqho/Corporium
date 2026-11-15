@@ -1,4 +1,5 @@
 """Completed evidence results must be tied to the reader's actual snapshot."""
+import source_fixtures
 import json
 import sqlite3
 import unittest
@@ -31,8 +32,8 @@ class EvidenceSnapshotTests(unittest.TestCase):
 
     def change(self,e,value):
         with server.connect(audit=False) as db:
-            body=json.loads(db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0]);body['translation']=value;body['raw']='';body['edited']=True
-            db.execute('UPDATE entries SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body,ensure_ascii=False),e['id']))
+            body=json.loads(db.execute('SELECT body FROM entries_documents WHERE id=?',(e['id'],)).fetchone()[0]);body['translation']=value;body['raw']='';body['edited']=True
+            source_fixtures.replace(db,'entries',e['id'],json.dumps(body,ensure_ascii=False),bump=True)
 
     def test_repeated_filter_reuses_complete_evidence_and_returns_independent_values(self):
         self.fixture();first=self.search();self.assertEqual(first['total'],1)
@@ -55,7 +56,7 @@ class EvidenceSnapshotTests(unittest.TestCase):
         with closing(sqlite3.connect(server.DB)) as setup:setup.execute('PRAGMA journal_mode=WAL')
         e,_=self.fixture();self.assertEqual(self.search()['total'],1)
         with server.connect(audit=False,observe_snapshot=True) as old:
-            old.execute('BEGIN');old.execute('SELECT body FROM entries').fetchone()
+            old.execute('BEGIN');old.execute('SELECT body FROM entries_documents').fetchone()
             self.change(e,'new committed value');self.assertEqual(self.search()['total'],0)
             result=lexicon.list_lexemes(old,'ordos','evidence-only')
             self.assertEqual(result['total'],1)
@@ -64,8 +65,8 @@ class EvidenceSnapshotTests(unittest.TestCase):
     def test_uncommitted_writes_and_missing_observer_use_live_sources(self):
         e,_=self.fixture();self.assertEqual(self.search()['total'],1)
         with server.connect(audit=False,observe_snapshot=True) as db:
-            db.execute('BEGIN IMMEDIATE');body=json.loads(db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0]);body['translation']='uncommitted';body['raw']='';body['edited']=True
-            db.execute('UPDATE entries SET body=? WHERE id=?',(json.dumps(body),e['id']))
+            db.execute('BEGIN IMMEDIATE');body=json.loads(db.execute('SELECT body FROM entries_documents WHERE id=?',(e['id'],)).fetchone()[0]);body['translation']='uncommitted';body['raw']='';body['edited']=True
+            source_fixtures.replace(db,'entries',e['id'],json.dumps(body))
             self.assertEqual(lexicon.list_lexemes(db,'ordos','evidence-only')['total'],0)
         with server.connect(audit=False) as db,patch.object(dictionary_search,'example_rows',wraps=dictionary_search.example_rows) as scan:
             self.assertEqual(lexicon.list_lexemes(db,'ordos','evidence-only')['total'],0);self.assertFalse(scan.called)

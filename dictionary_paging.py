@@ -2,6 +2,14 @@
 SIZES=(10,20,30,50,100,200,500,1000)
 
 
+def focused_page(ids,focus,page_size=30):
+    """Locate a stable identity in the same filtered, sorted key stream."""
+    paginate([],1,page_size)
+    for position,identity in enumerate(ids):
+        if identity==focus:return 1 if str(page_size)=='all' else position//int(page_size)+1
+    return None
+
+
 def paginate(rows,page=1,page_size=30):
     if str(page_size)=='all':size=max(1,len(rows))
     else:

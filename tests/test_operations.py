@@ -33,6 +33,7 @@ class OrganizationTests(unittest.TestCase):
         tid,entries=self.seed('A',3)
         payload={'id':entries[1]['id'],'text_id':tid,'revision':1}
         self.assertEqual(self.call('/api/delete-entry',payload)[0],400)
+        before=self.call('/api/backup')[1]['entries']
         status,r=self.call('/api/delete-entry',{**payload,'confirmed':True})
         self.assertEqual(status,200)
         left=self.call('/api/entries?text='+tid)[1]['items']
@@ -40,7 +41,8 @@ class OrganizationTests(unittest.TestCase):
         self.assertEqual([e['position'] for e in left],[1,2])
         from pathlib import Path
         backup=json.loads((Path(self.temp.name)/'backups'/r['backup']).read_text(encoding='utf-8'))
-        self.assertEqual(len(backup['entries']),3)
+        normalized=lambda rows:[{**row,'body':json.loads(row['body'])} for row in rows]
+        self.assertEqual(normalized(backup['entries']),normalized(before))
         self.assertEqual(self.call('/api/delete-text',{'id':tid,'count':3,'confirmed':True})[0],400)
         self.assertEqual(self.call('/api/delete-text',{'id':tid,'count':2,'confirmed':True})[0],200)
         self.assertEqual(self.call('/api/texts')[1],[])

@@ -2,11 +2,12 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const lexicon=fs.readFileSync('web/lexicon.js','utf8'),morphemes=fs.readFileSync('web/morphemes.js','utf8'),undo=fs.readFileSync('web/undo.js','utf8');
 function harness({existing=false,fail=false}={}){
  const nodes={},loads=[],calls=[];
- const node=id=>nodes[id]??={value:'',disabled:false,textContent:'',open:false};
+ const node=id=>nodes[id]??={value:'',disabled:false,textContent:'',open:false,querySelector:()=>null};
  node('morpheme-gloss').parentElement={parentElement:{}};const editor=node('morpheme-editor');editor.open=true;
  for(const [id,value] of Object.entries({'morpheme-form-value':'-new','morpheme-gloss':'GEN','morpheme-type':'affix','morpheme-function':'inflection','morpheme-position':'suffix'}))node(id).value=value;
- const c={workspace:'dictionary',activeLanguage:'ordos',editing:existing?{id:'same',revision:1,language_id:'ordos'}:null,editorDirty:true,selection:'old',editor,$:node,dictSafe:f=>f,readGlossAddition:()=>({}),readTags:()=>[],readVariants:()=>[],readMorphemeSenses:()=>[],wsReadWritings:()=>[],edit(){},refreshUndo:async()=>calls.push('history'),originalApi:async(path,body)=>{calls.push({path,body});if(fail)throw Error('保存失败');return {id:existing?'same':'new'};},loadDictionary:async()=>{loads.push({open:editor.open,selection:c.selection,dirty:c.editorDirty});if(editor.open&&c.selection!==c.editing?.id)calls.push('discard-prompt');}};
+ const c={workspace:'dictionary',mode:'morphemes',CSS:{escape:s=>s},detail:{},revealCreatedRecord:async()=>{},revealCreatedDictionaryItem:async()=>{},createdDictionaryPage:async()=>4,window:{corporiumRefreshUndoState:async()=>{}},activeLanguage:'ordos',editing:existing?{id:'same',revision:1,language_id:'ordos'}:null,editorDirty:true,selection:'old',editor,$:node,dictSafe:f=>f,readGlossAddition:()=>({}),readTags:()=>[],readVariants:()=>[],readMorphemeSenses:()=>[],wsReadWritings:()=>[],edit(){},refreshUndo:async()=>calls.push('history'),originalApi:async(path,body)=>{calls.push({path,body});if(fail)throw Error('保存失败');return {id:existing?'same':'new'};},loadDictionary:async()=>{loads.push({open:editor.open,selection:c.selection,dirty:c.editorDirty});if(editor.open&&c.selection!==c.editing?.id)calls.push('discard-prompt');}};
  editor.close=()=>{editor.open=false;c.editing=null;c.editorDirty=false;calls.push('close');};
+ c.load=c.loadDictionary;
  c.prepareDictionaryLinkChanges=async request=>request;
  vm.createContext(c);
  vm.runInContext(lexicon.slice(lexicon.indexOf('const lexiconRefreshUndo='),lexicon.indexOf('const lexiconSwitchLanguage=')),c);

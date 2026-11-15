@@ -21,15 +21,16 @@ test('row dragging and arrow keys reorder the original component nodes, while cr
  hit(b);h.onpointerdown(event());c.pointerMove(event(40,95));c.cancelDrag();c.pointerUp(event());assert.deepEqual([...lists.a],[a,b]);assert.equal(done(),2);
 });
 
-function inputNavigation(){
+function inputNavigation(grid=false){
  const source=fs.readFileSync('web/quick-edit-rows.js','utf8'),components=new Map(),lists=[{children:[]},{children:[]}];let focused=null,selected=null,enabled=true;
- const c={components,active:()=>enabled,lexemeDirty:false};vm.createContext(c);
+ const c={components,active:()=>enabled,lexemeDirty:false,options:{gridNavigation:()=>grid}};vm.createContext(c);
  vm.runInContext(source.slice(source.indexOf(' function componentColumn('),source.indexOf(' function componentView(')),c);
  function row(list,index){
   const element={parentElement:lists[list]},view={writingInputs:new Map()};lists[list].children.push(element);
-  function input(column){return {value:list+':'+index+':'+column,disabled:false,readOnly:false,hidden:false,closest:()=>element,getClientRects(){return this.hidden?[]:[{}];},focus(){focused=this;},select(){selected=this;}};}
-  for(const name of ['form','readings','gloss'])view[name]=input(name);
+  function input(column){return {value:list+':'+index+':'+column,selectionStart:0,selectionEnd:0,disabled:false,readOnly:false,hidden:false,closest:()=>element,getClientRects(){return this.hidden?[]:[{}];},focus(){focused=this;},select(){selected=this;}};}
+  for(const name of ['query','form','readings','gloss'])view[name]=input(name);
   for(const type of ['han','latin'])view.writingInputs.set(type,input(type));
+  view.line={querySelectorAll:()=>[view.query,view.form,view.readings,...view.writingInputs.values(),view.gloss]};
   components.set(element,view);return {element,view,input};
  }
  const rows=[row(0,0),row(0,1),row(0,2),row(0,3)],foreign=row(1,0);
@@ -76,4 +77,25 @@ test('readonly linked component fields retain native focus and navigation behavi
  const {rows,key}=inputNavigation(),input=rows[0].view.readings;input.readOnly=true;
  assert.equal(key(input,'ArrowDown').prevented,false);input.readOnly=false;input.disabled=true;
  assert.equal(key(input,'ArrowDown').prevented,false);
+});
+test('Chinese table navigation includes per-row search and crosses editable columns only at caret boundaries',()=>{
+ const {rows,key,c}=inputNavigation(true),view=rows[0].view;
+ assert.equal(key(view.query,'ArrowDown').focused,rows[1].view.query);
+ assert.equal(key(rows[1].view.query,'ArrowUp').focused,view.query);
+ view.form.selectionStart=view.form.selectionEnd=0;
+ assert.equal(key(view.form,'ArrowLeft').focused,view.query);
+ view.form.selectionStart=view.form.selectionEnd=2;
+ assert.equal(key(view.form,'ArrowLeft').prevented,false);
+ assert.equal(key(view.form,'ArrowRight').prevented,false);
+ view.form.selectionStart=view.form.selectionEnd=view.form.value.length;
+ assert.equal(key(view.form,'ArrowRight').focused,view.readings);
+ view.readings.readOnly=true;
+ assert.equal(key(view.form,'ArrowRight').focused,view.writingInputs.get('han'));
+ view.writingInputs.get('han').disabled=true;
+ assert.equal(key(view.form,'ArrowRight').focused,view.writingInputs.get('latin'));
+ view.form.selectionStart=0;
+ assert.equal(key(view.form,'ArrowRight').prevented,false);
+ assert.equal(key(view.query,'ArrowDown',{isComposing:true}).prevented,false);
+ assert.equal(key(rows[0].input('native-select'),'ArrowDown').prevented,false);
+ assert.equal(c.lexemeDirty,false);
 });

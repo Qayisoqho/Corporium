@@ -2,6 +2,7 @@
 import copy
 import json
 import unittest
+from unittest.mock import patch
 import server
 import test_sentence_dictionary as sd
 
@@ -55,11 +56,13 @@ class LayerReplaceTests(unittest.TestCase):
         a=self.layer('A','ipa');b=self.layer('B','translation')
         for kind in ('corpus','independent'):
             src=self.source(kind,[('root','G')]);self.annotate(src,[(a,None,'old old'),(b,None,'old old')])
-            args,p=self.preview(kind,replacement='oldold')
-            first=p['changes'][0];r=self.apply(args,p,keys=[first['key']],pending_keys=[c['key'] for c in p['changes']])
-            self.assertEqual(len(r['remaining_keys']),3)
-            fresh=self.api('text-replace-preview',args);remaining=[c for c in fresh['changes'] if c['key'] in r['remaining_keys']]
-            self.assertEqual(len(remaining),3);self.apply(args,fresh,keys=[c['key'] for c in remaining],pending_keys=[c['key'] for c in remaining])
+            args,p=self.preview(kind,replacement='oldold',reuse_preview=True)
+            with patch.object(server.text_replace,'plan',side_effect=AssertionError('preview reread')):
+                first=p['changes'][0];r=self.apply(args,p,keys=[first['key']])
+                self.assertEqual(len(r['remaining_keys']),3)
+                remaining=r['remaining_preview']
+                self.assertEqual([c['key'] for c in remaining['changes']],r['remaining_keys'])
+                self.apply(args,remaining)
             self.assertEqual({c['value'] for c in self.data(src)['cells']},{'oldold oldold'})
 
     def test_layer_filter_scope_arbitrary_text_empty_and_orphans(self):

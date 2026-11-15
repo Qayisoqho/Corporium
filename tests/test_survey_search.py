@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 import unittest
 import uuid
@@ -88,7 +89,7 @@ class SurveySearchTests(unittest.TestCase):
         with server.connect() as db:
             for i in range(405):
                 rid=str(uuid.uuid4());eid=str(uuid.uuid4())
-                db.execute('INSERT INTO dictionary_examples VALUES(?,?,?,1)',(rid,'ordos',json.dumps(dict(ipa='测试'+str(i),translation='批次命中',words=[]))))
+                source_fixtures.seed(db,'dictionary_examples',('id', 'language_id', 'body', 'revision'),(rid, 'ordos', json.dumps(dict(ipa='测试'+str(i),translation='批次命中',words=[])), 1))
                 db.execute('INSERT INTO survey_evidence VALUES(?,?,?,?,?,?,?,1)',(eid,'ordos',nid,'independent',rid,i+1,'{}'))
         self.assertEqual(self.search('批次命中','examples')['total'],405)
 

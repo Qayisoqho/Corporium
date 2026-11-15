@@ -1,6 +1,7 @@
 """Same-language, exact-form homonym numbering and confirmation snapshots."""
 import hashlib
 import json
+import record_sources
 
 def number(value):
     if value in (None,''):return None
@@ -8,10 +9,13 @@ def number(value):
     return value
 
 def group(db,lid,form):
-    rows=[{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT * FROM lexemes WHERE language_id=? AND headword=? ORDER BY rowid',(lid,form))]
-    used={number(r['body'].get('homonym_number')) for r in rows}-{None}
+    field='homonym_number' if record_sources.native(db) else """CASE json_type(body,'$.homonym_number')
+        WHEN 'true' THEN 'true' WHEN 'false' THEN 'false' ELSE json_extract(body,'$.homonym_number') END"""
+    rows=[dict(r) for r in db.execute(
+        f'SELECT id,language_id,headword,revision,{field} stored_number FROM lexemes WHERE language_id=? AND headword=? ORDER BY rowid',(lid,form))]
+    used={number(r['stored_number']) for r in rows}-{None}
     for r in rows:
-        n=number(r['body'].get('homonym_number'))
+        n=number(r['stored_number'])
         if n is None and len(rows)>1:
             n=1
             while n in used:n+=1
@@ -26,6 +30,7 @@ def plan(db,lid,form,exclude=''):
     return dict(peers=peers,token=token)
 
 def prepare(db,lid,form,data,old,confirmation):
+    import dictionary_rows
     peers=[r for r in group(db,lid,form) if not old or r['id']!=old['id']]
     if peers and (not old or old['headword']!=form):
         if confirmation!=plan(db,lid,form,old['id'] if old else '')['token']:
@@ -44,19 +49,23 @@ def prepare(db,lid,form,data,old,confirmation):
                 n=1
                 while n in used or n==chosen:n+=1
                 used.add(n)
-            if r['body'].get('homonym_number')!=n:
-                r['body']['homonym_number']=n
-                db.execute('UPDATE lexemes SET body=?,revision=revision+1 WHERE id=?',(json.dumps(r['body'],ensure_ascii=False),r['id']))
+            if r['stored_number']!=n:
+                body=dictionary_rows.raw_bodies(db,'lexeme',[r['id']])[r['id']]
+                body['homonym_number']=n
+                dictionary_rows.write(db,'lexeme',r['id'],body)
         if chosen is None:
             chosen=1
             while chosen in used:chosen+=1
     data['homonym_number']=chosen
 
 def clear_singleton(db,lid,form):
+    import dictionary_rows
     rows=group(db,lid,form)
-    if len(rows)==1 and rows[0]['body'].get('homonym_number') is not None:
-        r=rows[0];r['body']['homonym_number']=None
-        db.execute('UPDATE lexemes SET body=?,revision=revision+1 WHERE id=?',(json.dumps(r['body'],ensure_ascii=False),r['id']))
+    if len(rows)==1 and rows[0]['stored_number'] is not None:
+        xid=rows[0]['id']
+        body=dictionary_rows.raw_bodies(db,'lexeme',[xid])[xid]
+        body['homonym_number']=None
+        dictionary_rows.write(db,'lexeme',xid,body)
 
 def decorate(db,item):
     if item['body'].get('homonym_number') is None:
@@ -72,7 +81,8 @@ def decorate_many(db,items):
     keys=list(needed)
     for start in range(0,len(keys),200):
         batch=keys[start:start+200]
-        sql='SELECT id,language_id,headword,json_extract(body,\'$.homonym_number\') number FROM lexemes WHERE '+ ' OR '.join('(language_id=? AND headword=?)' for _ in batch)+' ORDER BY rowid'
+        field='homonym_number' if record_sources.native(db) else "json_extract(body,'$.homonym_number')"
+        sql=f'SELECT id,language_id,headword,{field} number FROM lexemes WHERE '+ ' OR '.join('(language_id=? AND headword=?)' for _ in batch)+' ORDER BY rowid'
         for r in db.execute(sql,[v for pair in batch for v in pair]):groups.setdefault((r['language_id'],r['headword']),[]).append(r)
     numbers={}
     for rows in groups.values():
@@ -88,10 +98,12 @@ def decorate_many(db,items):
         if r['body'].get('homonym_number') is None:r['body']['homonym_number']=numbers[r['id']]
     return items
 
-def validate(db):
+def validate(db,targets=None):
+    if targets is None:
+        targets=record_sources.with_bodies(db,'lexemes',db.execute('SELECT id,language_id,headword FROM lexemes'))
     seen=set()
-    for r in db.execute('SELECT language_id,headword,body FROM lexemes'):
-        n=number(json.loads(r['body']).get('homonym_number'))
+    for r in targets:
+        n=number(r['stored_number'] if 'stored_number' in r else r['body'].get('homonym_number'))
         if n is None:continue
         key=(r['language_id'],r['headword'],n)
         if key in seen:raise ValueError('同一词形不能使用重复的同形词下标')

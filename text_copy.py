@@ -80,7 +80,7 @@ def copy(db,body):
         r=dict(attribution);r.update(id=uid(),record_id=tid,revision=1);insert(db,'collaborator_assignments',r)
     from operations import copy_entry
     mapping={};spans={}
-    for position,entry in long_tasks.steps(enumerate(list(db.execute('SELECT * FROM entries WHERE text_id=? ORDER BY position,id',(row['id'],))),1)):
+    for position,entry in long_tasks.steps(enumerate(list(db.execute('SELECT * FROM entries_documents WHERE text_id=? ORDER BY position,id',(row['id'],))),1)):
         eid=copy_entry(db,entry,tid,position,spans);mapping[entry['id']]=eid
         # copy_entry intentionally freezes effective people when moving a sentence;
         # a whole text copy instead retains the original inheritance mode.

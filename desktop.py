@@ -14,7 +14,14 @@ import threading
 from contextlib import closing
 from http.cookies import SimpleCookie
 from urllib.parse import urlparse,parse_qs
-import server
+import desktop_startup
+STARTUP=desktop_startup.begin(sys.argv[1:]) if __name__=='__main__' else None
+try:import server
+except Exception as exc:
+    if STARTUP:
+        STARTUP.finish('failed');STARTUP.release()
+        ctypes.windll.user32.MessageBoxW(None,('Corporium could not start: ' if STARTUP.english else 'Corporium 启动失败：')+str(exc),'Corporium',0x10)
+    raise
 from app_info import VERSION
 
 MIN_WINDOW_SIZE=(1100,600)
@@ -76,6 +83,7 @@ class Projects:
     def open(self,path,new=False):
         if server.recorder.SERVICE.busy():raise ValueError('请先停止录音，再切换项目')
         path=Path(path).resolve();dbpath=path/'data'/'corpus.sqlite3'
+        if STARTUP:STARTUP.stage(2,str(path))
         if not new:
             if not dbpath.is_file():raise ValueError('该文件夹不是 Corporium 项目：未找到 data/corpus.sqlite3。请选择项目最外层文件夹。')
             with closing(sqlite3.connect(dbpath.as_uri()+'?mode=ro',uri=True)) as db:
@@ -84,10 +92,14 @@ class Projects:
                 if db.execute('PRAGMA quick_check').fetchone()[0]!='ok':raise ValueError('数据库检查失败，请先从备份恢复。')
             # A consistent copy works even when an older browser server is still open.
             import backup_policy
-            with closing(sqlite3.connect(dbpath)) as src:backup_policy.sqlite_snapshot(path/'data'/'backups',src,'desktop')
+            if STARTUP:STARTUP.stage(3,str(path))
+            with closing(sqlite3.connect(dbpath)) as src:
+                backup_policy.sqlite_snapshot(path/'data'/'backups',src,'desktop',
+                    **({'progress':STARTUP.backup_progress} if STARTUP and not STARTUP.closed else {}))
         old=server.DB
         try:
-            server.DB=dbpath;server.init()
+            if STARTUP:STARTUP.stage(4,str(path))
+            server.DB=dbpath;server.init(**({'progress':STARTUP.project_progress} if STARTUP and not STARTUP.closed else {}))
             fontdir=path/'font';fontdir.mkdir(exist_ok=True)
             bundled=ASSETS/'font'/'Junicode'
             if bundled.exists() and not (fontdir/'Junicode').exists():shutil.copytree(bundled,fontdir/'Junicode')
@@ -103,26 +115,32 @@ class Projects:
         import tempfile
         import language_exchange
         import journal
+        import project_backup
         if server.recorder.SERVICE.busy():raise ValueError('请先停止录音，再切换项目')
         path=Path(path).resolve()
         if path.exists() and any(path.iterdir()):raise ValueError('请选择一个空文件夹，新建项目不会覆盖现有文件。')
-        source=ASSETS/'packaging'/'examples'/'Telira.corporium'
-        if not source.is_file():raise ValueError('未找到随附的 Tëlira 示例材料，请重新安装 Corporium。')
+        examples=ASSETS/'packaging'/'examples'
+        snapshot=examples/'Telira.corporium-backup'
+        source=examples/'Telira.corporium'
+        if not snapshot.is_file() and not source.is_file():raise ValueError('未找到随附的 Tëlira 示例材料，请重新安装 Corporium。')
         path.parent.mkdir(parents=True,exist_ok=True)
         with tempfile.TemporaryDirectory(prefix='.corporium-example-',dir=path.parent) as pending:
             prepared=Path(pending)/'project';(prepared/'data').mkdir(parents=True)
             old=server.DB;scope=journal.scope.set(journal.scope.get());action=journal.action.set(None)
             try:
                 server.DB=prepared/'data'/'corpus.sqlite3'
-                # Start in Tëlira rather than an unrelated, empty default language.
-                server.init(seed_default_language=False)
-                # Use the normal save lifecycle to rebuild effective gloss
-                # inheritance and validate links before publishing the project.
-                journal.action.set(journal.LABELS['/api/language-package-import'])
-                with server.connect() as db:
-                    language_exchange.import_new(db,server.DB,source,'Tëlira',[])
+                if snapshot.is_file():
+                    project_backup.restore(snapshot,server.DB)
+                    server.init(seed_default_language=False)
+                else:
+                    # Compatibility with resources distributed before the SQLite sample.
+                    server.init(seed_default_language=False)
+                    journal.action.set(journal.LABELS['/api/language-package-import'])
+                    with server.connect() as db:
+                        language_exchange.import_new(db,server.DB,source,'Tëlira',[])
                 with server.connect(audit=False) as db:
-                    if db.execute('PRAGMA quick_check').fetchone()[0]!='ok' or db.execute('PRAGMA foreign_key_check').fetchone():
+                    if ([r[0] for r in db.execute('SELECT name FROM languages')]!=['Tëlira'] or
+                            db.execute('PRAGMA quick_check').fetchone()[0]!='ok' or db.execute('PRAGMA foreign_key_check').fetchone()):
                         raise ValueError('示例项目检查失败，请重新安装 Corporium。')
             finally:
                 server.DB=old;journal.scope.reset(scope);journal.action.reset(action)
@@ -183,7 +201,19 @@ def make_handler(projects,token):
                 if not projects.current:return self.send({'error':'请先打开项目'},409)
                 download_current=parsed.path in ('/api/language-package-download','/api/task-download') and parse_qs(parsed.query).get('project',[''])[0]==projects.generation
                 if parsed.path.startswith('/api/') and parsed.path!='/api/font-file' and not download_current and self.headers.get('X-Corporium-Project')!=projects.generation:return self.send({'error':'项目已切换，请刷新页面'},409)
-                return super().do_GET()
+                if parsed.path!='/api/task-status':return super().do_GET()
+                status_query=parse_qs(parsed.query)
+                if status_query.get('wait')!=['1']:return super().do_GET()
+                project_path=server.DB
+                generation=projects.generation
+            # Waiting for a job must leave project reads and cancellation usable.
+            try:
+                status=server.long_tasks.view(project_path,status_query.get('id',[None])[0],wait=True)
+            except ValueError as error:
+                return self.send({'error':str(error)},400)
+            with LOCK:
+                if projects.generation!=generation:return self.send({'error':'项目已切换，请刷新页面'},409)
+            return self.send(status)
         def do_POST(self):
             with LOCK:
                 if not self.authenticated():return self.send({'error':'需要桌面会话'},403)
@@ -194,6 +224,25 @@ def make_handler(projects,token):
 
 class Bridge:
     def __init__(self,projects):self._projects=projects;self._window=None;self._sidebar_collapsed=False
+
+    def startup_ready(self,style=None):
+        if not self._window.get_current_url().startswith(self._origin+'/'):return {'error':'Invalid origin'}
+        # Persist only presentation preferences, never browser-provided paths.
+        if isinstance(style,dict):
+            saved=desktop_startup.preferences(style)
+            try:
+                with LOCK:
+                    if self._projects.settings.get('startup_ui')!=saved:
+                        updated=dict(self._projects.settings,startup_ui=saved)
+                        pending=self._projects.file.with_suffix('.tmp')
+                        pending.write_text(json.dumps(updated,ensure_ascii=False),encoding='utf-8')
+                        pending.replace(self._projects.file)
+                        self._projects.settings=updated
+            except OSError:logging.exception('Could not remember startup appearance')
+        if STARTUP and not STARTUP.closed:
+            if not STARTUP.smoke:self._window.show()
+            STARTUP.finish()
+        return {'ok':True}
 
     def set_ui_language(self,value):
         try:
@@ -339,7 +388,9 @@ def main():
     window_title='Corporium · 开发版' if args.dev else 'Corporium'
     home=Path(args.self_test or args.smoke_test or os.environ.get('LOCALAPPDATA',str(Path.home())))/app_name
     home.mkdir(parents=True,exist_ok=True)
-    logging.basicConfig(filename=home/'desktop.log',level=logging.INFO,encoding='utf-8')
+    # Early imports can install a stderr handler, including under pythonw where
+    # there is no console. Always keep this application's diagnostics in its log.
+    logging.basicConfig(filename=home/'desktop.log',level=logging.INFO,encoding='utf-8',force=True)
     if args.self_test:
         projects=Projects(home);projects.create(home/'Test project');assert server.DB.exists()
         resumed=Projects(home);assert resumed.restore_last() and resumed.current==projects.current
@@ -349,7 +400,7 @@ def main():
         import webview
         (home/'self-test.json').write_text(json.dumps({'ok':True,'version':VERSION,'frozen':bool(getattr(sys,'frozen',False)),'python':sys.version,'project':str(projects.current),'resume':True,'license_documents':len(notices)}),encoding='utf-8');return
     mutex=None
-    if not args.smoke_test:
+    if not args.smoke_test and not STARTUP:
         kernel=ctypes.WinDLL('kernel32',use_last_error=True);kernel.CreateMutexW.restype=ctypes.c_void_p
         mutex=kernel.CreateMutexW(None,False,'Local\\CorporiumDesktop'+('Dev' if args.dev else ''))
         if ctypes.get_last_error()==183:
@@ -365,21 +416,37 @@ def main():
         with LOCK:projects.open(args.project)
     else:
         with LOCK:projects.restore_last()
+    if STARTUP:STARTUP.stage(5)
     token=secrets.token_urlsafe(32)
     http=server.ThreadingHTTPServer(('127.0.0.1',0 if args.smoke_test else (18766 if args.dev else 18765)),make_handler(projects,token));http.daemon_threads=True
     thread=threading.Thread(target=http.serve_forever,daemon=True);thread.start()
+    if STARTUP:STARTUP.stage(6)
     import webview
     webview.settings['ALLOW_DOWNLOADS']=True
     bridge=Bridge(projects);bridge._origin='http://127.0.0.1:'+str(http.server_port)
     window_title=server.ui_localization.message(window_title,bridge._ui_language())
-    window=webview.create_window(window_title,bridge._origin+'/desktop-bootstrap?token='+token,js_api=bridge,width=1280,height=860,min_size=MIN_WINDOW_SIZE,background_color='#ffffff',hidden=bool(args.smoke_test),text_select=True)
+    window=webview.create_window(window_title,bridge._origin+'/desktop-bootstrap?token='+token,js_api=bridge,width=1280,height=860,min_size=MIN_WINDOW_SIZE,background_color='#ffffff',hidden=bool(args.smoke_test or STARTUP),text_select=True)
     bridge._window=window
+    if STARTUP:window.events.loaded+=lambda:STARTUP.stage(7)
     def refresh_window_minimum(*args):
         try:bridge._apply_window_minimum()
         except Exception:logging.exception('Window monitor update failed')
     window.events.shown+=refresh_window_minimum
     window.events.moved+=refresh_window_minimum
     close_state={'allowed':False,'pending':False}
+    class StartupErrors(logging.Handler):
+        failed=False
+        def emit(self,record):
+            if not STARTUP or STARTUP.closed or self.failed or 'initialization failed' not in record.getMessage():return
+            self.failed=True
+            def fail():
+                STARTUP.finish('failed');close_state['allowed']=True
+                message=('The main window could not open. Please restart Corporium. Details: ' if STARTUP.english else '无法打开主窗口，请重新启动 Corporium。详细记录：')+str(home/'desktop.log')
+                ctypes.windll.user32.MessageBoxW(None,message,'Corporium',0x10)
+                window.destroy()
+            threading.Thread(target=fail,daemon=True).start()
+    startup_errors=StartupErrors()
+    logging.getLogger('pywebview').addHandler(startup_errors)
     def check_close():
         try:
             if server.recorder.SERVICE.busy():
@@ -409,21 +476,32 @@ def main():
     if args.smoke_test:
         def smoke():
             try:
+                # The loaded event precedes data/font readiness. Test the same
+                # explicit handoff as normal startup, without a fixed sleep.
+                if STARTUP:
+                    import time
+                    deadline=time.monotonic()+90
+                    while not STARTUP.closed and time.monotonic()<deadline:time.sleep(.05)
+                    if not STARTUP.closed:raise RuntimeError('Startup page did not become ready')
                 value=json.loads(window.evaluate_js("JSON.stringify({title:document.title,uiLanguage:document.documentElement.lang,interfaceLanguage:document.getElementById('interface-language')?.value,theme:document.documentElement.dataset.theme,background:getComputedStyle(document.body).backgroundColor,startup:!!document.getElementById('startup-language'),languageAtTop:document.getElementById('interface-language')?.getBoundingClientRect().top<100,home:!!document.getElementById('home-enter'),homeVisible:document.documentElement.dataset.home==='true'&&!document.getElementById('homepage').hidden,desktop:!!document.getElementById('desktop-toolbar'),licenses:!!document.getElementById('legal-notices-open'),textSelection:getComputedStyle(document.body).userSelect,buttonSelection:document.getElementById('home-enter')?getComputedStyle(document.getElementById('home-enter')).userSelect:null})"))
                 value.update(version=VERSION,project=str(projects.current),resumed=smoke_resumed)
+                if STARTUP:value['startup_progress']=STARTUP.events
                 (home/'ui-test.json').write_text(json.dumps(value,ensure_ascii=False),encoding='utf-8')
             except Exception:logging.exception('UI smoke test failed')
-            finally:window.destroy()
+            finally:close_state['allowed']=True;window.destroy()
         window.events.loaded+=smoke
     try:webview.start(icon=str(ASSETS/'packaging'/'Corporium.ico'),gui='edgechromium',private_mode=False,storage_path=str(home/'webview'))
     finally:
         server.long_tasks.cancel_all()
         http.shutdown();http.server_close();thread.join(timeout=5)
         if mutex:ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(mutex))
+        logging.getLogger('pywebview').removeHandler(startup_errors)
+        if STARTUP:STARTUP.finish('closed');STARTUP.release()
 
 if __name__=='__main__':
     try:main()
     except Exception as exc:
+        if STARTUP:STARTUP.finish('failed');STARTUP.release()
         logging.exception('Desktop startup failed')
         locale='zh-CN'
         try:

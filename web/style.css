@@ -52,6 +52,24 @@
 .theme-panel select{width:100%;font-size:var(--ui-text-size);padding:var(--ui-control-padding)}
 aside{overflow-y:auto}
 footer{flex-shrink:0}
+/* Shared by the workspace, project chooser and standalone license page. */
+html[data-theme="docoid-crimson"]{
+  color-scheme:light;
+  --ink:#2c2929;--body-text:var(--ink);--ipa:var(--ink);--gloss:#403b3b;--muted:#655e5d;
+  --paper:#fcfbf9;--surface:#fff;--raised:var(--surface);--sidebar:#f1eeeb;--tool:#f4f1ee;
+  --line:#d8d2ce;--line-soft:#e8e3df;--edit-surface:#faf6f4;
+  --green:#873d42;--primary-hover:#6f3035;--button-ink:#fff;--focus:#0e419c;
+  --accent:#f4e9e8;--hover:#f5efec;--selected:#f2e2e1;--hit:#f7e7af;
+  --ok:#30634c;--warning:#79560f;--danger:#ad301a;
+  --bar:var(--green);--bar-ink:#fff;--bar-muted:#f2dfdf;--bar-active:var(--bar-ink);
+  --bar-field:#ffffff24;--bar-field-line:#ffffff4d;--bar-hover:#ffffff1f;
+  --docoid-nav:var(--bar);--docoid-tools:var(--tool);--docoid-backdrop:#3427284d;
+  --docoid-shadow-color:#38282c24;--shell-shadow:0 6px 18px var(--docoid-shadow-color);
+  --gold:#39558a;--morph-clitic:#71468e;--morph-infix:#176488;--morph-circumfix:#246556;
+  --morph-connector:#8f4828;--morph-multipart:#6b5b26;--morph-reduplication:#913d62;
+}
+html[data-theme="docoid-crimson"]::selection{background:#e7c8cd;color:#3c262a}
+html[data-theme="docoid-crimson"] button:is(.primary,[data-inline-save],#add,#new-lexeme,#morpheme-new,#library-search):hover:not(:disabled){--hover:var(--primary-hover);--green:var(--primary-hover)}
 html[data-theme="ivory"]{
   color-scheme:light;
   --ink:#253c58;--muted:#686c75;--paper:#f7f3e9;--line:#ded8cb;

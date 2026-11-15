@@ -98,6 +98,13 @@ class FormSyncTests(unittest.TestCase):
         code,r=self.call('/api/lexeme-save',x);self.assertEqual(code,400,r);self.assertIn('语素切分',r['error'])
         self.assertEqual(self.api('lexeme?id='+x['id'])['headword'],'n');self.assertEqual(self.detail(e)['body']['words'][0]['form'],'root-n');self.assertEqual(self.api('undo-state')['generation'],before['generation'])
 
+    def test_conflicting_whole_and_component_edits_are_rejected(self):
+        import corpus,dictionary_form_sync
+        word=corpus.analyze(dict(ipa='',translation='',words=[dict(form='ma-pa',gloss='M-P')]))['words'][0]
+        with self.assertRaisesRegex(ValueError,'范围重叠'):
+            dictionary_form_sync.transform(word,{'@word':('ma-pa','na-pa'),'0:host':('ma','ra')})
+        self.assertEqual(word['form'],'ma-pa')
+
     def test_invalid_new_markup_does_not_break_export_or_partially_save(self):
         e=self.seed('#pass([], (([n],[GEN]),), [])');x=self.word('n',['GEN']);self.bind(e,x,'@word')
         x['headword']='[';code,data=self.call('/api/lexeme-save',x)

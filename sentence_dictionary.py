@@ -9,6 +9,7 @@ import uuid
 import annotations
 import corpus
 import dictionary_gloss_sync
+import gloss_inheritance
 import homonyms
 import lexicon
 import morphology
@@ -385,17 +386,21 @@ def completion_apply(db, b, lid):
     corpus.analyze(body)
     if d['kind'] == 'independent':
         from text_replace import preserve_independent_refs
+        from independent_links import write_body
         preserve_independent_refs(original, body, list(set(rules) | whole), set())
-    else:body['edited'] = True
-    table = 'entries' if d['kind'] == 'corpus' else 'dictionary_examples'
-    db.execute('UPDATE '+table+' SET body=?,revision=revision+1 WHERE id=?', (json.dumps(body, ensure_ascii=False), d['id']))
-    if d['kind'] == 'corpus':
+        gloss_inheritance.clear_metadata(body)
+        write_body(db,d['id'],body)
+    else:
+        body['edited'] = True
+        import sentence_rows
+        sentence_rows.write(db,'corpus',d['id'],body)
         words = list(db.execute("SELECT id FROM corpus_units WHERE entry_id=? AND kind='word' AND active=1 ORDER BY position", (d['id'],)))
         mids = {w['id']: [m['id'] for m in db.execute("SELECT id FROM corpus_units WHERE parent_id=? AND active=1 ORDER BY position", (w['id'],))] for w in words}
         # A reused analysis changes the morpheme inventory, but keeps the word
         # identity to which layers, survey references and media are attached.
         mids = {wid: ids for wid, ids in mids.items() if wid not in {words[i]['id'] for i in whole}}
-        lexicon.sync_entry(db, d['id'], [w['id'] for w in words], mids, preserve_complex=True)
+        lexicon.sync_entry(db, d['id'], [w['id'] for w in words], mids,
+                           preserve_complex=True,analyzed_body=body,stored_body=body)
     for (i, key), c in selected:
         if key == '@analysis':
             for target in analysis_links[i]:

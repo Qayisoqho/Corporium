@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 import unittest
 import server
@@ -97,8 +98,8 @@ class CustomFieldTests(unittest.TestCase):
         self.assertEqual(self.execute(conditions=query)['summary']['hits'],1)
         other=self.call('/api/save-language',dict(name='Other',metadata={}))[1]['id']
         with server.connect() as db:
-            row=db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone();body=json.loads(row[0]);body['language_id']=other
-            db.execute('UPDATE entries SET body=? WHERE id=?',(json.dumps(body),e['id']));analysis_workspace.invalidate(db)
+            row=db.execute('SELECT body FROM entries_documents WHERE id=?',(e['id'],)).fetchone();body=json.loads(row[0]);body['language_id']=other
+            source_fixtures.replace(db,'entries',e['id'],json.dumps(body));analysis_workspace.invalidate(db)
         self.assertEqual(self.hits('class:'+c['id']),0)
         self.assertEqual(self.hits('layer_word:'+layer['id'],'NOUN'),0)
         self.assertTrue(all(r['language_id']==other for r in self.call('/api/analysis-fields?language='+other)[1]))

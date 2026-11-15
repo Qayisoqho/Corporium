@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 import unittest
 from urllib.parse import urlencode
@@ -25,7 +26,7 @@ class PeopleDialogueTests(unittest.TestCase):
     def independent(self):
         with server.connect(audit=False) as db:
             body=dict(ipa='solo',translation='独立',notes='笔记',words=[dict(form='solo',gloss='N',annotation_id='slot')],targets=[])
-            db.execute("INSERT INTO dictionary_examples(id,language_id,body) VALUES('solo','ordos',?)",(json.dumps(body),))
+            source_fixtures.seed(db,'dictionary_examples',('id', 'language_id', 'body'),('solo', 'ordos', json.dumps(body)))
         return 'solo'
     def test_text_participant_does_not_infer_sentence_speaker(self):
         p=self.person();self.assign([dict(person_id=p,role='转写人')],'text',self.tid)

@@ -65,6 +65,6 @@ function renderDictionaryList(host,source,options){
  const searchResize=new ResizeObserver(syncInset);if(stickySearch)searchResize.observe(stickySearch);syncInset();
  host.style.paddingTop=host.style.paddingBottom='';if(virtual)host.setAttribute('role','list');else host.removeAttribute('role');
  if(virtual){reset();host.style.minHeight=offsets.at(-1)+'px';scroller.scrollTop=scrollBefore;width=scroller.clientWidth;scroller.addEventListener('scroll',schedule,{passive:true});resize.observe(scroller);document.fonts?.addEventListener('loadingdone',schedule);}
- host.dictionaryViewport={destroy(){closed=true;if(frame)cancelAnimationFrame(frame);resize.disconnect();searchResize.disconnect();scroller.removeEventListener('scroll',schedule);document.fonts?.removeEventListener('loadingdone',schedule);host.removeEventListener('click',click);host.removeEventListener('keydown',keydown);},refresh(){range='';schedule();},rebuild(){renderDictionaryList(host,source,options);}};
+ host.dictionaryViewport={destroy(){closed=true;if(frame)cancelAnimationFrame(frame);resize.disconnect();searchResize.disconnect();scroller.removeEventListener('scroll',schedule);document.fonts?.removeEventListener('loadingdone',schedule);host.removeEventListener('click',click);host.removeEventListener('keydown',keydown);},refresh(){range='';schedule();},rebuild(){renderDictionaryList(host,source,options);},reveal(id){const index=items.findIndex(row=>row.id===id);if(virtual&&index>=0)focusRow(index);}};
  paint();host.style.minHeight='';
 }

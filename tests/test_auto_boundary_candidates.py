@@ -1,5 +1,6 @@
 """Whole-library matching: citation boundaries cannot hide eligible targets."""
 import unittest
+from unittest.mock import patch
 from urllib.parse import urlencode
 
 import server
@@ -53,17 +54,53 @@ class AutoBoundaryTests(unittest.TestCase):
                     prefix=kind+first
                     self.entry(prefix+'exact','G');self.entry(prefix+'relaxed-','G');self.entry(prefix+'later-','G')
                     src=self.source(kind,[(prefix+'exact','G'),(prefix+'relaxed','G'),(prefix+'later','G')])
-                    p=self.plan(src);self.assertEqual(len(p['matches']),1);self.assertEqual(len(p['suggestions']),2)
+                    p=self.plan(src,reuse_preview='1');self.assertEqual(len(p['matches']),1);self.assertEqual(len(p['suggestions']),2)
                     selected=[p['suggestions'][0]['candidate_id']]
-                    self.assertEqual(self.apply(p,selected if first=='candidates' else None)['count'],1)
-                    fresh=self.plan(src);self.assertNotEqual(fresh['token'],p['token'])
+                    with patch.object(server.lexicon,'auto_link_plan',side_effect=AssertionError('matched the entire scope again')):
+                        result=self.apply(p,selected if first=='candidates' else None,reuse_preview=True)
+                    self.assertEqual(result['count'],1)
+                    fresh=result['remaining_plan'];self.assertNotEqual(fresh['token'],p['token'])
+                    self.assertEqual({k:v for k,v in fresh.items() if k!='token'},
+                                     {k:v for k,v in self.plan(src).items() if k!='token'})
                     self.assertEqual(len(fresh['matches']),0 if first=='strict' else 1)
                     self.assertEqual(len(fresh['suggestions']),2 if first=='strict' else 1)
                     if first=='strict':self.assertEqual({c['candidate_id'] for c in p['suggestions']},{c['candidate_id'] for c in fresh['suggestions']})
-                    self.assertEqual(self.apply(fresh,[fresh['suggestions'][0]['candidate_id']] if first=='strict' else None)['count'],1)
+                    self.assertEqual(self.apply(fresh,[fresh['suggestions'][0]['candidate_id']] if first=='strict' else None,reuse_preview=True)['count'],1)
                     final=self.plan(src);self.assertEqual(len(final['matches']),0);self.assertEqual(len(final['suggestions']),1)
                     self.undo();restored=self.plan(src);self.assertEqual(len(restored['matches']),len(fresh['matches']));self.assertEqual(len(restored['suggestions']),len(fresh['suggestions']))
                     self.undo(True);left=self.plan(src);self.apply(left,[c['candidate_id'] for c in left['suggestions']])
+
+    def test_independent_batch_keeps_segment_binding_and_source_through_replay(self):
+        import independent_links
+        import record_sources
+
+        src=self.source('independent',[('ger-n','家-GEN'),('tala','路')])
+        self.entry('ger','家');self.entry('tala','路')
+        # Exercise the same trusted fixture path as an already checked project.
+        import save_validation
+        with server.connect(audit=False) as db:
+            server.lexicon.validate_links(db)
+            db.execute('UPDATE save_validation_state SET checked_epoch=epoch')
+            self.assertIsNotNone(save_validation.snapshot(db))
+        p=self.plan(src,reuse_preview='1')
+        self.assertEqual({r['segmentation_ref']['key'] for r in p['matches']},{'@word','0:host'})
+        def source_and_links():
+            with server.connect(audit=False) as db:
+                raw=record_sources.read(db,'dictionary_examples',src['id'])
+                return raw,[dict(row) for row in independent_links.rows(db,src['id'])]
+        before=source_and_links()
+        with patch.object(independent_links,'replace',side_effect=AssertionError('reconciled an isolated slot individually')):
+            result=self.apply(p,reuse_preview=True)
+        self.assertEqual(result['count'],2)
+        self.assertEqual(result['remaining_plan']['matches'],[])
+        after=source_and_links()
+        self.assertEqual(after[0],before[0])
+        self.assertEqual(len(after[1]),2)
+        rendered=self.detail(src)['body']['words']
+        self.assertEqual([w['gloss'] for w in rendered],['家-GEN','路'])
+        self.assertEqual([w['gloss_sources'][0]['key'] for w in rendered],['0:host','@word'])
+        self.undo();self.assertEqual(source_and_links(),before)
+        self.undo(True);self.assertEqual(source_and_links(),after)
 
     def test_exact_and_edge_targets_are_all_selectable_both_sources_and_kinds(self):
         for source in ('corpus', 'independent'):

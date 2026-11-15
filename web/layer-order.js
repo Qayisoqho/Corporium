@@ -6,7 +6,8 @@
  function target(x,y){const el=document.elementFromPoint(x,y)?.closest('#layers-list [data-layer-row]');if(!el)return null;const box=el.getBoundingClientRect();return {el,id:el.dataset.layerRow,after:y>box.top+box.height/2};}
  function highlight(){host.querySelectorAll('[data-drop]').forEach(el=>delete el.dataset.drop);if(!gesture?.moved)return;const hit=target(gesture.x,gesture.y);if(hit&&hit.id!==gesture.id)hit.el.dataset.drop=hit.after?'after':'before';}
  function scroll(){if(!gesture?.moved)return;const r=host.getBoundingClientRect();if(gesture.x>=r.left&&gesture.x<=r.right){host.scrollTop+=gesture.y<r.top+24?-8:gesture.y>r.bottom-24?8:0;highlight();}frame=requestAnimationFrame(scroll);}
- async function save(order,focus){
+ function save(order,focus){
+  return runSettingsEditorAction('layers-dialog',async()=>{
   if(busy||order.every((id,i)=>id===rows[i].id))return;
   busy=true;const language=layerLanguage,snapshot=rows.map(l=>({id:l.id,revision:l.revision}));host.setAttribute('aria-busy','true');
   try{
@@ -19,6 +20,7 @@
    corporiumStatus(text('标注层顺序已保存，可撤销。','Layer order saved. You can undo it.'));
   }catch(error){await corporiumAlert(error.message);}
   finally{busy=false;host.removeAttribute('aria-busy');}
+  });
  }
  window.CorporiumLayerOrder={loaded(data){
   clear();rows=data;

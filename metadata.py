@@ -26,7 +26,8 @@ import link_review
 TABLES += link_review.TABLES
 TABLES += example_groups.TABLES
 TABLES += dictionary_organization.TABLES+morpheme_registry.TABLES+synonyms.TABLES+gloss_inheritance.TABLES
-TABLES = example_numbering.TABLES + TABLES
+import independent_links
+TABLES = example_numbering.TABLES + TABLES + independent_links.TABLES
 
 def initialize(db):
     db.executescript('''CREATE TABLE IF NOT EXISTS folders(id TEXT PRIMARY KEY,name TEXT NOT NULL,position INTEGER,metadata TEXT NOT NULL DEFAULT '{}',revision INTEGER NOT NULL DEFAULT 1);

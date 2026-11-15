@@ -43,7 +43,7 @@ function drawAutoPlan(plan,previous=null,shown=0){
  renderAutoSuggestions(plan,previous,shown);
  $('auto-link-apply').disabled=!plan.matches.length;
 }
-function autoPreviewRequest(plan=null){return 'lexeme-auto-preview?'+new URLSearchParams({language:autoLanguage,text_id:plan?plan.text_id:$('auto-link-scope').value,...(plan?{ignore_symbols:plan.ignore_symbols,ignore_position:plan.ignore_position}:autoMarkOptions())});}
+function autoPreviewRequest(plan=null){return 'lexeme-auto-preview?'+new URLSearchParams({language:autoLanguage,reuse_preview:'1',text_id:plan?plan.text_id:$('auto-link-scope').value,...(plan?{ignore_symbols:plan.ignore_symbols,ignore_position:plan.ignore_position}:autoMarkOptions())});}
 $('auto-link-preview').onclick=async()=>{
  if(autoBusy)return;resetAutoPlan();const seq=autoSequence;$('auto-link-preview').disabled=true;
  try{const plan=await api(autoPreviewRequest());if(seq===autoSequence)drawAutoPlan(plan);}
@@ -89,19 +89,30 @@ async function applyAutoLinks(mode){
  const plan=autoPlan,selected=[...(autoCandidateSelection?.selected||[])],shown=autoShown,seq=autoSequence;
  const content=$('auto-link-dialog').querySelector('.dialog-content')||$('auto-link-dialog');
  const scroll=$('auto-link-results').scrollTop,dialogScroll=content.scrollTop;
+ const view=typeof captureCorpusLinkUpdate==='function'?captureCorpusLinkUpdate():null;
  let applied=null;lockAutoLinks(true);$('auto-link-error').textContent='';
  try{
-  const update=async()=>{
-   applied=await api('lexeme-auto-link',{_language:autoLanguage,text_id:plan.text_id,token:plan.token,ignore_symbols:plan.ignore_symbols,ignore_position:plan.ignore_position,mode,selected});
-   return api(autoPreviewRequest(plan));
-  };
-  const remaining=await (globalThis.window?.corporiumWithTaskProgress?window.corporiumWithTaskProgress(update):update());
+  applied=await api('lexeme-auto-link',{_language:autoLanguage,text_id:plan.text_id,token:plan.token,
+   ignore_symbols:plan.ignore_symbols,ignore_position:plan.ignore_position,mode,selected,reuse_preview:true,
+   ...(view?{_view_revision:view.base,_visible_corpus:view.ids}:{})});
+  const remaining=applied.preview_error?null:applied.remaining_plan||await api(autoPreviewRequest(plan));
   if(seq!==autoSequence)return;
+  if(!remaining){
+   await (globalThis.window?.corporiumRefreshUndoState||refreshUndo)({reloadLanguages:false});
+   await refreshExampleViews({texts:false});
+   throw Error(applied.preview_error);
+  }
   drawAutoPlan(remaining,new Set(selected),shown);
   $('auto-link-results').scrollTop=scroll;content.scrollTop=dialogScroll;
   const message=globalThis.CorporiumI18n?.ui(`已关联 ${applied.count} 处，可一步撤销。剩余唯一匹配 ${remaining.matches.length} 处，需确认候选 ${remaining.suggestions.length} 项，可继续关联。`,`Linked ${applied.count}. You can undo this step. Remaining: ${remaining.matches.length} unique matches and ${remaining.suggestions.length} candidates to confirm.`)??`已关联 ${applied.count} 处，可一步撤销。剩余唯一匹配 ${remaining.matches.length} 处，需确认候选 ${remaining.suggestions.length} 项，可继续关联。`;
   $('auto-link-summary').textContent=message;
-  try{await (globalThis.window?.corporiumRefreshUndoState||refreshUndo)();await refreshExampleViews();}
+  try{
+   let updated=false;
+   if(view&&applied._view_update){
+    try{updated=await view.apply(applied._view_update);}catch{window.corporiumInvalidateViews?.();}
+   }
+   if(!updated){await (globalThis.window?.corporiumRefreshUndoState||refreshUndo)({reloadLanguages:false});await refreshExampleViews({texts:false});}
+  }
   catch(e){$('auto-link-error').textContent=(globalThis.CorporiumI18n?.ui('关联已保存；页面刷新失败：','Links saved; page refresh failed: ')??'关联已保存；页面刷新失败：')+e.message;}
  }catch(e){
   if(seq!==autoSequence)return;

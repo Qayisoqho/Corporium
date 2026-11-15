@@ -2,6 +2,36 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const helperSource=fs.readFileSync('web/dictionary-evidence.js','utf8');
 const lexiconSource=fs.readFileSync('web/lexicon.js','utf8');
 
+test('morpheme evidence requests the selected page and changes only its independent cards',async()=>{
+ const source=fs.readFileSync('web/morphemes.js','utf8');
+ const calls=[], root=new Element('section'), holder=new Element(),pager=new Element('nav');
+ const add=new Element('button'),corpus=new Element('nav');
+ add.dataset.newEvidence='';corpus.dataset.corpusPager='';
+ holder.dataset.independentEvidence='';pager.dataset.independentPager='';
+ root.append(add,corpus,pager,holder);
+ const c=vm.createContext({
+  URLSearchParams,selection:'m',dictSafe:fn=>fn,mountDictionaryUnlinkAll(){},leaveSentenceDrafts:async()=>{},
+  renderDictionaryExample:(body,kind,id)=>id,
+  topPagination:(bar,page,pages,go)=>{bar.go=go;},
+  api:async path=>{
+   const [route,query]=path.split('?'),params=new URLSearchParams(query);
+   calls.push([route,params.get('page')]);
+   if(route==='lexeme-examples')return {items:[],total:0,page:1,pages:1};
+   assert.equal(params.get('paged'),'1');
+   const page=Number(params.get('page'));
+   return {items:[{id:'example-'+page,body:{targets:[]}}],total:21,page,pages:2};
+  }
+ });
+ vm.runInContext(source.slice(source.indexOf(' async function renderMorphemeEvidence'),source.indexOf(' let conversionPlan=')),c);
+ await c.renderMorphemeEvidence({id:'m',language_id:'one'},root);
+ assert.equal(root.dataset.independentCount,'21');
+ assert.match(holder.innerHTML,/example-1/);
+ await pager.go(2);
+ assert.equal(root.dataset.independentEvidencePage,'2');
+ assert.match(holder.innerHTML,/example-2/);
+ assert.deepEqual(calls,[['lexeme-examples','1'],['dictionary-examples','1'],['dictionary-examples','2']]);
+});
+
 // Small DOM surface for the real paging and selection functions. Original
 // paging controls keep their identities and callbacks as they move into a row.
 class Element {

@@ -34,14 +34,70 @@
   return selectionLocked?html.replace('<input ','<input disabled '):html;
  }
  function groupHTML(g,hits=null){return (globalThis.CorporiumI18n?.f("9de0b0f8028cb6",()=>[esc(g.id),esc(g.id),esc(groupName(g)),g.members.length,!briefMode?(globalThis.CorporiumI18n?.f("d0faee3f111f40",()=>[esc(g.id),esc(g.language_id)])??`<button type="button" data-group-manage="${esc(g.id)}" data-language="${esc(g.language_id)}">管理组</button>`):'',g.body.context?`<div class="example-group-context preserve-lines">${esc(g.body.context)}</div>`:'',g.members.map((m,i)=>`<section class="example-group-member" data-member="${esc(m.id)}">${pickBox(m.example_id)}${memberActions(m.example_id,m.record?.library_number)}<div class="example-group-example"><span class="example-group-mark" title="${m.record?.library_number?(globalThis.CorporiumI18n?.f("2affe54d3ef032",()=>[esc(m.record.library_number)])??'独立例句 '+esc(m.record.library_number)):''}">${esc(memberMark(g,m,i))}</span><div>${hits?.length&&hits.includes(m.example_id)?(globalThis.CorporiumI18n?.f("0271ebac9c497b",()=>[])??'<small class="example-group-hit">检索命中</small>'):''}${sentenceHTML(m,g.language_id)}</div></div></section>`).join('')||(globalThis.CorporiumI18n?.f("70257e52e7e4b6",()=>[])??'<p class="empty">本组暂无成员，可从“管理组”添加已有例句。</p>')])??`<article class="entry example-group" data-example-group="${esc(g.id)}" data-navigation-anchor="example-group:${esc(g.id)}"><div class="entry-head"><details class="example-group-fold" open><summary>${esc(groupName(g))} <small>${g.members.length} 句</small></summary></details><div>${!briefMode?`<button type="button" data-group-manage="${esc(g.id)}" data-language="${esc(g.language_id)}">管理组</button>`:''}</div></div><div class="example-group-body">${g.body.context?`<div class="example-group-context preserve-lines">${esc(g.body.context)}</div>`:''}${g.members.map((m,i)=>`<section class="example-group-member" data-member="${esc(m.id)}">${pickBox(m.example_id)}${memberActions(m.example_id,m.record?.library_number)}<div class="example-group-example"><span class="example-group-mark" title="${m.record?.library_number?'独立例句 '+esc(m.record.library_number):''}">${esc(memberMark(g,m,i))}</span><div>${hits?.length&&hits.includes(m.example_id)?'<small class="example-group-hit">检索命中</small>':''}${sentenceHTML(m,g.language_id)}</div></div></section>`).join('')||'<p class="empty">本组暂无成员，可从“管理组”添加已有例句。</p>'}</div></article>`);}
+ let libraryView=null;
+ function libraryParams(){
+  return new URLSearchParams({language:activeLanguage,q:$('library-query').value,field:$('library-field').value,mode:$('library-mode').value,case:$('library-case').checked,grammaticality:$('library-grammaticality')?.value||'',group_filter:$('example-group-filter').value,sort_order:sortSelect.value,page:libraryPage,...(window.CorporiumCodes?.params('library')||{})});
+ }
+ async function revealCreated(id){
+  const lid=activeLanguage,current=()=>workspace==='library'&&activeLanguage===lid;
+  const locate=()=>{const q=libraryParams();q.set('focus',id);return request('example-groups-library?'+q);};
+  let data=await locate();if(!current())return true;
+  if(!data.focus_found){
+   $('library-query').value='';$('library-field').value='all';$('library-mode').value='contains';$('library-case').checked=false;
+   $('library-grammaticality').value='';$('example-group-filter').value='all';
+   for(const suffix of ['-code-mode','-code-id'])$('library'+suffix).value='';
+   data=await locate();if(!current())return true;
+  }
+  libraryPage=data.page;await loadLibrary();return true;
+ }
+ function captureTextUpdate(draft,{replacement=false}={}){
+  const page=libraryView,base=window.corporiumWorkspaceRevision;
+  if(!page||draft.kind!=='independent'||draft.isNew||draft.onSaved||draft.host||
+     !window.CorporiumViews?.current('library')||(!replacement&&!page.sources.has(draft.id)))return null;
+  const current=()=>workspace==='library'&&page===libraryView&&page.sequence===sequence&&page.brief===briefMode&&page.key===libraryParams().toString();
+  if(!current())return null;
+  return {base,async apply(update){
+   if(!update||update.kind!=='independent'||update.id!==draft.id||update.base!==base||
+      (!replacement&&update.before_revision!==draft.revision)||!current())return false;
+   const source=page.sources.get(draft.id);
+   if(!source&&(page.filtered||(update.record&&!update.code_unchanged)))return false;
+   if(!await window.corporiumRefreshSavedHistory(update)||!current())return false;
+   if(!source){
+    const selected=chosen.get(draft.id);
+    if(selected)selected.body=update.record||{...selected.body,...update.values};
+    window.corporiumMarkSavedView('library');
+    return true;
+   }
+   const refresh=page.filtered||changedExampleCodeSummary(source.body,update.record);
+   source.body=update.record||{...source.body,...update.values};
+   if(chosen.has(draft.id))chosen.get(draft.id).body=source.body;
+   if(refresh){await loadLibrary();return true;}
+   const cards=$('library-results').querySelectorAll('.editable-example[data-example-kind="independent"][data-example-id="'+CSS.escape(draft.id)+'"]');
+   if(!cards.length)return false;
+   const template=document.createElement('template');
+   for(const card of cards){
+    // Each occurrence gets its own formatted-copy identity. Keep the physical
+    // card so scrolling and focus return to the occurrence the user edited.
+    template.innerHTML=renderEditableExample({...source.body,language_id:source.language_id},'independent',source.id);
+    if(template.content.childElementCount!==1||!replaceSavedExample(card,template.content.firstElementChild))return false;
+   }
+   window.corporiumMarkSavedView('library');
+   return true;
+  }};
+ }
+ window.corporiumCaptureLibraryTextUpdate=captureTextUpdate;
  async function loadGroupedLibrary(){
   const seq=++sequence,lid=activeLanguage;if(lid!=='all'&&[...chosen.values()].some(x=>x.language_id!==lid)){chosen.clear();selecting=false;}selectedState();sortSelect.value=librarySort();
-  const q=new URLSearchParams({language:lid,q:$('library-query').value,field:$('library-field').value,mode:$('library-mode').value,case:$('library-case').checked,grammaticality:$('library-grammaticality')?.value||'',group_filter:$('example-group-filter').value,sort_order:sortSelect.value,page:libraryPage,...(window.CorporiumCodes?.params('library')||{})});
+  const q=libraryParams();
   const data=await request('example-groups-library?'+q);if(seq!==sequence||lid!==activeLanguage)return;libraryPage=data.page;
   $('library-count').textContent=(globalThis.CorporiumI18n?.f("6b7772792a023c",()=>[data.sentence_total+(data.filtered?(globalThis.CorporiumI18n?.f("e31b14ffd94c3f",()=>[])??' 条匹配独立例句 · '):(globalThis.CorporiumI18n?.f("1a151bf0057caf",()=>[])??' 条独立例句 · '))+data.group_total,data.ungrouped_total])??data.sentence_total+(data.filtered?' 条匹配独立例句 · ':' 条独立例句 · ')+data.group_total+' 组 · '+data.ungrouped_total+' 条未分组');
   if($('library-code-summary'))$('library-code-summary').textContent=window.CorporiumCodes?.stats(data.code_summary)||'';
   for(const id of ['library-top','library-bottom'])topPagination($(id),data.page,data.pages,async p=>{requireSaved();libraryPage=p;await loadLibrary();});
   const sources=new Map();for(const e of data.items)if(e.kind==='group'){for(const m of e.group.members)if(m.record)sources.set(m.example_id,{id:m.example_id,language_id:e.group.language_id,body:m.record.body,ordering:m.record.ordering});}else sources.set(e.id,e);
+  await window.corporiumPrepareSentences?.([...sources.values()].map(e=>({kind:'independent',id:e.id,language_id:e.language_id})));
+  if(seq!==sequence||lid!==activeLanguage)return;
+  q.set('page',data.page);
+  libraryView={sequence:seq,key:q.toString(),filtered:data.filtered,sources,brief:briefMode};
   $('library-results').innerHTML=data.items.map(e=>e.kind==='group'?groupHTML(e.group,e.matched_ids):(globalThis.CorporiumI18n?.f("891a0a6956a77f",()=>[String(e.body.library_number||'').length+2,esc(e.id),esc(e.body.library_number||'' ),esc(languageList.find(l=>l.id===e.language_id)?.name||''),esc(e.body.source||(globalThis.CorporiumI18n?.f("9ab37587706645",()=>[])??'未分组')),pickBox(e.id),memberActions(e.id),renderEditableExample({...e.body,language_id:e.language_id},'independent',e.id)])??`<article class="entry independent-library-entry" style="--example-number-width:${String(e.body.library_number||'').length+2}ch" data-navigation-anchor="independent:${esc(e.id)}"><div class="sentence-number" title="独立例句固定编号">(${esc(e.body.library_number||'' )})</div><div class="entry-head"><span>独立例句 · ${esc(languageList.find(l=>l.id===e.language_id)?.name||'')} · ${esc(e.body.source||'未分组')}</span><div></div></div>${pickBox(e.id)}${memberActions(e.id)}${renderEditableExample({...e.body,language_id:e.language_id},'independent',e.id)}</article>`)).join('')||(globalThis.CorporiumI18n?.f("f6afa494563c06",()=>[])??'<p class="empty">没有符合条件的例句。</p>');
   $('library-results').querySelectorAll('[data-group-select]').forEach(c=>c.onchange=safe(()=>{
    try{requireSaved();}
@@ -92,7 +148,7 @@
  $('survey-group-confirm').onclick=safe(async()=>{requireSaved();const groups=[...pickedGroups.values()].map(g=>({id:g.id,token:g.token}));if(!groups.length)return;$('survey-group-confirm').disabled=true;try{await confirmGroups(groups);pickedGroups.clear();}finally{$('survey-group-confirm').disabled=false;}});
  function noteHTML(note,markup){if(!note)return '';return `${note.judgment?(globalThis.CorporiumI18n?.f("30b32fdfb58cd1",()=>[esc(note.judgment)])??`<div>本处判断：${esc(note.judgment)}</div>`):''}${note.judges?.length?(globalThis.CorporiumI18n?.f("d518ca45464ace",()=>[note.judges.map(id=>esc(window.CorporiumExampleGroups.people?.find(p=>p.id===id)?.name||(globalThis.CorporiumI18n?.f("7be9a3ca1e4ef0",()=>[])??'已删除'))).join('、')])??`<div>判断者：${note.judges.map(id=>esc(window.CorporiumExampleGroups.people?.find(p=>p.id===id)?.name||'已删除')).join('、')}</div>`):''}${note.context?.length?`<div class="survey-rich">${markup(note.context)}</div>`:''}${note.notes?.length?`<div class="survey-rich">${markup(note.notes)}</div>`:''}`;}
  function survey(g,e,markup,people=[]){window.CorporiumExampleGroups.people=people;const current=new Set(g.members.map(m=>m.id)),retired=Object.entries(e.body.member_notes||{}).filter(([id])=>!current.has(id));return (globalThis.CorporiumI18n?.f("e79520c7d74b3c",()=>[esc(groupName(g)),g.members.length,!briefMode?(globalThis.CorporiumI18n?.f("15dc6d549634a6",()=>[esc(g.id),esc(g.language_id)])??`<button type="button" data-group-manage="${esc(g.id)}" data-language="${esc(g.language_id)}">管理源组</button>`):'',g.body.context?`<div class="example-group-context preserve-lines">${esc(g.body.context)}</div>`:'',g.members.map((m,i)=>`<section class="example-group-member"><div class="example-group-example"><span class="example-group-mark" title="${m.record?.library_number?(globalThis.CorporiumI18n?.f("c35df9a965a15e",()=>[esc(m.record.library_number)])??'独立例句 '+esc(m.record.library_number)):''}">${esc(memberMark(g,m,i))}</span><div>${sentenceHTML(m,g.language_id)}<div class="example-group-local" data-group-note-view="${esc(m.id)}">${noteHTML(e.body.member_notes?.[m.id],markup)}</div>${!briefMode?(globalThis.CorporiumI18n?.f("a3d4aab335986b",()=>[esc(m.id),esc(e.id)])??`<button type="button" data-group-member-note="${esc(m.id)}" data-evidence="${esc(e.id)}">本句本处判断与笔记</button>`):''}</div></div></section>`).join(''),retired.length?(globalThis.CorporiumI18n?.f("4f2c829984bc6a",()=>[retired.length,retired.map(([id,n])=>`<div class="example-group-member"><div>${esc(n.source_label||(globalThis.CorporiumI18n?.f("b84380db3e6e71",()=>[])??'原成员'))}</div>${noteHTML(n,markup)}${!briefMode?(globalThis.CorporiumI18n?.f("72a0df4318c8ed",()=>[esc(id),esc(e.id)])??`<button type="button" data-group-member-note="${esc(id)}" data-evidence="${esc(e.id)}">编辑本处笔记</button>`):''}</div>`).join('')])??`<details class="example-group-retired"><summary>已移出成员记录（${retired.length}）</summary>${retired.map(([id,n])=>`<div class="example-group-member"><div>${esc(n.source_label||'原成员')}</div>${noteHTML(n,markup)}${!briefMode?`<button type="button" data-group-member-note="${esc(id)}" data-evidence="${esc(e.id)}">编辑本处笔记</button>`:''}</div>`).join('')}</details>`):''])??`<div class="example-group survey-example-group"><div class="entry-head"><strong>${esc(groupName(g))} <small>${g.members.length} 句</small></strong>${!briefMode?`<button type="button" data-group-manage="${esc(g.id)}" data-language="${esc(g.language_id)}">管理源组</button>`:''}</div>${g.body.context?`<div class="example-group-context preserve-lines">${esc(g.body.context)}</div>`:''}${g.members.map((m,i)=>`<section class="example-group-member"><div class="example-group-example"><span class="example-group-mark" title="${m.record?.library_number?'独立例句 '+esc(m.record.library_number):''}">${esc(memberMark(g,m,i))}</span><div>${sentenceHTML(m,g.language_id)}<div class="example-group-local" data-group-note-view="${esc(m.id)}">${noteHTML(e.body.member_notes?.[m.id],markup)}</div>${!briefMode?`<button type="button" data-group-member-note="${esc(m.id)}" data-evidence="${esc(e.id)}">本句本处判断与笔记</button>`:''}</div></div></section>`).join('')}${retired.length?`<details class="example-group-retired"><summary>已移出成员记录（${retired.length}）</summary>${retired.map(([id,n])=>`<div class="example-group-member"><div>${esc(n.source_label||'原成员')}</div>${noteHTML(n,markup)}${!briefMode?`<button type="button" data-group-member-note="${esc(id)}" data-evidence="${esc(e.id)}">编辑本处笔记</button>`:''}</div>`).join('')}</details>`:''}</div>`);}
- window.CorporiumExampleGroups={open,number,survey,pick,loadLibrary:loadGroupedLibrary,pickerActive:()=>groupPicking,paintNotes(e,markup){const card=document.querySelector('[data-survey-evidence="'+CSS.escape(e.id)+'"]');if(card)for(const el of card.querySelectorAll('[data-group-note-view]'))el.innerHTML=noteHTML(e.body.member_notes?.[el.dataset.groupNoteView],markup);}};
+ window.CorporiumExampleGroups={open,number,survey,pick,revealCreated,loadLibrary:loadGroupedLibrary,pickerActive:()=>groupPicking,paintNotes(e,markup){const card=document.querySelector('[data-survey-evidence="'+CSS.escape(e.id)+'"]');if(card)for(const el of card.querySelectorAll('[data-group-note-view]'))el.innerHTML=noteHTML(e.body.member_notes?.[el.dataset.groupNoteView],markup);}};
  // Align the group label with the actual IPA/first content line after the
  // shared tools, media and loaded fonts have taken their final positions.
  let alignFrame=0;function alignLabels(){alignFrame=0;const writes=[];for(const row of document.querySelectorAll('.example-group-example')){const mark=row.querySelector(':scope>.example-group-mark'),anchor=row.querySelector('.judgment-anchor,.ipa,.words,.translation');if(!mark||!anchor||!row.getClientRects().length)continue;const top=Math.max(0,anchor.getBoundingClientRect().top-row.getBoundingClientRect().top);if(Math.abs((parseFloat(mark.style.paddingTop)||0)-top)>.5)writes.push([mark,top]);}for(const [mark,top]of writes)mark.style.paddingTop=top+'px';}

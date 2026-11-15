@@ -49,8 +49,8 @@
   const observer=new MutationObserver(put);observer.observe(root,{childList:true,subtree:true});observer.observe(document.documentElement,{attributes:true,attributeFilter:['class']});
   const resize=typeof ResizeObserver==='undefined'?null:new ResizeObserver(put);resize?.observe(root);resize?.observe(card);for(const p of containers)resize?.observe(p.el);
   try{const result=await work();put();return result;}finally{
-   await new Promise(resolve=>requestAnimationFrame(resolve));put();
-   await new Promise(resolve=>requestAnimationFrame(resolve));put();
+   await nextLayoutFrame();put();
+   await nextLayoutFrame();put();
    observer.disconnect();resize?.disconnect();for(const type of events)document.removeEventListener(type,interrupt,true);
    if(!--exampleLocations&&!exampleHadTransition)document.documentElement.classList.remove('workspace-transition');
   }
@@ -71,8 +71,8 @@
    window.scrollTo({left:x,top:target?window.scrollY+target.getBoundingClientRect().top-previous.top:y,behavior:'instant'});
   }
   try{return await work();}finally{
-   await new Promise(resolve=>requestAnimationFrame(resolve));put();
-   await new Promise(resolve=>requestAnimationFrame(resolve));put();
+   await nextLayoutFrame();put();
+   await nextLayoutFrame();put();
    if(!hadTransition)document.documentElement.classList.remove('workspace-transition');
   }
  };
@@ -97,10 +97,10 @@
    capture();document.documentElement.classList.add('workspace-transition');
    try{
     await previous(name);
-    await new Promise(resolve=>requestAnimationFrame(resolve));
+    await nextLayoutFrame();
     restore();
     // Keep automatic anchoring disabled through the paint that follows the DOM replacement.
-    await new Promise(resolve=>requestAnimationFrame(resolve));
+    await nextLayoutFrame();
     restore();
    }finally{document.documentElement.classList.remove('workspace-transition');}
   });

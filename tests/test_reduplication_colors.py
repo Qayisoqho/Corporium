@@ -234,6 +234,7 @@ class ReduplicationColorReadTests(unittest.TestCase):
             self.assertFalse(any(w.get('redup_colors') for w in self.get(e,kind)['body']['words']))
             self.assertEqual(self.undo()[0],200);self.assertTrue(self.get(e,kind)['body']['words'][1]['redup_colors'])
             with server.connect(audit=False) as db:
+                import record_sources
                 table='entries' if kind=='corpus' else 'dictionary_examples'
-                raw=json.loads(db.execute('SELECT body FROM '+table+' WHERE id=?',(e['id'],)).fetchone()[0])
+                raw=record_sources.read(db,table,e['id'])
                 self.assertFalse(any(w.get('redup_colors') for w in raw['words']))

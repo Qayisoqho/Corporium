@@ -5,6 +5,7 @@ alignment and survey workflows deliberately retain their own state machines.
 """
 import json
 import undo_codec
+import record_sources
 
 MARKER='manual-status-retired-v1'
 BODY_TABLES={'lexemes','morphemes','morpheme_components','component_links',
@@ -25,10 +26,11 @@ def row(table,value):
     if value is None:return None
     value=dict(value)
     if table in BODY_TABLES and value.get('body'):
-        original=json.loads(value['body']);updated=clean(original)
+        original=record_sources.body(value,mutable=False);updated=clean(original)
         if table in COLUMN_TABLES and value.get('status')=='disputed':
             updated=clean({**updated,'status':'disputed'})
-        if updated!=original:value['body']=json.dumps(updated,ensure_ascii=False)
+        if updated!=original:
+            value['body']=updated if isinstance(value['body'],dict) else json.dumps(updated,ensure_ascii=False)
     if table=='lexical_links' and value.get('status')=='disputed':
         notes=value.get('notes','')
         if DISPUTED_NOTE not in notes:value['notes']=(notes+'\n'+DISPUTED_NOTE).strip()
@@ -37,12 +39,21 @@ def row(table,value):
 
 def normalize_rows(db,keys):
     # Called on touched rows only during ordinary edits/imports, never a full scan.
+    import independent_links
     for table,rid in list(keys):
         if table not in BODY_TABLES|COLUMN_TABLES:continue
-        old=db.execute('SELECT * FROM '+table+' WHERE rowid=?',(rid,)).fetchone()
+        if table=='dictionary_examples' and isinstance(keys,dict) and independent_links.revision_only(*keys[table,rid]):continue
+        after=keys[table,rid][1] if isinstance(keys,dict) else None
+        old=after if after is not None else db.execute('SELECT * FROM '+table+' WHERE rowid=?',(rid,)).fetchone()
         if old is None:continue
-        old=dict(old);new=row(table,old)
-        fields=[k for k in old if old[k]!=new[k]]
+        old=dict(old)
+        if table in record_sources.TABLES and 'body' not in old:
+            old['body']=record_sources.read(db,table,old['id'])
+        new=row(table,old)
+        fields=[k for k in old if k!='rowid' and old[k]!=new[k]]
+        if fields==['body'] and table in record_sources.TABLES and isinstance(new['body'],dict):
+            record_sources.write(db,table,old['id'],new['body'],bump=False)
+            continue
         if fields:db.execute('UPDATE '+table+' SET '+','.join(k+'=?' for k in fields)+' WHERE rowid=?',(*[new[k] for k in fields],rid))
 
 def needed(db):

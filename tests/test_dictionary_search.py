@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 import unittest
 from urllib.parse import urlencode
@@ -85,13 +86,14 @@ class DictionarySearchTests(unittest.TestCase):
         b=self.save('b',{'usages':[{'pos':'名词','senses':[{'definition':'乙'}]}]})
         example=test_dictionary_manager.DictionaryManagerTests.example(self,a)
         with server.connect() as db:
-            row=db.execute('SELECT body FROM dictionary_examples WHERE id=?',(example['id'],)).fetchone()
-            body=json.loads(row['body'])
+            from independent_links import source_body
+            row=db.execute('SELECT body FROM dictionary_examples_documents WHERE id=?',(example['id'],)).fetchone()
+            body=source_body(db,example['id'],json.loads(row['body']))
             body['targets'].append({**body['targets'][0],'lexeme_id':b['id']})
             body['notes']='shared-evidence'
-            db.execute('UPDATE dictionary_examples SET body=? WHERE id=?',(json.dumps(body),example['id']))
+            source_fixtures.replace(db,'dictionary_examples',example['id'],json.dumps(body))
             orphan={**body,'targets':[],'notes':'unlinked-only','orphan_field':'hidden'}
-            db.execute('INSERT INTO dictionary_examples(id,language_id,body,revision) VALUES(?,?,?,1)',('orphan','ordos',json.dumps(orphan)))
+            source_fixtures.seed(db,'dictionary_examples',('id', 'language_id', 'body', 'revision'),('orphan', 'ordos', json.dumps(orphan), 1))
         self.assertEqual({r['id'] for r in self.search(q='shared-evidence')['items']},{a['id'],b['id']})
         self.assertEqual(self.search(q='unlinked-only')['total'],0)
         self.assertEqual(self.search(conditions=[self.condition('examples.notes','shared-evidence','not_contains')])['total'],0)

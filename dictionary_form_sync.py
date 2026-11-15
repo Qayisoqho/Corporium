@@ -1,6 +1,6 @@
 """Materialize spelling edits at live occurrences of the referenced base or variant."""
 import copy
-import json
+import record_sources
 import re
 import unicodedata
 from collections import defaultdict
@@ -18,15 +18,21 @@ def changes_for(changes):
     for (table,_),(before,after) in list(changes.items()):
         if table not in ('lexemes','morphemes') or not before or not after:continue
         field='form' if table=='morphemes' else 'headword'
-        def forms(row):
+        if before[field]==after[field] and record_sources.same_body(before['body'],after['body']):continue
+        def forms(row,body):
             import multipart_forms
-            body=json.loads(row['body'])
             def spelling(form,data):
                 parts=multipart_forms.forms(data,form)
                 return multipart_forms.lookup(parts) if parts else form
             return {None:spelling(row[field],body),**{v['id']:spelling(v['form'],v) for v in body.get('variants',[])}}
-        a,z=forms(before),forms(after)
+        previous,current=record_sources.body(before,mutable=False),record_sources.body(after,mutable=False)
+        a,z=forms(before,previous),forms(after,current)
         delta={key:(value,z[key]) for key,value in a.items() if key in z and value!=z[key]}
+        if table=='lexemes' and None in delta:
+            if not previous.get('headword_source') and current.get('headword_source') and previous.get('word_structure',{})==current.get('word_structure',{}):
+                # Adopting an existing analysis records citation provenance.
+                # The recorded occurrence remains its own surface realization.
+                delta.pop(None)
         if delta:result[after['id']]=delta
     return result
 
@@ -73,6 +79,43 @@ def spread(parts,value):
     return result
 
 
+def coalesced_edits(raw, edits):
+    """Agree on a single replacement for nested links into the same source word."""
+    ordered = sorted(edits, key=lambda span: (span[0], -span[1]))
+    children = defaultdict(list)
+    roots = []
+    stack = []
+    conflict = '整词与语素的形式更新范围重叠，请先调整重复关联'
+    for span in ordered:
+        start, stop = span
+        while stack and start >= stack[-1][1]:
+            stack.pop()
+        if stack:
+            if stop > stack[-1][1]:
+                raise ValueError(conflict)
+            children[stack[-1]].append(span)
+        else:
+            roots.append(span)
+        stack.append(span)
+    for span in reversed(ordered):
+        if span not in children:
+            continue
+        start, stop = span
+        parts = []
+        for inner in children[span]:
+            parts.extend((raw[start:inner[0]], edits[inner]))
+            start = inner[1]
+        parts.append(raw[start:stop])
+        replacement = ''.join(parts)
+        whole = edits[span]
+        # A plain spelling can agree with the narrower edits while those edits
+        # retain the sentence's Typst markers and escapes.
+        if replacement != whole and (corpus.plain(whole) != whole or corpus.plain(replacement) != whole):
+            raise ValueError(conflict)
+        edits[span] = replacement
+    return [(span, edits[span]) for span in roots]
+
+
 def transform(word,rules):
     old=copy.deepcopy(word);new=copy.deepcopy(word);raw=word['form'];plain,mapping=plain_map(raw)
     units={m['key']:m for m in word.get('morphemes',[])}
@@ -99,9 +142,7 @@ def transform(word,rules):
             if markup:text='#'+markup[1]+'['+text+']'
             if span in edits and edits[span]!=text:raise ValueError('同一词格的多个关联产生不同形式更新，请先调整重复关联')
             edits[span]=text
-    ordered=sorted(edits)
-    if any(a[1]>b[0] for a,b in zip(ordered,ordered[1:])):raise ValueError('整词与语素的形式更新范围重叠，请先调整重复关联')
-    for (a,z),value in sorted(edits.items(),reverse=True):raw=raw[:a]+value+raw[z:]
+    for (a,z),value in reversed(coalesced_edits(raw,edits)):raw=raw[:a]+value+raw[z:]
     if raw==word['form']:return old
     new['form']=raw
     a={k:old[k] for k in ('form','gloss')};z={k:new[k] for k in ('form','gloss')}
@@ -121,7 +162,9 @@ def transform(word,rules):
 def sync(db,changes):
     changed=changes_for(changes)
     if not changed:return
-    records=defaultdict(list);independent=set();ids=list(changed)
+    import evidence_owners
+    records=defaultdict(list);ids=list(changed)
+    independent=evidence_owners.independent_ids(db,ids)
     for start in range(0,len(ids),400):
         batch=ids[start:start+400];marks=','.join('?' for _ in batch)
         for row in db.execute('''SELECT l.lexeme_id,a.form_id,u.entry_id,u.kind,u.position,
@@ -131,13 +174,12 @@ def sync(db,changes):
             LEFT JOIN morphology_analyses a ON a.id=l.id
             WHERE u.active=1 AND (p.id IS NULL OR p.active=1) AND l.lexeme_id IN ('''+marks+')',batch):
             if (row['form_id'] or None) in changed[row['lexeme_id']]:records[row['entry_id']].append({**dict(row),'form_id':row['form_id'] or None})
-        independent.update(r[0] for r in db.execute("SELECT DISTINCT e.id FROM dictionary_examples e,json_each(e.body,'$.targets') t WHERE json_extract(t.value,'$.lexeme_id') IN ("+marks+')',batch))
     from dictionary_gloss_sync import sync_progress,SyncCache,source_records
     total=len(records)+len(independent);cache=SyncCache()
     for index,(eid,row,unit_state) in enumerate(source_records(db,records)):
         sync_progress(index,total,'形式')
         links=records[eid]
-        body=corpus.analyze(json.loads(row['body']),cache=cache.analysis);rules=defaultdict(dict)
+        body=corpus.analyze(record_sources.body(row),cache=cache.analysis);rules=defaultdict(dict)
         for link in links:
             if (body.get('language_id') or row['owner_language'])!=link['language_id']:continue
             i=link['word_position']
@@ -151,7 +193,8 @@ def sync(db,changes):
         apply_record(db,'corpus',row,rules,transform,analyzed=body,cache=cache,unit_state=unit_state)
     for index,(eid,row,_) in enumerate(source_records(db,independent,'independent'),len(records)):
         sync_progress(index,total,'形式')
-        body=corpus.analyze(json.loads(row['body']),cache=cache.analysis);rules=defaultdict(dict)
+        from independent_links import source_body
+        body=corpus.analyze(source_body(db,eid,record_sources.body(row)),cache=cache.analysis);rules=defaultdict(dict)
         for target in body.get('targets',[]):
             delta=changed.get(target['lexeme_id'],{}).get(target.get('form_id') or None);ref=target.get('segmentation_ref')
             if not delta or not ref or target.get('segmentation_review') or ref.get('detached'):continue

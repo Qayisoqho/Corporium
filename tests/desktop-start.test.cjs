@@ -41,6 +41,7 @@ test('startup accepts an installed family and retains safe fallbacks for project
  assert.equal(s.values['--global-font-stack'],'"STIX Two Text","'+folder+'",sans-serif');
 });
 test('startup handles legacy defaults, corrupt preferences and unavailable storage',()=>{
+ assert.equal(preferences({'ordos-theme':'docoid-crimson'}).root.dataset.theme,'docoid-crimson');
  const old=preferences({'corporium-typography':JSON.stringify({uiFonts:['Noto Sans','Source Han Sans SC']})});
  assert.equal(old.values['--global-font-stack'],'"STIX Two Text","Microsoft JhengHei",sans-serif');
  assert.doesNotThrow(()=>preferences({'corporium-typography':'{bad json'}));

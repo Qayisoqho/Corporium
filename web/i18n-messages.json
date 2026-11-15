@@ -5392,6 +5392,7 @@
   },
   "phrases": {
     "正在更新句子检索索引…": "Updating the sentence search index…",
+    "正在更新自动关联索引…": "Updating the automatic dictionary matching index…",
     "正在更新有效标注检索索引…": "Updating effective gloss search…",
     "正在更新附加层与书写检索索引…": "Updating layer and writing search…",
     "正在更新词典关联例证检索索引…": "Updating linked evidence search…",
@@ -8385,12 +8386,12 @@
     "新建关系": "New relationship",
     "保存关系": "Save relationship",
     "核对": "Review",
-    "~ 仅提示候选，请确认方向与基底。": "~ suggests a candidate only. Confirm its direction and base.",
+    "可在此手动确认方向与基底；已有关系优先保留。": "Confirm the direction and base here. Existing relationships are preserved.",
     "关系随本句“保存”一起生效。": "This relationship takes effect when the sentence is saved.",
     "修改不会自动改写标注或登记词典变体。": "Changes do not rewrite glosses or register dictionary variants automatically.",
     "更新关系": "Update relationship",
     "原关系：⟦0⟧ → ⟦1⟧。请重新选择当前部分。": "Original relationship: ⟦0⟧ → ⟦1⟧. Select the current parts again.",
-    "含 ~：可选中词格后关联重叠基底，候选不会自动生效。": "Contains ~. Select cells to link a reduplication base; candidates are not applied automatically.",
+    "保存句子时会按标注关联明确的重叠基底；其余可手动关联。": "Saving the sentence links unambiguous reduplication bases from glosses. Other cases can be linked manually.",
     "~ 候选 ⟦0⟧": "~ candidates: ⟦0⟧",
     "重叠关系 ⟦0⟧⟦1⟧": "Reduplication relationships: ⟦0⟧⟦1⟧",
     "高亮": "Highlight",
@@ -9380,6 +9381,7 @@
     "修改语言信息": "Edit language information",
     "导入新语言数据包": "Import new language package",
     "解除独立例句词典关联": "Unlink example from dictionary",
+    "保存独立例句词典关联": "Save example dictionary links",
     "调整句子顺序": "Reorder sentences",
     "查找替换词典": "Find and replace in dictionary",
     "批量编辑词条分类与标签": "Batch edit entry categories and usage tags",
@@ -9954,6 +9956,7 @@
     "所选词格含待核对的词典关联，请先处理后再转移": "Selected word cells contain dictionary links awaiting review. Handle them before transferring.",
     "目标句子无法保留语素关联，请先核对分析": "The destination sentence cannot retain morpheme links. Review the analysis first.",
     "独立例句仍引用词条「⟦0⟧」中要移除的义项或用法，请先解除或调整关联；重新编号不会自动转移关联。": "Examples still reference senses or uses to remove in entry “⟦0⟧”. Unlink or update references first; renumbering does not transfer links automatically.",
+    "独立例句仍引用词条「⟦0⟧」中要移除的义项、用法或形式，请先解除或调整关联。": "Examples still reference senses, uses, or forms to remove in entry “⟦0⟧”. Unlink or update these references first.",
     "独立例句仍引用词条「⟦0⟧": "Examples still reference entry “⟦0⟧",
     "形式与变体": "Forms and variants",
     "值": "Value",
@@ -10643,6 +10646,7 @@
     "资料保存在你选择的项目文件夹中。": "Your materials stay in the project folder you choose."
   },
   "backend": {
+    "正在更新自动关联索引…": "Updating the automatic dictionary matching index…",
     "正在更新有效标注检索索引…": "Updating effective gloss search…",
     "正在更新附加层与书写检索索引…": "Updating layer and writing search…",
     "正在更新词典关联例证检索索引…": "Updating linked evidence search…",
@@ -11157,6 +11161,7 @@
     "导入语言数据": "Import language data",
     "批量关联词典": "Batch-link dictionary",
     "解除独立例句词典关联": "Unlink example from dictionary",
+    "保存独立例句词典关联": "Save example dictionary links",
     "词条转为语素": "Convert entry to morpheme",
     "拆分文本": "Split text",
     "复制句子": "Copy sentence",
@@ -11844,6 +11849,7 @@
     "领域": "Domain",
     "其他": "Other",
     "独立例句仍引用词条「⟦0⟧」中要移除的义项或用法，请先解除或调整关联；重新编号不会自动转移关联。": "Examples still reference senses or uses to remove in entry “⟦0⟧”. Unlink or update references first; renumbering does not transfer links automatically.",
+    "独立例句仍引用词条「⟦0⟧」中要移除的义项、用法或形式，请先解除或调整关联。": "Examples still reference senses, uses, or forms to remove in entry “⟦0⟧”. Unlink or update these references first.",
     "独立例句仍引用词条「⟦0⟧": "Examples still reference entry “⟦0⟧",
     "词类及子类": "POS & subclasses",
     "语义分类": "Semantic classes",
@@ -12257,7 +12263,18 @@
     "同一语素不能有重叠的语码标记": "Language tags cannot overlap on the same morpheme",
     "原语素范围已变化，请重新点选范围后保存": "The original morphemes changed. Select their current range before saving",
     "疑似语法标签尚未登记（请确认） ⟦0⟧": "Possible unregistered grammatical labels (please confirm): ⟦0⟧",
-    "含未支持的 Typst 命令，保留源码显示": "Contains unsupported Typst commands; source code is displayed"
+    "含未支持的 Typst 命令，保留源码显示": "Contains unsupported Typst commands; source code is displayed",
+    "请选择基本词形的语素分析来源": "Choose the analysis that generates the basic headword.",
+    "词形连接符须为不超过32个字符的单行文本": "Joining text must be a single line of at most 32 characters.",
+    "基本词形引用的语素分析已不存在，请选择分析或改用独立词形": "The source analysis no longer exists. Choose an analysis or an independent headword.",
+    "请至少填写一个用于生成基本词形的语素格": "Enter at least one morpheme cell to generate the basic headword.",
+    "基本词形须使用有明确形式的连续语素格；不连续分析可使用独立词形": "Use continuous morpheme cells with explicit forms to generate the basic headword. Discontinuous analyses can use an independent headword.",
+    "请先为所属语言开启汉语模式": "Enable Chinese mode for this language first.",
+    "汉语模式必须是开关": "Chinese mode must be a boolean setting.",
+    "词形由语素生成，请编辑来源组分或替换关联语素的形式，也可先切换为独立词形。": "This headword is generated from morphemes. Edit its source components, replace the linked morpheme forms, or first switch to an independent headword.",
+    "启用汉语模式并转换稽东话词形": "Enable Chinese mode and convert Jidong headwords",
+    "基本词形生成与不连续多部分形式须择一使用": "Choose either a generated headword or discontinuous parts.",
+    "基本词形与所选语素分析不一致，请重新保存词条": "The basic headword differs from its source analysis. Save the entry again."
   },
   "messages": {
     "9ad6d8c888c8c3": {
@@ -19865,8 +19882,8 @@
       "en": "Edit"
     },
     "155aa67e0db4db": {
-      "zh": "~ 仅提示候选，请确认方向与基底。",
-      "en": "~ suggests a candidate only. Confirm its direction and base."
+      "zh": "可在此手动确认方向与基底；已有关系优先保留。",
+      "en": "Confirm the direction and base here. Existing relationships are preserved."
     },
     "feb131961dbd77": {
       "zh": "关系随本句“保存”一起生效。",
@@ -19897,8 +19914,8 @@
       "en": "<button type=\"button\" data-redup-open>Link base</button></div>"
     },
     "521af4308bd754": {
-      "zh": "<small class=\"redup-candidate\">含 ~：可选中词格后关联重叠基底，候选不会自动生效。</small>",
-      "en": "<small class=\"redup-candidate\">Contains ~. Select cells to link a reduplication base; candidates are not applied automatically.</small>"
+      "zh": "<small class=\"redup-candidate\">保存句子时会按标注关联明确的重叠基底；其余可手动关联。</small>",
+      "en": "<small class=\"redup-candidate\">Saving the sentence links unambiguous reduplication bases from glosses. Other cases can be linked manually.</small>"
     },
     "23f9ade44144ac": {
       "zh": "<button type=\"button\" data-redup-panel>重叠与基底</button>",
@@ -21109,8 +21126,8 @@
       "en": "Pause"
     },
     "205eef06ab0529": {
-      "zh": "<div class=\"tl-edit-layout\"><div class=\"tl-edit-rail\" role=\"toolbar\" aria-label=\"时间与例句工具\"><label>起点 / 秒<input id=\"tl-start\" type=\"number\" step=\"0.001\" value=\"⟦0⟧\"></label><label>终点 / 秒<input id=\"tl-end\" type=\"number\" step=\"0.001\" value=\"⟦1⟧\"></label><div class=\"tl-icon-grid\">⟦2⟧⟦3⟧⟦4⟧</div><small id=\"tl-time-save-state\" role=\"status\">仅调整时间<br>不改变正文</small></div><div class=\"tl-editor-body\">⟦5⟧⟦6⟧⟦7⟧⟦8⟧</div></div>",
-      "en": "<div class=\"tl-edit-layout\"><div class=\"tl-edit-rail\" role=\"toolbar\" aria-label=\"Time &amp; example tools\"><label>Start / seconds<input id=\"tl-start\" type=\"number\" step=\"0.001\" value=\"⟦0⟧\"></label><label>End / seconds<input id=\"tl-end\" type=\"number\" step=\"0.001\" value=\"⟦1⟧\"></label><div class=\"tl-icon-grid\">⟦2⟧⟦3⟧⟦4⟧</div><small id=\"tl-time-save-state\" role=\"status\">Adjust times only<br>Text unchanged</small></div><div class=\"tl-editor-body\">⟦5⟧⟦6⟧⟦7⟧⟦8⟧</div></div>"
+      "zh": "<div class=\"tl-edit-layout\"><div class=\"tl-edit-rail\" role=\"toolbar\" aria-label=\"时间与例句工具\"><label>起点 / 秒<input id=\"tl-start\" type=\"number\" step=\"0.001\" value=\"⟦0⟧\"></label><label>终点 / 秒<input id=\"tl-end\" type=\"number\" step=\"0.001\" value=\"⟦1⟧\"></label><div class=\"tl-icon-grid\">⟦2⟧⟦3⟧⟦4⟧</div><small id=\"tl-time-save-state\" role=\"status\"></small></div><div class=\"tl-editor-body\">⟦5⟧⟦6⟧⟦7⟧⟦8⟧</div></div>",
+      "en": "<div class=\"tl-edit-layout\"><div class=\"tl-edit-rail\" role=\"toolbar\" aria-label=\"Time &amp; example tools\"><label>Start<input id=\"tl-start\" aria-label=\"Start (seconds)\" title=\"Seconds\" type=\"number\" step=\"0.001\" value=\"⟦0⟧\"></label><label>End<input id=\"tl-end\" aria-label=\"End (seconds)\" title=\"Seconds\" type=\"number\" step=\"0.001\" value=\"⟦1⟧\"></label><div class=\"tl-icon-grid\">⟦2⟧⟦3⟧⟦4⟧</div><small id=\"tl-time-save-state\" role=\"status\"></small></div><div class=\"tl-editor-body\">⟦5⟧⟦6⟧⟦7⟧⟦8⟧</div></div>"
     },
     "a6befdb99aa8ea": {
       "zh": "起点取播放头",
@@ -22177,8 +22194,8 @@
       "en": "Save or cancel sentence edits before undoing or redoing."
     },
     "b1f721da8b54e5": {
-      "zh": "<label for=\"theme-select\">界面主题 <span aria-hidden=\"true\">✧</span></label><select id=\"theme-select\"><option value=\"docoid\">Docoid</option><option value=\"dawoid\">DAWoid</option><option value=\"ivory\">暖白 · 墨蓝</option><option value=\"night\">夜间 · 星墨</option><option value=\"forest\">经典 · 苔绿</option></select>",
-      "en": "<label for=\"theme-select\">Theme <span aria-hidden=\"true\">✧</span></label><select id=\"theme-select\"><option value=\"docoid\">Docoid</option><option value=\"dawoid\">DAWoid</option><option value=\"ivory\">Warm white · Ink blue</option><option value=\"night\">Night · Starlight</option><option value=\"forest\">Classic · Moss green</option></select>"
+      "zh": "<label for=\"theme-select\">界面主题 <span aria-hidden=\"true\">✧</span></label><select id=\"theme-select\"><option value=\"docoid\">Docoid</option><option value=\"docoid-crimson\">Docoid · 绛红</option><option value=\"dawoid\">DAWoid</option><option value=\"ivory\">暖白 · 墨蓝</option><option value=\"night\">夜间 · 星墨</option><option value=\"forest\">经典 · 苔绿</option></select>",
+      "en": "<label for=\"theme-select\">Theme <span aria-hidden=\"true\">✧</span></label><select id=\"theme-select\"><option value=\"docoid\">Docoid</option><option value=\"docoid-crimson\">Docoid · Crimson</option><option value=\"dawoid\">DAWoid</option><option value=\"ivory\">Warm white · Ink blue</option><option value=\"night\">Night · Starlight</option><option value=\"forest\">Classic · Moss green</option></select>"
     },
     "caa4e57e5b76ba": {
       "zh": "<label class=\"scale-label\" for=\"text-scale\">文字大小</label><select id=\"text-scale\"><option value=\"0.9\">90%</option><option value=\"1\" selected>100%</option><option value=\"1.1\">110%</option><option value=\"1.2\">120%</option><option value=\"1.3\">130%</option><option value=\"1.5\">150%</option></select>",

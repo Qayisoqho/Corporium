@@ -96,6 +96,8 @@ class TimelineOrderTests(unittest.TestCase):
         ids=[self.create(n) for n in ('甲','乙','丙')]
         old_order=[r['id'] for r in self.rows()]
         with server.connect(audit=False) as db:
+            import save_validation
+            save_validation.drop(db)
             db.execute('DROP INDEX timeline_session_order')
             db.execute('ALTER TABLE timeline_sessions DROP COLUMN position')
             for step in db.execute('SELECT id,changes FROM undo_steps').fetchall():

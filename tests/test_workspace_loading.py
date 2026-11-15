@@ -26,6 +26,7 @@ class WorkspaceLoadingTests(unittest.TestCase):
         with server.connect() as db:
             self.assertEqual(db.total_changes, changes)
         self.assertEqual(self.call('/workspace-loading.js')[0], 200)
+        self.assertEqual(self.call('/render-ready.js')[0], 200)
 
     def test_other_language_edits_and_new_languages_invalidate_all_scope(self):
         before = self.revision('all')

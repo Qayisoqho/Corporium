@@ -25,6 +25,7 @@
  let sequence=0,owner=null,signature='';
  const selectors=()=>[$('field'),$('library-field'),$('survey-search-scope')].filter(Boolean);
  async function refresh(){
+  if(typeof initialLanguageReady!=='undefined')await initialLanguageReady;
   const lid=activeLanguage,ticket=++sequence,data=await api('sentence-search-fields?language='+encodeURIComponent(lid));
   if(ticket!==sequence||lid!==activeLanguage)return;
   const next=JSON.stringify(data);if(owner===lid&&signature===next)return;

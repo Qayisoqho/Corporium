@@ -61,7 +61,7 @@ def plan(db,lid,b):
     planned=[];seen=set()
     for item in long_tasks.steps(items):
         if not isinstance(item,dict) or not isinstance(item.get('id'),str) or item.get('id') in seen:raise ValueError('词条选择重复或无效')
-        row=db.execute('SELECT * FROM lexemes WHERE id=? AND language_id=?',(item.get('id'),lid)).fetchone()
+        row=db.execute('SELECT * FROM lexemes_documents WHERE id=? AND language_id=?',(item.get('id'),lid)).fetchone()
         if not row or row['revision']!=item.get('revision'):raise ValueError('所选词条已改变，请清空选择并重新勾选')
         seen.add(row['id']);before=json.loads(row['body']);after=copy.deepcopy(before);conflicts=[]
         for op in ops:
@@ -105,6 +105,7 @@ def apply(db,lid,b):
     count=0
     for p in long_tasks.steps(rows):
         if p['before']==p['after']:continue
-        db.execute('UPDATE lexemes SET body=?,revision=revision+1 WHERE id=?',(json.dumps(p['after'],ensure_ascii=False),p['id']));count+=1
+        import dictionary_rows
+        dictionary_rows.write(db,'lexeme',p['id'],p['after']);count+=1
     lexicon.validate_links(db)
     return dict(ok=True,changed=count)

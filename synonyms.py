@@ -1,6 +1,7 @@
 """Explicit, symmetric sense-to-sense links; never inferred from spelling."""
 import json
 import uuid
+import record_sources
 
 TABLES=('synonym_links',)
 
@@ -13,9 +14,10 @@ def key(ref):return ':'.join(ref[k] for k in ('kind','id','sense'))
 
 def senses(db,lid,kind,rid):
     if kind not in ('lexeme','morpheme'):raise ValueError('条目类型无效')
-    row=db.execute('SELECT * FROM '+('lexemes' if kind=='lexeme' else 'morphemes')+' WHERE id=? AND language_id=?',(rid,lid)).fetchone()
+    table='lexemes' if kind=='lexeme' else 'morphemes'
+    row=db.execute('SELECT * FROM '+table+' WHERE id=? AND language_id=?',(rid,lid)).fetchone()
     if not row:raise ValueError('条目已删除或不属于当前语言')
-    body=json.loads(row['body']);form=row['headword'] if kind=='lexeme' else row['form']
+    body=record_sources.read(db,table,rid);form=row['headword'] if kind=='lexeme' else row['form']
     # Keep the legacy plain label, but identify its gloss separately for display.
     # POS names and definitions can themselves contain registered-label spellings.
     def part(text,gloss=False):return dict(kind='gloss' if gloss else 'text',text=text)
@@ -57,7 +59,8 @@ def search(db,lid,q):
     languages.require(db,lid);kind=q.get('kind','lexeme')
     if kind not in ('lexeme','morpheme'):raise ValueError('条目类型无效')
     table='lexemes' if kind=='lexeme' else 'morphemes';field='headword' if kind=='lexeme' else 'form';query=q.get('q','').lower()
-    rows=db.execute(f'SELECT id FROM {table} WHERE language_id=? AND instr(lower({field}||body),?)>0 ORDER BY {field} COLLATE NOCASE LIMIT 40',(lid,query))
+    source=record_sources.document_table(table)
+    rows=db.execute(f'SELECT id FROM {source} WHERE language_id=? AND instr(lower({field}||body),?)>0 ORDER BY {field} COLLATE NOCASE LIMIT 40',(lid,query))
     return dict(items=[s for row in rows for s in senses(db,lid,kind,row['id'])],limited=True)
 
 def mutate(db,lid,b):

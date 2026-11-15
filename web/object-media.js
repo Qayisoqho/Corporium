@@ -1,8 +1,12 @@
 /* Shared, project-managed pictures and recordings; attachments never overwrite sentence attribution. */
 (()=>{
  const url=asset=>{const q=new URLSearchParams({asset:asset.id,proxy:String(!!asset.proxy)});if(typeof desktopProjectStamp==='string')q.set('project',desktopProjectStamp);return '/api/timeline-file?'+q;};
- const read=(kind,id)=>api('object-media?'+new URLSearchParams({kind,id}));
- let state=null,editing=null,dirty=false,busy=false,people=[],assets=[],scanTimer,scanning=false;
+ const mediaCaches=new Map();
+ const mediaCache=kind=>{if(!mediaCaches.has(kind))mediaCaches.set(kind,new CorporiumViewBatch(ids=>kind==='independent'?api('object-media?'+new URLSearchParams({kind,ids:ids.join(',')})).then(r=>r.items):Promise.all(ids.map(async id=>[id,await api('object-media?'+new URLSearchParams({kind,id}))])).then(Object.fromEntries),{size:100}));return mediaCaches.get(kind);};
+ const read=async(kind,id)=>(await mediaCache(kind).get([id]))[id];
+ async function prepare(kind,ids){if(!ids.length)return;const [,persons]=await Promise.all([mediaCache(kind).get(ids),api('collaborators')]);people=persons.speakers;peopleReady=mediaIdentity();}
+ const mediaIdentity=()=>JSON.stringify([activeLanguage,window.corporiumWorkspaceRevision,CorporiumViewBatch.generation]);let peopleReady=null;
+ let state=null,editing=null,dirty=false,busy=false,people=[],assets=[],scanTimer,scanning=false,mediaRevision=0;
  const audio=document.createElement('audio');audio.id='object-media-player';audio.hidden=true;audio.preload='metadata';document.body.append(audio);let playing=null,playSeq=0;
  const player=new RangePlayback(audio,reset);
  function reset(){if(playing?.isConnected){playing.textContent='▶';playing.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("8685d806276665",()=>[])??'播放录音'));}playing=null;window.CorporiumVolume?.unbind(audio);}
@@ -18,13 +22,13 @@
   syncRecorder(holder);
   if(['lexeme','morpheme'].includes(holder.dataset.mediaKind)){
    const images=data.items.filter(i=>i.asset.metadata.kind==='image');const gallery=holder.closest('#dictionary-detail,#morpheme-detail')?.querySelector('.object-media-gallery');
-   if(gallery){gallery.hidden=!images.length;gallery.closest('.dictionary-core-columns')?.classList.toggle('has-media',!!images.length);gallery.innerHTML=(globalThis.CorporiumI18n?.f("706e39086f775c",()=>[images.length,images.map(i=>(globalThis.CorporiumI18n?.f("77b9156f615085",()=>[esc(i.id),esc(i.body.caption||i.asset.name),esc(url(i.asset)),esc(i.body.caption||i.asset.name),esc(i.body.caption||i.asset.name),i.body.creator?' · '+esc(i.body.creator):'',i.body.source?' · '+esc(i.body.source):''])??'<figure><button type="button" data-media-image="'+esc(i.id)+'" aria-label="放大图片：'+esc(i.body.caption||i.asset.name)+'"><img loading="lazy" src="'+esc(url(i.asset))+'" alt="'+esc(i.body.caption||i.asset.name)+'"></button><figcaption>'+esc(i.body.caption||i.asset.name)+(i.body.creator?' · '+esc(i.body.creator):'')+(i.body.source?' · '+esc(i.body.source):'')+'</figcaption></figure>')).join('')])??'<summary>图片 · '+images.length+'</summary><div class="object-media-thumbs">'+images.map(i=>'<figure><button type="button" data-media-image="'+esc(i.id)+'" aria-label="放大图片：'+esc(i.body.caption||i.asset.name)+'"><img loading="lazy" src="'+esc(url(i.asset))+'" alt="'+esc(i.body.caption||i.asset.name)+'"></button><figcaption>'+esc(i.body.caption||i.asset.name)+(i.body.creator?' · '+esc(i.body.creator):'')+(i.body.source?' · '+esc(i.body.source):'')+'</figcaption></figure>').join('')+'</div>');gallery._media=data;}
+   if(gallery){gallery.hidden=!images.length;gallery.closest('.dictionary-core-columns')?.classList.toggle('has-media',!!images.length);gallery.innerHTML=(globalThis.CorporiumI18n?.f("706e39086f775c",()=>[images.length,images.map(i=>(globalThis.CorporiumI18n?.f("77b9156f615085",()=>[esc(i.id),esc(i.body.caption||i.asset.name),esc(url(i.asset)),esc(i.body.caption||i.asset.name),esc(i.body.caption||i.asset.name),i.body.creator?' · '+esc(i.body.creator):'',i.body.source?' · '+esc(i.body.source):''])??'<figure><button type="button" data-media-image="'+esc(i.id)+'" aria-label="放大图片：'+esc(i.body.caption||i.asset.name)+'"><img loading="lazy" src="'+esc(url(i.asset))+'" alt="'+esc(i.body.caption||i.asset.name)+'"></button><figcaption>'+esc(i.body.caption||i.asset.name)+(i.body.creator?' · '+esc(i.body.creator):'')+(i.body.source?' · '+esc(i.body.source):'')+'</figcaption></figure>')).join('')])??'<summary>图片 · '+images.length+'</summary><div class="object-media-thumbs">'+images.map(i=>'<figure><button type="button" data-media-image="'+esc(i.id)+'" aria-label="放大图片：'+esc(i.body.caption||i.asset.name)+'"><img loading="lazy" src="'+esc(url(i.asset))+'" alt="'+esc(i.body.caption||i.asset.name)+'"></button><figcaption>'+esc(i.body.caption||i.asset.name)+(i.body.creator?' · '+esc(i.body.creator):'')+(i.body.source?' · '+esc(i.body.source):'')+'</figcaption></figure>').join('')+'</div>');gallery._media=data;for(const image of gallery.querySelectorAll('img')){const meta=images.find(item=>item.id===image.closest('[data-media-image]')?.dataset.mediaImage)?.asset.metadata;if(Number.isFinite(meta?.width)&&meta.width>0&&Number.isFinite(meta?.height)&&meta.height>0){image.width=meta.width;image.height=meta.height;}}}
   }
  }
  function volumeContext(holder,item){item||=holder._media?.items.find(i=>i.id===holder.querySelector('select')?.value)||holder._media?.items.find(i=>i.asset.metadata.kind!=='image');return window.CorporiumVolume.recording(holder.dataset.mediaKind,holder.dataset.mediaRecord,item?.id);}
  function markup(kind,id){return '<span class="object-media-controls" data-media-kind="'+kind+'" data-media-record="'+esc(id)+'"></span>';}
  const render=renderEditableExample;renderEditableExample=function(e,kind,id){const html=render(e,kind,id);return kind==='independent'&&!String(id).startsWith('new:')&&!inlineDrafts.get(inlineKey(kind,id))?.isNew?html.replace(/(<section\b[^>]*>)/,'$1'+markup(kind,id)):html;};
- const show=showLexeme;showLexeme=async function(...args){await show(...args);if(args[0]!==dictionarySelection)return;const detail=$('dictionary-detail');if(!detail.querySelector('.lexeme-identity')||detail.querySelector('.object-media-controls[data-media-kind=lexeme]'))return;detail.querySelector('#delete-lexeme').insertAdjacentHTML('beforebegin',markup('lexeme',dictionarySelection));const gallery=document.createElement('details');gallery.className='object-media-gallery';gallery.open=true;gallery.hidden=true;const columns=document.createElement('div');columns.className='dictionary-core-columns';const definitions=document.createElement('section');definitions.className='dictionary-core-definitions';definitions.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("e157379ce68181",()=>[])??'词类用法与义项'));const usages=[...detail.querySelectorAll(':scope > .lex-usage-view')];const first=usages[0]||detail.querySelector('.dictionary-morphology-block');first.before(columns);for(const u of usages)definitions.append(u);if(!usages.length)definitions.textContent=(globalThis.CorporiumI18n?.f("e36694c91498e0",()=>[])??'词类和义项尚待分析。');const divider=document.createElement('div');divider.className='dictionary-media-divider';divider.tabIndex=0;divider.role='separator';divider.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("2b19199751c86d",()=>[])??'调整释义与媒体宽度'));divider.setAttribute('aria-orientation','vertical');divider.title=(globalThis.CorporiumI18n?.f("79fa1563784ed1",()=>[])??'拖动调整媒体宽度；方向键微调；双击恢复 40%');columns.append(definitions,divider,gallery);installDivider(columns,divider);const [data,personData]=await Promise.all([read('lexeme',args[0]),api('collaborators')]);if(args[0]===dictionarySelection&&columns.isConnected){people=personData.speakers;controls(detail.querySelector('.object-media-controls[data-media-kind=lexeme]'),data);}schedule();};
+ const show=showLexeme;showLexeme=async function(...args){await show(...args);if(args[0]!==dictionarySelection)return;const detail=$('dictionary-detail');if(!detail.querySelector('.lexeme-identity')||detail.querySelector('.object-media-controls[data-media-kind=lexeme]'))return;detail.querySelector('#delete-lexeme').insertAdjacentHTML('beforebegin',markup('lexeme',dictionarySelection));const gallery=document.createElement('details');gallery.className='object-media-gallery';gallery.open=true;gallery.hidden=true;const columns=document.createElement('div');columns.className='dictionary-core-columns';const definitions=document.createElement('section');definitions.className='dictionary-core-definitions';definitions.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("e157379ce68181",()=>[])??'词类用法与义项'));const usages=[...detail.querySelectorAll(':scope > .lex-usage-view')];const first=usages[0]||detail.querySelector('.dictionary-morphology-block');first.before(columns);for(const u of usages)definitions.append(u);if(!usages.length)definitions.textContent=(globalThis.CorporiumI18n?.f("e36694c91498e0",()=>[])??'词类和义项尚待分析。');const divider=document.createElement('div');divider.className='dictionary-media-divider';divider.tabIndex=0;divider.role='separator';divider.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("2b19199751c86d",()=>[])??'调整释义与媒体宽度'));divider.setAttribute('aria-orientation','vertical');divider.title=(globalThis.CorporiumI18n?.f("79fa1563784ed1",()=>[])??'拖动调整媒体宽度；方向键微调；双击恢复 40%');columns.append(definitions,divider,gallery);installDivider(columns,divider);const holder=detail.querySelector('.object-media-controls[data-media-kind=lexeme]');holder.dataset.mediaReady='loading';try{const [data,personData]=await Promise.all([read('lexeme',args[0]),api('collaborators')]);if(args[0]===dictionarySelection&&columns.isConnected&&holder.isConnected){people=personData.speakers;controls(holder,data);}}finally{if(holder.dataset.mediaReady==='loading')delete holder.dataset.mediaReady;schedule();}};
 
  function syncRecorder(holder){
   const kind=holder.dataset.mediaKind,old=holder.querySelector('[data-record-kind]');
@@ -36,7 +40,7 @@
  }
  document.addEventListener('corporium-sentence-audio-ready',e=>{for(const holder of e.detail?.closest('.editable-example')?.querySelectorAll('.object-media-controls')||[])syncRecorder(holder);});
  document.addEventListener('corporium-recorder-ready',()=>document.querySelectorAll('.object-media-controls').forEach(syncRecorder));
- window.CorporiumObjectMedia={async recorded(kind,id){if(state?.kind===kind&&state.id===id&&dialog.open)await refresh();else invalidate();},attachMorpheme(detail,id){
+ window.CorporiumObjectMedia={prepare,async recorded(kind,id){if(state?.kind===kind&&state.id===id&&dialog.open)await refresh();else invalidate();},attachMorpheme(detail,id){
   detail.querySelector('#morpheme-edit').insertAdjacentHTML('afterend',markup('morpheme',id));
   const usages=[...detail.querySelectorAll(':scope>[data-morpheme-sense]')],first=usages[0];if(!first){schedule();return;}
   const columns=document.createElement('div');columns.className='dictionary-core-columns';const definitions=document.createElement('section');definitions.className='dictionary-core-definitions';definitions.setAttribute('aria-label',(globalThis.CorporiumI18n?.f("50c12358eb1fc2",()=>[])??'语素释义'));first.before(columns);for(const el of usages)definitions.append(el);
@@ -51,10 +55,44 @@
   divider.onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();mediaPercent=e.key==='Home'?20:e.key==='End'?60:mediaPercent+(e.key==='ArrowLeft'?2:-2);apply(true);};
   const observer=new ResizeObserver(()=>{if(!columns.isConnected){observer.disconnect();return;}columns.classList.toggle('is-narrow',columns.clientWidth<480);});observer.observe(columns);apply();
  }
- async function scan(){if(scanning)return;const nodes=[...document.querySelectorAll('.object-media-controls:not([data-media-ready])')];if(!nodes.length)return;scanning=true;try{people=(await originalApi('collaborators')).speakers;const cache=new Map();for(const n of nodes){const key=n.dataset.mediaKind+':'+n.dataset.mediaRecord;if(!cache.has(key))cache.set(key,read(n.dataset.mediaKind,n.dataset.mediaRecord));try{const data=await cache.get(key);if(n.isConnected)controls(n,data);}catch{n.dataset.mediaReady='error';n.innerHTML=(globalThis.CorporiumI18n?.f("dc83b7c152f9ee",()=>[])??'<button type="button" data-media-manage>管理媒体</button>');}}}finally{scanning=false;if(document.querySelector('.object-media-controls:not([data-media-ready])'))schedule();}}
- function schedule(){clearTimeout(scanTimer);scanTimer=setTimeout(scan,80);}
+ async function scan(){
+  if(scanning)return;
+  const nodes=[...document.querySelectorAll('.object-media-controls:not([data-media-ready])')];
+  if(!nodes.length)return;
+  scanning=true;const revision=mediaRevision;
+  try{
+   const personRequest=peopleReady===mediaIdentity()?Promise.resolve({speakers:people}):api('collaborators');
+   const ids=[...new Set(nodes.filter(n=>n.dataset.mediaKind==='independent').map(n=>n.dataset.mediaRecord))];
+   const batches=new Map(),cache=new Map();
+   for(let start=0;start<ids.length;start+=100){
+    const group=ids.slice(start,start+100);
+    const request=mediaCache('independent').get(group).catch(()=>null);
+    for(const id of group)batches.set(id,request);
+   }
+   people=(await personRequest).speakers;peopleReady=mediaIdentity();
+   for(const n of nodes){
+    if(revision!==mediaRevision)break;
+    if(!n.isConnected)continue;
+    const kind=n.dataset.mediaKind,id=n.dataset.mediaRecord,key=kind+':'+id;
+    try{
+     if(!cache.has(key)){
+      const batch=kind==='independent'?await batches.get(id):null;
+      cache.set(key,batch?(Object.hasOwn(batch,id)?batch[id]:null):await read(kind,id));
+     }
+     if(revision!==mediaRevision||!n.isConnected)continue;
+     const data=cache.get(key);
+     if(!data)throw Error();
+     controls(n,data);
+    }catch{
+     if(revision!==mediaRevision||!n.isConnected)continue;
+     n.dataset.mediaReady='error';n.innerHTML=(globalThis.CorporiumI18n?.f("dc83b7c152f9ee",()=>[])??'<button type="button" data-media-manage>管理媒体</button>');
+    }
+   }
+  }finally{scanning=false;if(document.querySelector('.object-media-controls:not([data-media-ready])'))schedule();}
+ }
+ function schedule(){if(scanTimer)return;scanTimer=true;queueMicrotask(()=>{scanTimer=false;void scan();});}
  new MutationObserver(records=>{if(playing&&!playing.isConnected)stop();if(records.some(r=>[...r.addedNodes].some(n=>n.nodeType===1&&(n.matches?.('.object-media-controls')||n.querySelector?.('.object-media-controls')))))schedule();}).observe(document.body,{subtree:true,childList:true});
- function invalidate(){stop();for(const n of document.querySelectorAll('.object-media-controls'))n.removeAttribute('data-media-ready');schedule();}
+ function invalidate(){peopleReady=null;mediaRevision++;mediaCaches.forEach(cache=>cache.clear());stop();for(const n of document.querySelectorAll('.object-media-controls'))n.removeAttribute('data-media-ready');schedule();}
  document.addEventListener('corporium-people-changed',invalidate);document.addEventListener('corporium-alignment-changed',invalidate);
  makeDialog('object-media-dialog',(globalThis.CorporiumI18n?.f("a70412aaf87878",()=>[])??`<h2>管理媒体</h2><p>文件复制进项目。图片用于词义展示，录音可关联发言人和指定时间片段；列表中最靠前的录音为默认录音。</p><div class="object-media-manager"><div><div id="object-media-list"></div><button id="object-media-new" type="button">＋ 添加媒体</button></div><form id="object-media-form"><label>媒体来源<select id="object-media-source"><option value="keep">保留当前媒体</option><option value="upload">选择新文件</option><option value="existing">引用本语言已有媒体</option></select></label><label id="object-media-upload-label">选择图片或录音<input id="object-media-upload" type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.tif,.tiff,.wav,.mp3,.flac,.m4a,.ogg,.opus,.aac,.wma,.aif,.aiff"></label><label id="object-media-asset-label">已有媒体<select id="object-media-asset"></select></label><small>JPEG、PNG、WebP、GIF 可直接展示，BMP、TIFF 转 PNG（多页 TIFF 取首页）。HEIC 请先转 JPEG 或 PNG。录音原文件保留，播放时生成兼容副本，最多一小时。</small><label>说明<input id="object-media-caption"></label><label>记录者<input id="object-media-creator"></label><label>来源<input id="object-media-origin"></label><label id="object-media-target-label">对应词形<select id="object-media-target"></select></label><fieldset id="object-media-audio-fields"><legend>录音</legend><div class="object-media-range"><label>开始（秒）<input id="object-media-start" type="number" min="0" step="0.001" value="0"></label><label>结束（秒）<input id="object-media-end" type="number" min="0" step="0.001" placeholder="留空播放至结尾"></label></div><fieldset><legend>发言人（可多选）</legend><div id="object-media-people"></div><button id="object-media-person-new" type="button">＋ 新建发言人</button></fieldset><small>这里关联的是这段录音的发言人，不会覆盖例句的发言人设置。</small></fieldset><p id="object-media-status" role="status"></p><p id="object-media-error" role="alert"></p><button type="submit" class="primary">保存媒体</button></form></div>`));
  const dialog=$('object-media-dialog');dialog.addEventListener('cancel',e=>{if(busy){e.preventDefault();return;}guardDialogDiscard(e,dirty,(globalThis.CorporiumI18n?.f("40db10691e2351",()=>[])??'放弃尚未保存的媒体信息？'));});dialog.querySelector('.close').onclick=e=>{e.preventDefault();if(dialog.dispatchEvent(new Event('cancel',{cancelable:true})))dialog.close();};dialog.addEventListener('close',()=>{dirty=false;state=null;stop();});

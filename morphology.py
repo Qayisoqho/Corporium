@@ -86,25 +86,36 @@ def analysis(db,link_id):
     import link_review
     return {'review_reason':link_review.reason(db,link_id),**({'form_id':r['form_id'],'features':json.loads(r['features'])} if r else {'form_id':None,'features':[]}), 'component_ref':component_links.read(db,link_id)}
 
+def validate_entry(db,x,lookup):
+    import paradigms
+    b=x['body'];check_features(db,x['language_id'],b.get('features',[]))
+    if x.get('target_kind')=='lexeme' and 'headword_source' in b:
+        import chinese_mode
+        generated=chinese_mode.realization(b,stored=True)
+        if generated is not None and generated!=x['headword']:
+            raise ValueError('基本词形与所选语素分析不一致，请重新保存词条')
+    paradigms.normalize(b,dict(b))
+    for part in [*b.get('variants',[]),*b.get('usages',[]),*(s for u in b.get('usages',[]) for s in u.get('senses',[]))]:check_features(db,x['language_id'],part.get('features',[]))
+    rel=b.get('relation')
+    if rel:
+        base=lookup(rel['base_id'])
+        if not base or base['language_id']!=x['language_id']:raise ValueError('所属基本条目不存在或语言不一致，请先调整形态关系')
+        return rel['base_id']
+
+
 def validate(db,entries=None,affected=None):
     if entries is None:entries={r['id']:{**dict(r),'body':json.loads(r['body'])} for r in db.execute('SELECT * FROM dictionary_targets')}
     word_structure.validate(db,entries)
-    parents={}
-    for xid,x in entries.items():
-        b=x['body'];check_features(db,x['language_id'],b.get('features',[]))
-        import paradigms
-        paradigms.normalize(b,dict(b))
-        for part in [*b.get('variants',[]),*b.get('usages',[]),*(s for u in b.get('usages',[]) for s in u.get('senses',[]))]:check_features(db,x['language_id'],part.get('features',[]))
-        rel=b.get('relation')
-        if rel:
-            base=entries.get(rel['base_id'])
-            if not base or base['language_id']!=x['language_id']:raise ValueError('所属基本条目不存在或语言不一致，请先调整形态关系')
-            parents[xid]=rel['base_id']
+    parents={xid:base for xid,x in entries.items() if (base:=validate_entry(db,x,entries.get))}
     for start in parents:
         seen=set();p=start
         while p in parents:
             if p in seen:raise ValueError('所属基本条目不能形成循环关系')
             seen.add(p);p=parents[p]
+    validate_occurrences(db,entries.get,affected)
+
+
+def validate_occurrences(db,lookup,affected):
     # Equal target/form/features tuples have the same validity regardless of how
     # many occurrences use them; the LEFT JOIN still exposes orphan analyses.
     import lexicon
@@ -114,20 +125,13 @@ def validate(db,entries=None,affected=None):
         from itertools import chain
         rows=chain(lexicon.scoped_rows(db,sql,[('a.id',affected['links'])]),lexicon.scoped_rows(db,'SELECT DISTINCT l.lexeme_id,l.usage_id,l.sense_id,a.form_id,a.features FROM lexical_links l JOIN morphology_analyses a ON a.id=l.id',[('l.lexeme_id',affected['targets'])]))
     for r in rows:
-        x=entries.get(r['lexeme_id'])
+        x=lookup(r['lexeme_id'])
         if not x:raise ValueError('形态分析缺少词典关联')
         form_selection(x['body'],r['form_id']);check_features(db,x['language_id'],json.loads(r['features']))
         import paradigms
         paradigms.validate_selection(x['body'],r['usage_id'],r['sense_id'],r['form_id'])
-    for e in db.execute('SELECT language_id,body FROM dictionary_examples'):
-        for t in json.loads(e['body'])['targets']:
-            x=entries.get(t['lexeme_id'])
-            if x:
-                form_selection(x['body'],t.get('form_id'));check_features(db,e['language_id'],t.get('features',[]))
-                import paradigms
-                paradigms.validate_selection(x['body'],t.get('usage_id'),t.get('sense_id'),t.get('form_id'))
 
-def options(db,lid,entry_id=''):
+def options(db,lid,entry_id='',*,editor=False):
     sql="SELECT id,language_id,headword,body,revision,target_kind FROM dictionary_targets WHERE (?='all' OR language_id=?)";params=[lid,lid]
     if entry_id:
         row=db.execute('SELECT language_id,body FROM dictionary_targets WHERE id=?',(entry_id,)).fetchone()
@@ -135,10 +139,32 @@ def options(db,lid,entry_id=''):
         body=json.loads(row['body']);refs={(body.get('relation') or {}).get('base_id','')}
         refs.update(c.get('lexeme_id','') for a in body.get('word_structure',{}).get('analyses',[]) for c in a.get('components',[]));refs.discard('')
         # A detail needs direct targets and reverse relations, not all entry drafts.
-        sql+=' AND (id IN ('+','.join('?' for _ in refs)+") OR json_extract(body,'$.relation.base_id')=? OR EXISTS(SELECT 1 FROM json_each(body,'$.word_structure.analyses') a,json_each(a.value,'$.components') c WHERE json_extract(c.value,'$.lexeme_id')=?))"
-        params.extend([*refs,entry_id,entry_id])
+        import dictionary_relations
+        if editor:
+            sql+=' AND id IN ('+','.join('?' for _ in refs)+')'
+            params.extend(refs)
+        elif dictionary_relations.ready(db):
+            sql+=' AND (id IN ('+','.join('?' for _ in refs)+') OR id IN (SELECT owner FROM dictionary_relation_edges WHERE target=?))'
+            params.extend([*refs,entry_id])
+        else:
+            sql+=' AND (id IN ('+','.join('?' for _ in refs)+") OR json_extract(body,'$.relation.base_id')=? OR EXISTS(SELECT 1 FROM json_each(body,'$.word_structure.analyses') a,json_each(a.value,'$.components') c WHERE json_extract(c.value,'$.lexeme_id')=?))"
+            params.extend([*refs,entry_id,entry_id])
+    elif editor:
+        sql+=' AND 0'
     sql+=' ORDER BY headword COLLATE NOCASE'
-    return {'classes':categories.listing(db,lid),'writing_types':[dict(r) for r in db.execute("SELECT * FROM writing_types WHERE ?='all' OR language_id=? ORDER BY position,name",(lid,lid))],'tags':grammar.listing(db,lid),'entries':[dict(r) for r in db.execute(sql,params)]}
+    result={'classes':categories.listing(db,lid),'writing_types':[dict(r) for r in db.execute("SELECT * FROM writing_types WHERE ?='all' OR language_id=? ORDER BY position,name,id",(lid,lid))],'tags':grammar.listing(db,lid),'entries':[dict(r) for r in db.execute(sql,params)]}
+    if editor:
+        semantic=[dict(r) for r in db.execute('SELECT * FROM semantic_classes WHERE language_id=? ORDER BY position,name,id',(lid,))]
+        result.update(remote_choices=True,language_id=lid,semantic_classes=semantic)
+    return result
+
+
+def choices(db,lid,query='',page=1,exclude=''):
+    """Use native dictionary paging; candidates never carry entry drafts."""
+    import dictionary_read
+    if not isinstance(query,str) or len(query)>1000:raise ValueError('筛选词形过长')
+    if not db.in_transaction:db.execute('BEGIN')
+    return dictionary_read.choice_page(db,lid,query.strip().lower(),page,exclude)
 
 def suggested_features(db,lid,gloss):
     lookup=grammar.index(grammar.listing(db,lid));found=[]

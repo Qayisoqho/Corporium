@@ -10,7 +10,7 @@ function setup(){
  const one=card('one',100),two=card('two',400),resize=[],mutations=[],frames=[],listeners=new Map(),root={};let scans=0;
  const list={nodeType:1,cards:[one.a,two.a],querySelectorAll(){scans++;return this.cards;},closest:()=>null};
  const c=vm.createContext({ResizeObserver:class{constructor(fn){this.fn=fn;resize.push(this);}observe(target){this.target=target;}disconnect(){this.disconnected=true;}},MutationObserver:class{constructor(fn){this.fn=fn;mutations.push(this);}observe(target){this.target=target;}}});
- const win={requestAnimationFrame:fn=>(frames.push(fn),frames.length),getComputedStyle:()=>({lineHeight:'20px',fontSize:'16px',paddingTop:'0'}),addEventListener:(name,fn)=>listeners.set(name,fn)},doc={documentElement:root,fonts:{ready:{then(fn){listeners.set('fonts',fn);}}}};
+ const win={queueMicrotask:fn=>(frames.push(fn),frames.length),getComputedStyle:()=>({lineHeight:'20px',fontSize:'16px',paddingTop:'0'}),addEventListener:(name,fn)=>listeners.set(name,fn)},doc={documentElement:root,fonts:{ready:{then(fn){listeners.set('fonts',fn);}}}};
  vm.runInContext(source.slice(source.indexOf('function createSentenceMeasurements('),source.indexOf('(()=>{const lists=',source.indexOf('function createSentenceMeasurements('))),c);c.createSentenceMeasurements([list],doc,win);
  const flush=()=>{for(let i=0;frames.length&&i<10;i++)frames.shift()();assert.equal(frames.length,0);};flush();return {one,two,list,resize,mutations,flush,listeners,scans:()=>scans,root};
 }

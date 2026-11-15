@@ -110,7 +110,7 @@ class TimelineTextOrderTests(unittest.TestCase):
             binding=db.execute('SELECT o.*,t.language_id FROM timeline_text_orders o JOIN texts t ON t.id=o.id WHERE t.language_id=?',(target,)).fetchone()
             self.assertIsNotNone(binding);self.assertNotEqual(binding['id'],self.tid);self.assertNotEqual(binding['session_id'],self.sid)
             self.assertEqual(db.execute('SELECT language_id FROM timeline_sessions WHERE id=?',(binding['session_id'],)).fetchone()[0],target)
-            copied=[json.loads(r[0])['ipa'] for r in db.execute('SELECT body FROM entries WHERE text_id=? ORDER BY position',(binding['id'],))]
+            copied=[json.loads(r[0])['ipa'] for r in db.execute('SELECT body FROM entries_documents WHERE text_id=? ORDER BY position',(binding['id'],))]
             self.assertEqual(copied,list('ACB'))
         backup=Path(self.temp.name)/'backup.json';backup.write_text(json.dumps(self.call('/api/backup')[1]),encoding='utf-8')
         restored=Path(self.temp.name)/'restored.sqlite3';restore(backup,restored)
@@ -120,7 +120,7 @@ class TimelineTextOrderTests(unittest.TestCase):
         for dest in (restored,snapshot):
             with closing(sqlite3.connect(dest)) as db:
                 self.assertEqual(db.execute('SELECT session_id FROM timeline_text_orders WHERE id=?',(self.tid,)).fetchone()[0],self.sid)
-                self.assertEqual([json.loads(r[0])['ipa'] for r in db.execute('SELECT body FROM entries WHERE text_id=? ORDER BY position',(self.tid,))],list('ACB'))
+                self.assertEqual([r[0] for r in db.execute("SELECT s.ipa FROM entries e JOIN sentence_text_rows s ON s.kind='corpus' AND s.owner_id=e.id WHERE e.text_id=? ORDER BY e.position",(self.tid,))],list('ACB'))
         bundle.pop('timeline_text_orders');target=self.call('/api/save-language',dict(name='旧交换包',metadata={}))[1]['id']
         self.assertEqual(self.call('/api/import-language',dict(bundle=bundle,_language=target))[0],200)
 

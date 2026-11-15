@@ -185,13 +185,16 @@ class LexiconTests(unittest.TestCase):
         self.assertEqual(self.undo(language=other)[0],200)
 
     def test_migration_does_not_rewrite_corpus(self):
+        server.DB=Path(self.temp.name)/'old.sqlite3'
+        server.init(source_mode='legacy')
         e=self.seed()
         with server.connect() as db:
-            before=db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0]
+            before=json.loads(db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0])
             db.execute('DROP TABLE lexical_links');db.execute('DROP TABLE lexemes');db.execute('DROP TABLE corpus_units')
         server.init()
         with server.connect() as db:
-            self.assertEqual(before,db.execute('SELECT body FROM entries WHERE id=?',(e['id'],)).fetchone()[0])
+            import record_sources
+            self.assertEqual(before,record_sources.read(db,'entries',e['id']))
         uid=self.entries()[0]['words'][0]['unit_id'];server.init()
         self.assertEqual(self.entries()[0]['words'][0]['unit_id'],uid)
         self.assertTrue(list((server.DB.parent/'backups').glob('before-lexicon-*.sqlite3')))

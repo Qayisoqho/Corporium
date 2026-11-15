@@ -6,7 +6,13 @@ const grammarWorkspace=setWorkspace;setWorkspace=async function(name){await gram
 grammarButton.onclick=safe(()=>setWorkspace('grammar'));
 const grammarTypes={unknown:(globalThis.CorporiumI18n?.f("654e0ae6f4d5cb",()=>[])??'未登记候选'),boundary:(globalThis.CorporiumI18n?.f("131868dbcb183f",()=>[])??'切分不一致'),alias:(globalThis.CorporiumI18n?.f("07de0d46cfbbf7",()=>[])??'别名与大小写'),pending:(globalThis.CorporiumI18n?.f("d3381bc2e508c3",()=>[])??'待核对'),annotation:(globalThis.CorporiumI18n?.f("19c43f427fabb9",()=>[])??'附加层待核对'),usage:(globalThis.CorporiumI18n?.f("ea87cf7570dcb6",()=>[])??'标签用例')};
 function grammarPair(e){const m=JSON.parse(languageList.find(l=>l.id===e.language_id)?.metadata||'{}');return `<div class="language-body grammar-pair" style="${languageTypography(m)}"><div class="words">${renderWord({form:e.form||'',gloss:e.gloss||''},e.language_id)}</div></div>`;}
-let grammarRows=[];
+let grammarRows=[],grammarTagPage=1;
+const grammarTagNav=document.createElement('div');grammarTagNav.className='pagination';grammarTagNav.hidden=true;
+$('grammar-tags').after(grammarTagNav);
+function registryPagination(data){
+ grammarTagPage=data.tag_page;grammarTagNav.hidden=data.tag_pages<=1;
+ if(!grammarTagNav.hidden)topPagination(grammarTagNav,grammarTagPage,data.tag_pages,async next=>{grammarTagPage=next;await loadGrammar();});
+}
 function grammarWordLocation(e){
  if(!e.word)return '';
  if(e.word_number===null)return globalThis.CorporiumI18n?.ui(' · 第 '+e.word+' 格',' · Cell '+e.word)??' · 第 '+e.word+' 格';
@@ -21,10 +27,29 @@ function drawGrammarTags(){const q=$('grammar-tag-query').value.toLocaleLowerCas
 function grammarSafe(fn){return async(...args)=>{try{await fn(...args);$('grammar-notice').textContent='';}catch(e){$('grammar-notice').textContent=e.message;}};}
 function publishGrammarAudit(state){globalThis.dispatchEvent?.(new CustomEvent('corporium-grammar-audit',{detail:state}));}
 async function loadGrammar({fresh=false}={}){
- const seq=++grammarRequest;publishGrammarAudit({pending:true});let data;
+ const seq=++grammarRequest,language=activeLanguage;publishGrammarAudit({pending:true});let data;
+ grammarTagNav.hidden=true;
+ if(grammarPanel.dataset.grammarView==='tags'&&!fresh){
+  const params=new URLSearchParams({view:'registry',source:$('grammar-source').value,lower:$('grammar-lower').checked,reuse:'1',tag_page:grammarTagPage,tag_q:$('grammar-tag-query').value});
+  try{
+   data=await originalApi('grammar-audit?'+params+'&interactive=1');
+   if(seq!==grammarRequest||language!==activeLanguage)return;
+   if(data.needs_task){
+    const definitions=data.definitions||await originalApi('grammar-tags?'+params);
+    if(seq!==grammarRequest||language!==activeLanguage)return;
+    grammarRows=definitions.tags.map(t=>({...t,uses:'…'}));drawGrammarTags();registryPagination(definitions);
+    data=window.corporiumRunTask
+     ?await window.corporiumRunTask('grammar-audit',{...Object.fromEntries(params),language},globalThis.CorporiumI18n?.ui('标注检查','Checking annotations')??'标注检查')
+     :await api('grammar-audit?'+params);
+   }
+  }catch(error){if(seq===grammarRequest)publishGrammarAudit({pending:false,error:true});throw error;}
+  if(seq!==grammarRequest||language!==activeLanguage)return;
+  grammarRows=data.tags;drawGrammarTags();registryPagination(data);drawGrammarCandidates(data);publishGrammarAudit({pending:false});
+  return;
+ }
  try{data=await api('grammar-audit?'+new URLSearchParams({source:$('grammar-source').value,issue:$('grammar-issue').value,lower:$('grammar-lower').checked,q:$('grammar-query').value,page:grammarPage,tag:grammarFocus,candidate:grammarCandidateFocus?.symbol||'',candidate_language:grammarCandidateFocus?.language_id||'',reuse:fresh?'0':'1'}));}
  catch(error){if(seq===grammarRequest)publishGrammarAudit({pending:false,error:true});throw error;}
- if(seq!==grammarRequest)return;publishGrammarAudit({pending:false,counts:data.counts});grammarRows=data.tags;grammarPage=data.page;drawGrammarTags();$('grammar-summary').textContent=(globalThis.CorporiumI18n?.f("bb3b6e119d4231",()=>[data.sentences,data.total,$('grammar-issue').value==='usage'?(globalThis.CorporiumI18n?.f("13c4522cc63cc6",()=>[])??'条例句'):(globalThis.CorporiumI18n?.f("50dc3f967699f8",()=>[])??'项'),Object.entries(data.counts).map(([k,v])=>`${grammarTypes[k]} ${v}`).join(' · ')])??`已检查 ${data.sentences} 条例句 · 当前结果 ${data.total} ${$('grammar-issue').value==='usage'?'条例句':'项'}。`+Object.entries(data.counts).map(([k,v])=>`${grammarTypes[k]} ${v}`).join(' · '));
+ if(seq!==grammarRequest||language!==activeLanguage)return;publishGrammarAudit({pending:false,counts:data.counts});grammarRows=data.tags;grammarPage=data.page;drawGrammarTags();$('grammar-summary').textContent=(globalThis.CorporiumI18n?.f("bb3b6e119d4231",()=>[data.sentences,data.total,$('grammar-issue').value==='usage'?(globalThis.CorporiumI18n?.f("13c4522cc63cc6",()=>[])??'条例句'):(globalThis.CorporiumI18n?.f("50dc3f967699f8",()=>[])??'项'),Object.entries(data.counts).map(([k,v])=>`${grammarTypes[k]} ${v}`).join(' · ')])??`已检查 ${data.sentences} 条例句 · 当前结果 ${data.total} ${$('grammar-issue').value==='usage'?'条例句':'项'}。`+Object.entries(data.counts).map(([k,v])=>`${grammarTypes[k]} ${v}`).join(' · '));
  for(const id of ['grammar-top','grammar-bottom'])topPagination($(id),data.page,data.pages,async p=>{grammarPage=p;await loadGrammar();});
  drawGrammarCandidates(data);
  $('grammar-results').innerHTML=data.items.map((e,i)=>`<article class="entry"><div class="entry-head"><strong>${esc(grammarTypes[e.issue])}</strong><span>${esc(languageList.find(l=>l.id===e.language_id)?.name)} · ${esc(e.title)}${e.position?(globalThis.CorporiumI18n?.f("eb43a1b68b9777",()=>[e.position])??' · 第 '+e.position+' 句'):''}${grammarWordLocation(e)}</span></div><p>${esc(e.message)}${e.token?'：'+grammarLabel(e.token,e.language_id):''}${e.canonical?' → '+grammarLabel(e.canonical,e.language_id):''}</p>${e.body?renderEditableExample({...e.body,language_id:e.language_id,position:e.position},e.kind,e.id):grammarPair(e)}<div>${!e.deleted?(globalThis.CorporiumI18n?.f("4b07018de1d2b1",()=>[i])??`<button data-audit-open="${i}">定位例句</button>`):''}${e.issue==='unknown'?(globalThis.CorporiumI18n?.f("2aca2c17defa23",()=>[i])??`<button data-audit-register="${i}">登记此标签</button>`):''}${e.issue==='annotation'?(globalThis.CorporiumI18n?.f("3a8196e419cbaa",()=>[i])??`<button data-audit-layer="${i}">核对附加标注</button>`):''}</div></article>`).join('')||(globalThis.CorporiumI18n?.f("95b71546497c81",()=>[])??'<p class="empty">当前筛选下没有待核对项。候选识别采用文本规则，不等同于语言学正确性判断。</p>');
@@ -34,7 +59,7 @@ async function loadGrammar({fresh=false}={}){
 }
 makeDialog('grammar-editor',(globalThis.CorporiumI18n?.f("db07a07d6da75b",()=>[])??'<h2>语法标签定义</h2><form id="grammar-form"><label>语言<select id="grammar-language"></select></label><label>标签<input id="grammar-symbol" required placeholder="例如 GEN"></label><label>解释<input id="grammar-description" placeholder="例如 属格"></label><label>分类<input id="grammar-category" placeholder="例如 格、数、时体、词类"></label><label>别名（每行一个，不区分大小写）<textarea id="grammar-aliases" rows="3" placeholder="例如 GENITIVE"></textarea></label><label>备注<textarea id="grammar-notes" rows="3"></textarea></label><p>新增定义和别名会自动识别已有标注；标签改名会同步更新已识别的旧标签，可撤销。登记后统一显示为小型大写；大小写变体无需重复添加别名。与普通词义同形的标签请结合上下文核对。</p><p id="grammar-error" role="alert"></p><button type="submit" class="primary" id="grammar-save">保存定义</button></form>'));
 function openGrammar(t={}){grammarEditing=t.id?t:null;$('grammar-language').innerHTML=languageOptions();$('grammar-language').value=t.language_id||(activeLanguage==='all'?languageList[0].id:activeLanguage);$('grammar-language').disabled=!!t.id;for(const field of ['symbol','description','category','notes'])$('grammar-'+field).value=t[field]||'';$('grammar-aliases').value=(t.aliases||[]).join('\n');$('grammar-error').textContent='';$('grammar-editor').showModal();}
-$('grammar-new').onclick=()=>openGrammar();$('grammar-tag-query').oninput=drawGrammarTags;
+$('grammar-new').onclick=()=>openGrammar();$('grammar-tag-query').oninput=()=>{grammarTagPage=1;if(grammarPanel.dataset.grammarView==='tags')void grammarSafe(()=>loadGrammar())();else drawGrammarTags();};
 $('grammar-form').onsubmit=async e=>{e.preventDefault();if($('grammar-save').disabled)return;$('grammar-save').disabled=true;let saved=false;try{const body={id:grammarEditing?.id,revision:grammarEditing?.revision,_language:$('grammar-language').value,aliases:$('grammar-aliases').value.split('\n').map(s=>s.trim()).filter(Boolean)};for(const f of ['symbol','description','category','notes'])body[f]=$('grammar-'+f).value;await api('grammar-save',body);saved=true;grammarDirty=false;$('grammar-editor').close();await loadGrammar();}catch(error){$(saved?'grammar-notice':'grammar-error').textContent=saved?(globalThis.CorporiumI18n?.f("edef85db233625",()=>[error.message])??'标签已保存，但检查刷新失败：'+error.message):error.message;}finally{$('grammar-save').disabled=false;}};
 $('grammar-run').onclick=grammarSafe(async()=>{const fresh=!grammarFilterOnly;grammarFilterOnly=false;grammarPage=1;await loadGrammar({fresh});});$('grammar-reset').textContent=(globalThis.CorporiumI18n?.f("87db3f287d7f87",()=>[])??'清空条件');$('grammar-reset').onclick=grammarSafe(async()=>{$('grammar-source').value='all';$('grammar-lower').checked=false;grammarFocus='';grammarCandidateFocus=null;grammarPage=1;$('grammar-issue').value='all';$('grammar-query').value='';await loadGrammar();});
 for(const id of ['grammar-source','grammar-lower','grammar-issue'])$(id).onchange=grammarSafe(async()=>{grammarPage=1;grammarCandidateFocus=null;if($('grammar-issue').value!=='usage')grammarFocus='';await loadGrammar();});$('grammar-query').onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();if(!e.repeat){grammarFilterOnly=true;$('grammar-run').click();}}};

@@ -68,7 +68,7 @@ def plan(db,body):
     new=paradigms.templates(metadata.get('paradigm_templates',[]))
     old=json.loads(language['metadata']).get('paradigm_templates',[])
     updates=[];deletions=[]
-    entries=list(db.execute('SELECT * FROM lexemes WHERE language_id=?',(language['id'],))) if old!=new else []
+    entries=list(db.execute('SELECT * FROM lexemes_documents WHERE language_id=?',(language['id'],))) if old!=new else []
     for entry in long_tasks.steps(entries):
         data=json.loads(entry['body']);tables,removed=synchronize(data.get('paradigms',[]),old,new)
         if tables!=data.get('paradigms',[]):
@@ -78,7 +78,7 @@ def plan(db,body):
     if 'editor_paradigms' in body:
         if not isinstance(body['editor_paradigms'],list):raise ValueError('变形表格式不正确')
         if body.get('editor_target_id'):
-            target=db.execute('SELECT * FROM lexemes WHERE id=? AND language_id=?',(body['editor_target_id'],language['id'])).fetchone()
+            target=db.execute('SELECT * FROM lexemes_documents WHERE id=? AND language_id=?',(body['editor_target_id'],language['id'])).fetchone()
             if not target or target['revision']!=body.get('editor_target_revision'):raise ValueError('词条已修改，请重新打开后编辑')
         editor,removed=synchronize(body['editor_paradigms'],old,new)
         deletions.extend(dict(**r,entry_id=body.get('editor_target_id',''),headword=body.get('editor_headword',''),draft=True) for r in removed)
@@ -105,10 +105,11 @@ def apply(db,body):
         current=lexicon.get_lexeme(db,entry['id'])
         dictionary_link_changes.detach(db,dictionary_link_changes.collect(db,current,data))
         data=paradigms.normalize(data,{**data})
-        db.execute('UPDATE lexemes SET body=?,revision=revision+1 WHERE id=?',(json.dumps(data,ensure_ascii=False),entry['id']))
+        import dictionary_rows
+        dictionary_rows.write(db,'lexeme',entry['id'],data)
     result=dict(template_sync_count=len(value['updates']))
     if value['editor'] is not None:result['editor_paradigms']=value['editor']
     if body.get('editor_target_id'):
-        row=db.execute('SELECT id,revision FROM lexemes WHERE id=?',(body['editor_target_id'],)).fetchone()
+        row=db.execute('SELECT id,revision FROM lexemes_documents WHERE id=?',(body['editor_target_id'],)).fetchone()
         if row:result.update(editor_target_id=row['id'],editor_target_revision=row['revision'])
     return result

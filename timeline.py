@@ -98,6 +98,11 @@ def sentence_clips(db,ids):
         result[item.pop('entry_id')].append(item)
     return result
 
+import read_views
+
+EXTENTS = read_views.Cache(256*1024)
+
+
 def detail(db,lid,b):
     s=session(db,lid,b['id']);media=media_view(db,s['media_id'])
     complete=str(b.get('complete',''))=='1'
@@ -112,19 +117,25 @@ def detail(db,lid,b):
         params.extend([s['id'],b['selected_interval']])
     # Bound the interval set before joining large sentence bodies. A far-away
     # viewport used to fetch/parse text JSON for every interval in the session.
-    rows=db.execute('WITH candidates AS ('+candidates+'''), visible AS MATERIALIZED (
+    import record_sources
+    native=record_sources.native(db)
+    def source_field(field):
+        if native:return f'COALESCE(cs.{field},ds.{field})'
+        return f"json_extract(COALESCE(e.body,d.body),'$.{field}')"
+    fields=','.join(f'{source_field(field)} sentence_{name}' for field,name in
+                    (('ipa','ipa'),('translation','translation'),('language_id','language')))
+    header=" LEFT JOIN sentence_text_rows cs ON cs.kind='corpus' AND cs.owner_id=e.id LEFT JOIN sentence_text_rows ds ON ds.kind='independent' AND ds.owner_id=d.id" if native else ''
+    rows=db.execute('WITH candidates AS ('+candidates+f'''), visible AS MATERIALIZED (
       SELECT id FROM candidates
       ORDER BY CASE WHEN id=? THEN 0 ELSE 1 END,start_ms,entry_id,ordering LIMIT ?)
       SELECT i.*,
-      json_extract(COALESCE(e.body,d.body),'$.ipa') sentence_ipa,
-      json_extract(COALESCE(e.body,d.body),'$.translation') sentence_translation,
-      json_extract(COALESCE(e.body,d.body),'$.language_id') sentence_language,
+      {fields},
       track.kind track_kind,
       COALESCE(e.revision,d.revision) entry_revision,CASE WHEN d.id IS NOT NULL THEN '@independent' ELSE e.text_id END text_id,e.position,t.title,
       (SELECT COUNT(*) FROM timeline_intervals child WHERE child.parent_id=i.id) child_count,
       (SELECT p.end_ms FROM timeline_intervals p WHERE p.track_id=i.track_id AND p.start_ms<i.start_ms ORDER BY p.start_ms DESC LIMIT 1) previous_ms,
       (SELECT n.start_ms FROM timeline_intervals n WHERE n.track_id=i.track_id AND n.start_ms>i.start_ms ORDER BY n.start_ms LIMIT 1) next_ms FROM visible v JOIN timeline_intervals i ON i.id=v.id
-      LEFT JOIN entries e ON e.id=i.entry_id LEFT JOIN dictionary_examples d ON d.id=CASE WHEN substr(i.entry_id,1,12)='independent:' THEN substr(i.entry_id,13) END LEFT JOIN texts t ON t.id=e.text_id
+      LEFT JOIN entries e ON e.id=i.entry_id LEFT JOIN dictionary_examples d ON d.id=CASE WHEN substr(i.entry_id,1,12)='independent:' THEN substr(i.entry_id,13) END LEFT JOIN texts t ON t.id=e.text_id{header}
       LEFT JOIN timeline_tracks track ON track.id=i.track_id
       ORDER BY CASE WHEN i.id=? THEN 0 ELSE 1 END,i.start_ms,i.entry_id,i.rowid''',params+[b.get('selected_interval',''),-1 if complete else 2002,b.get('selected_interval','')]).fetchall()
     items=[];catalogs=hierarchy.catalog(db)
@@ -144,7 +155,12 @@ def detail(db,lid,b):
         item['missing_entry']=bool(item['entry_id'] and not item['text_id']);items.append(item)
     selected=next((i for i in items if i['id']==b.get('selected_interval')),None)
     if not complete:items=[i for i in items if i['end_ms']>=start and i['start_ms']<=end]
-    ext=db.execute('SELECT MIN(start_ms),MAX(end_ms),COUNT(*) FROM timeline_intervals WHERE session_id=?',(s['id'],)).fetchone()
+    stamp=read_views.token(db,'timeline_extent')
+    extent_key=(stamp,s['id']) if stamp else None
+    ext=EXTENTS.get(extent_key)
+    if ext is None:
+        ext=tuple(db.execute('SELECT MIN(start_ms),MAX(end_ms),COUNT(*) FROM timeline_intervals WHERE session_id=?',(s['id'],)).fetchone())
+        EXTENTS.put(extent_key,ext,384)
     import journal
     return dict(session=s,media=media,gloss_revision=journal.workspace_revision(db),**catalogs,auto_order_texts=[r[0] for r in db.execute('SELECT id FROM timeline_text_orders WHERE session_id=?',(s['id'],))],tracks=[dict(r) for r in db.execute('SELECT * FROM timeline_tracks WHERE session_id=? ORDER BY position,rowid',(s['id'],))],intervals=items if complete else items[:2000],selected_interval=selected,complete=complete,
         extent=[min(0,ext[0] or 0),max(media['metadata']['duration_ms'] if media else 0,ext[1] or 0)],count=ext[2],truncated=not complete and len(items)>2000)
@@ -157,13 +173,13 @@ def pending(db,lid,b):
         where="e.language_id=? AND NOT EXISTS(SELECT 1 FROM timeline_intervals i WHERE i.session_id=? AND i.entry_id='independent:'||e.id)"
         total=db.execute('SELECT COUNT(*) FROM dictionary_examples e WHERE '+where,args).fetchone()[0]
         page=min(page,max(1,math.ceil(total/40)));items=[]
-        for r in db.execute('SELECT e.id,e.body FROM dictionary_examples e WHERE '+where+' ORDER BY e.rowid LIMIT 40 OFFSET ?',[*args,(page-1)*40]):
+        for r in db.execute('SELECT e.id,e.body FROM dictionary_examples_documents e WHERE '+where+' ORDER BY e.rowid LIMIT 40 OFFSET ?',[*args,(page-1)*40]):
             body=json.loads(r['body']);items.append(dict(id='independent:'+r['id'],position='',title='独立例句',language_id=lid,text=body.get('ipa') or body.get('original') or body.get('translation') or '未填写句子'))
         return dict(items=items,total=total,page=page,pages=max(1,math.ceil(total/40)))
     if tid:where+=' AND e.text_id=?';args.append(tid)
     total=db.execute('SELECT COUNT(*) FROM entries e JOIN texts t ON t.id=e.text_id WHERE '+where,args).fetchone()[0]
     page=min(page,max(1,math.ceil(total/40)));items=[]
-    for r in db.execute('SELECT e.id,e.position,e.body,t.title FROM entries e JOIN texts t ON t.id=e.text_id WHERE '+where+' ORDER BY t.rowid,e.position LIMIT 40 OFFSET ?',[*args,(page-1)*40]):
+    for r in db.execute('SELECT e.id,e.position,e.body,t.title FROM entries_documents e JOIN texts t ON t.id=e.text_id WHERE '+where+' ORDER BY t.rowid,e.position LIMIT 40 OFFSET ?',[*args,(page-1)*40]):
         body=json.loads(r['body']);items.append(dict(id=r['id'],position=r['position'],title=r['title'],language_id=body.get('language_id') or lid,text=body.get('ipa') or body.get('translation') or '未填写句子'))
     return dict(items=items,total=total,page=page,pages=max(1,math.ceil(total/40)))
 

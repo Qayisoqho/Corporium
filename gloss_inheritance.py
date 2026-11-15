@@ -7,6 +7,7 @@ All readers resolve through this module in their own database snapshot.
 import copy
 import hashlib
 import json
+import record_sources
 import uuid
 from itertools import islice
 from collections import OrderedDict,defaultdict
@@ -17,6 +18,8 @@ CURRENT=ContextVar('gloss_inheritance_session',default=None)
 CHANGES=ContextVar('gloss_inheritance_changes',default=None)
 MARKER='sense-gloss-inheritance-v1'
 NUMBER_JOIN='digit-final-gloss-v1'
+STALE_BINDING="""(b.source_binding_revision IS NOT b.revision OR
+    (b.mode='inherit' AND b.source_meaning_revision IS NOT m.revision))"""
 
 
 def encoded(value):return json.dumps(value,ensure_ascii=False,separators=(',',':'))
@@ -89,8 +92,7 @@ def prefetch(db,kind,ids,*,changed_only=False):
             query='''WITH changed AS (
                 SELECT DISTINCT b.owner_kind,b.owner_id,b.word_id FROM gloss_bindings b
                 JOIN gloss_meanings m ON m.id=b.meaning_id WHERE b.owner_kind=? AND b.owner_id IN ('''+marks+''')
-                AND (b.source_binding_revision IS NULL OR b.source_binding_revision<>b.revision
-                     OR (b.mode='inherit' AND (b.source_meaning_revision IS NULL OR b.source_meaning_revision<>m.revision))))
+                AND '''+STALE_BINDING+''')
                 SELECT b.*,m.gloss meaning_gloss,m.revision meaning_revision FROM changed c
                 JOIN gloss_bindings b ON b.owner_kind=c.owner_kind AND b.owner_id=c.owner_id AND b.word_id=c.word_id
                 JOIN gloss_meanings m ON m.id=b.meaning_id'''
@@ -154,6 +156,10 @@ def revisions(db,kind,ids):
 
 
 def pattern(value,label):
+    return encoded(pattern_parts(value,label))
+
+
+def pattern_parts(value,label):
     from dictionary_gloss_sync import replace_short
     token='\ue000corporium-meaning\ue001'
     result=replace_short(value,label,token)
@@ -162,7 +168,7 @@ def pattern(value,label):
     for i,piece in enumerate(pieces):
         if i:out.append(None)
         if piece:out.append(piece)
-    return encoded(out)
+    return out
 
 
 def value(binding):
@@ -212,12 +218,24 @@ def render_word(word,rows):
     return current
 
 
-def resolve(db,kind,rid,body,*,metadata=True,lightweight=False,changed_only=False):
+def render_source(word):
+    excluded={'annotation_id','extra_layers','unit_id','linked_lexeme','gloss_sources','unit_type',
+              'boundary_count','gloss_relations','segments','group_reviews','infix_ambiguous','analysis_form','morphemes'}
+    return {key:value for key,value in word.items() if key not in excluded}
+
+
+def current_bindings(rows):
+    return all(r['source_binding_revision']==r['revision'] and
+               (r['mode']=='override' or r['source_meaning_revision']==r['meaning_revision']) for r in rows)
+
+
+def resolve(db,kind,rid,body,*,metadata=True,lightweight=False,changed_only=False,rows=None):
     """Resolve a mutable source copy. No persistent writes, no cached mutable body."""
-    rows=bindings(db,kind,rid,changed_only=lightweight or changed_only)
+    if rows is None:
+        rows=bindings(db,kind,rid,changed_only=lightweight or changed_only)
     if not rows:return body
     grouped=defaultdict(list)
-    stamp=None if lightweight or changed_only else revision(db,kind,rid,rows)
+    stamp=None if lightweight or changed_only or not (metadata or '_gloss_active_bindings' in body) else revision(db,kind,rid,rows)
     for row in rows:
         i=at_word(body,row)
         already=body.get('gloss_revision')==stamp and '_gloss_active_bindings' in body
@@ -226,8 +244,7 @@ def resolve(db,kind,rid,body,*,metadata=True,lightweight=False,changed_only=Fals
     s=session(db);versions=[]
     for i,items in grouped.items():
         word=body['words'][i]
-        clean=all(r['source_binding_revision']==r['revision'] and (r['mode']=='override' or r['source_meaning_revision']==r['meaning_revision']) for r in items)
-        if clean:
+        if current_bindings(items):
             if metadata:word['gloss_sources']=[dict(id=r['id'],key=r['unit_key'],mode=r['mode'],meaning=r['meaning_gloss'],revision=r['revision'],meaning_revision=r['meaning_revision']) for r in items]
             continue
         if lightweight:
@@ -245,8 +262,7 @@ def resolve(db,kind,rid,body,*,metadata=True,lightweight=False,changed_only=Fals
             continue
         # Derived annotations and presentation metadata are not part of the pure input.
         identity=('annotation_id','extra_layers','unit_id','linked_lexeme')
-        derived={'gloss_sources','unit_type','boundary_count','gloss_relations','segments','group_reviews','infix_ambiguous','analysis_form','morphemes'}
-        source={k:v for k,v in word.items() if k not in derived and k not in identity}
+        source=render_source(word)
         key=encoded([source,[(r['unit_key'],r['mode'],r['override_text'],r['pattern'],r['meaning_gloss']) for r in items]])
         saved=s.rendered.get(key)
         if saved is None:
@@ -286,11 +302,14 @@ def resolve(db,kind,rid,body,*,metadata=True,lightweight=False,changed_only=Fals
     return body
 
 
-def load(db,kind,rid,raw,**kwargs):
+def load(db,kind,rid,raw,*,include_targets=True,**kwargs):
     body=json.loads(raw) if isinstance(raw,str) else raw
     if kind=='corpus':
         import grammaticality
         grammaticality.strip_corpus(body)
+    else:
+        import independent_links
+        independent_links.source_body(db,rid,body,include_targets=include_targets and not kwargs.get('lightweight',False))
     return resolve(db,kind,rid,body,**kwargs)
 
 
@@ -303,7 +322,12 @@ def check_revision(db,kind,rid,request):
 
 
 def export_body(db,kind,row):
-    row=dict(row);row['body']=json.dumps(load(db,kind,row['id'],row['body'],metadata=False),ensure_ascii=False);return row
+    row=dict(row)
+    if 'body' not in row:
+        import sentence_rows
+        row['body']=sentence_rows.one(db,kind,row['id'])
+    row['body']=json.dumps(load(db,kind,row['id'],row['body'],metadata=False),ensure_ascii=False)
+    return row
 
 
 def export_word_map(db,eid):
@@ -312,11 +336,12 @@ def export_word_map(db,eid):
     # Export consumers only read this private map. Decoding the complete map
     # again for every unit/segment multiplied work by the words per sentence.
     if saved is not None:s.export_cache.move_to_end(eid);return saved[0]
-    row=db.execute('SELECT body FROM entries WHERE id=?',(eid,)).fetchone()
+    import sentence_rows
+    source=sentence_rows.one(db,'corpus',eid)
     result={}
-    if row:
+    if source is not None:
         if s.export_analysis is None:s.export_analysis=corpus.WordAnalysisCache()
-        body=corpus.analyze(load(db,'corpus',eid,row['body'],metadata=False),cache=s.export_analysis)
+        body=corpus.analyze(load(db,'corpus',eid,source,metadata=False),cache=s.export_analysis)
         units=[dict(r) for r in db.execute('SELECT * FROM corpus_units WHERE entry_id=? AND active=1',(eid,))]
         positions={u['id']:u['position'] for u in units if u['kind']=='word'}
         for u in units:
@@ -385,22 +410,33 @@ def copy_binding(db,old_id,new_id,kind,rid,word_id,key):
     # from before the source's override was edited.
     new=dict(old,id=new_id,owner_kind=kind,owner_id=rid,word_id=word_id,unit_key=key,revision=1,
              source_binding_revision=None,source_meaning_revision=None)
-    table='entries' if kind=='corpus' else 'dictionary_examples'
-    body=json.loads(db.execute('SELECT body FROM '+table+' WHERE id=?',(rid,)).fetchone()[0])
+    import sentence_rows
+    body=sentence_rows.one(db,kind,rid)
     if kind=='corpus':i=db.execute('SELECT position FROM corpus_units WHERE id=?',(word_id,)).fetchone()[0]
     else:i=next(i for i,w in enumerate(body['words']) if w.get('annotation_id')==word_id)
     new['source_hash']=source_hash(body['words'][i])
     db.execute('INSERT INTO gloss_bindings ('+','.join(columns)+') VALUES ('+','.join('?' for _ in columns)+')',[new[c] for c in columns])
 
 
-def iter_rows(db,rows,kind=None,*,lightweight=False):
+def iter_rows(db,rows,kind=None,*,lightweight=False,relational=False,independent_targets=False):
     """Bounded read-ahead for searches/analysis; never one query per token."""
     iterator=iter(rows)
     while batch:=list(islice(iterator,100)):
         groups=defaultdict(list)
         for row in batch:groups[kind or row['kind']].append(row['id'])
-        for source,ids in groups.items():prefetch(db,source,ids,changed_only=lightweight)
-        yield from batch
+        bodies = {}
+        for source,ids in groups.items():
+            prefetch(db,source,ids,changed_only=lightweight)
+            if relational:
+                import sentence_rows
+                bodies[source] = sentence_rows.read(db,source,ids)
+                if source=='independent' and independent_targets:
+                    import independent_links
+                    independent_links.source_bodies(db,bodies[source])
+        if relational:
+            yield from (dict(row,body=bodies[kind or row['kind']][row['id']]) for row in batch)
+        else:
+            yield from batch
 
 
 def initialize(db):
@@ -430,8 +466,12 @@ def initialize(db):
 def sync_meanings(db,changes=None):
     from dictionary_gloss_sync import meanings
     if changes is None:
-        targets=[(table,dict(r)) for table in ('lexemes','morphemes') for r in db.execute('SELECT * FROM '+table)]
-    else:targets=[(table,after) for (table,_),(before,after) in list(changes.items()) if table in ('lexemes','morphemes') and before!=after]
+        targets=[(table,r) for table in ('lexemes','morphemes')
+                 for r in record_sources.with_bodies(db,table,db.execute('SELECT id,language_id FROM '+table))]
+    else:
+        targets=[(table,after) for (table,_),(before,after) in list(changes.items())
+                 if table in ('lexemes','morphemes') and after and
+                 (not before or not record_sources.same_body(before['body'],after['body']))]
     deltas=[]
     for table,target in targets:
         if target is None:continue  # removed targets are checked after binding cleanup
@@ -453,6 +493,22 @@ def _unit(word,key):
     return dict(word,key='@word',fragments=[]) if key=='@word' else next((m for m in word.get('morphemes',[]) if m['key']==key),None)
 
 
+def _independent_binding(db,rid,target,word,position):
+    ref=target['segmentation_ref'];unit=_unit(word,ref['key'])
+    if not unit or not word.get('annotation_id'):return None
+    # A stale external reference must not be rebound merely by position.
+    if ref.get('form')!=word['form'] or ref.get('unit_form')!=unit['form']:return None
+    mid=meaning_id(target['lexeme_id'],target.get('usage_id'),target.get('sense_id'))
+    meaning=db.execute('SELECT gloss FROM gloss_meanings WHERE id=?',(mid,)).fetchone()
+    if meaning is None:return None
+    bid=target.setdefault('gloss_binding_id',str(uuid.uuid4()))
+    existing=db.execute('SELECT owner_kind,owner_id FROM gloss_bindings WHERE id=?',(bid,)).fetchone()
+    if existing and (existing['owner_kind'],existing['owner_id'])!=('independent',rid):
+        bid=target['gloss_binding_id']=str(uuid.uuid4())
+    return dict(id=bid,word_id=word['annotation_id'],word_position=position,key=ref['key'],form=unit['form'],
+                meaning_id=mid,meaning_gloss=meaning['gloss'],requested_mode=target.get('gloss_mode','inherit'))
+
+
 def association_rows(db,kind,rid,body,*,force=False):
     if kind=='corpus':
         return [dict(r) for r in db.execute('''SELECT l.id,w.id word_id,u.id unit_id,u.kind,u.position,
@@ -463,25 +519,15 @@ def association_rows(db,kind,rid,body,*,force=False):
             JOIN entries e ON e.id=u.entry_id JOIN texts t ON t.id=e.text_id
             JOIN (SELECT id,language_id FROM lexemes UNION ALL SELECT id,language_id FROM morphemes) x ON x.id=l.lexeme_id
             WHERE u.entry_id=? AND u.active=1 AND w.active=1
-            AND COALESCE(NULLIF(json_extract(e.body,'$.language_id'),''),t.language_id)=x.language_id''',(rid,))]
-    import segmentation,corpus
-    corpus.analyze(body);rows=[]
+            AND COALESCE(NULLIF(?,''),t.language_id)=x.language_id''',(rid,body.get('language_id')))]
+    rows=[]
     for target in body.get('targets',[]):
         ref=target.get('segmentation_ref')
         if not ref or ref.get('detached') or (target.get('segmentation_review') and not force):continue
         i=ref.get('word',-1)
         if not isinstance(i,int) or not 0<=i<len(body['words']):continue
-        word=body['words'][i];u=_unit(word,ref['key'])
-        if not u or not word.get('annotation_id'):continue
-        # A stale external reference must not be rebound merely by position.
-        if ref.get('form')!=word['form'] or ref.get('unit_form')!=u['form']:continue
-        mid=meaning_id(target['lexeme_id'],target.get('usage_id'),target.get('sense_id'))
-        m=db.execute('SELECT gloss FROM gloss_meanings WHERE id=?',(mid,)).fetchone()
-        if m is None:continue
-        bid=target.setdefault('gloss_binding_id',str(uuid.uuid4()))
-        existing=db.execute('SELECT owner_kind,owner_id FROM gloss_bindings WHERE id=?',(bid,)).fetchone()
-        if existing and (existing['owner_kind'],existing['owner_id'])!=(kind,rid):bid=target['gloss_binding_id']=str(uuid.uuid4())
-        rows.append(dict(id=bid,word_id=word['annotation_id'],word_position=i,key=ref['key'],form=u['form'],meaning_id=mid,meaning_gloss=m['gloss'],requested_mode=target.get('gloss_mode','inherit')))
+        item=_independent_binding(db,rid,target,body['words'][i],i)
+        if item:rows.append(item)
     return rows
 
 
@@ -492,24 +538,33 @@ def clear_metadata(body):
     return body
 
 
-def _write_body(db,kind,rid,body,*,bump=True):
+def preserve_unchanged_words(words,previous,*,edited=()):
+    """Retain stored slots when only their computed analysis differs."""
+    derived={'unit_type','boundary_count','gloss_relations','segments','group_reviews',
+             'infix_ambiguous','analysis_form','morphemes','punctuation'}
+    def source(word):
+        return {key:value for key,value in word.items() if key not in derived}
+    for i,(word,prior) in enumerate(zip(words,previous)):
+        if (i not in edited and bool(word.get('punctuation'))==bool(prior.get('punctuation'))
+                and source(word)==source(prior)):
+            words[i]=prior
+
+
+def _write_body(db,kind,rid,body,original,*,bump=True):
     import lexicon
-    table='entries' if kind=='corpus' else 'dictionary_examples'
-    clean=clear_metadata(copy.deepcopy(body))
-    old=db.execute('SELECT body FROM '+table+' WHERE id=?',(rid,)).fetchone()
-    if old is not None:
-        original=json.loads(old['body'])
-        derived={'unit_type','boundary_count','gloss_relations','segments','group_reviews','infix_ambiguous','analysis_form','morphemes','punctuation'}
-        for i,word in enumerate(clean['words']):
-            if i>=len(original['words']):break
-            prior=original['words'][i]
-            without=lambda value:{k:v for k,v in value.items() if k not in derived}
-            if without(word)==without(prior) and bool(word.get('punctuation'))==bool(prior.get('punctuation')):clean['words'][i]=prior
-    raw=json.dumps(clean,ensure_ascii=False)
-    if old is None or old['body']==raw:return
-    db.execute('UPDATE '+table+' SET body=?'+(',revision=revision+1' if bump else '')+' WHERE id=?',(raw,rid))
-    if kind=='corpus':lexicon.sync_entry(db,rid,preserve_complex=True,analyzed_body=body,preserve_slots=True,stored_body=raw)
-    refresh_source_hashes(db,kind,rid,clean)
+    import independent_links
+    import sentence_rows
+    clean=clear_metadata(dict(body,words=[dict(word) for word in body['words']]))
+    if original is not None:
+        if kind=='independent':
+            independent_links.source_body(db,rid,original)
+        preserve_unchanged_words(clean['words'],original['words'])
+    if kind=='independent':
+        return independent_links.write_body(db,rid,clean,bump=bump)
+    if original is None or original==clean:return original
+    saved=sentence_rows.write(db,kind,rid,clean,bump=bump,previous=original)
+    lexicon.sync_entry(db,rid,preserve_complex=True,analyzed_body=body,preserve_slots=True,stored_body=clean,source=saved)
+    return saved
 
 
 def refresh_source_hashes(db,kind,rid,body):
@@ -526,7 +581,7 @@ def previous_units(db,eid,units):
     changes=CHANGES.get() or {}
     before=next((a for (table,_),(a,b) in changes.items() if table=='entries' and a and a['id']==eid),None)
     if before is None:return units
-    body=corpus.analyze(load(db,'corpus',eid,before['body']))
+    body=corpus.analyze(load(db,'corpus',eid,record_sources.body(before)))
     parents={r['id']:r['position'] for r in units if r['kind']=='word'}
     for row in units:
         i=row['position'] if row['kind']=='word' else parents.get(row['parent_id'],-1)
@@ -537,17 +592,32 @@ def previous_units(db,eid,units):
     return units
 
 
-def reconcile_owner(db,kind,rid,before=None,*,force=False,already_changed=False):
+def reconcile_owner(db,kind,rid,before=None,*,force=False,already_changed=False,
+                    new_bindings=(),link_changes=None,current=None):
     import corpus
+    import sentence_rows
     from dictionary_gloss_sync import transform
-    table='entries' if kind=='corpus' else 'dictionary_examples'
-    row=db.execute('SELECT body FROM '+table+' WHERE id=?',(rid,)).fetchone()
+    raw=sentence_rows.one(db,kind,rid) if current is None else current
     previous=bindings(db,kind,rid)
-    if row is None:
+    if raw is None:
         db.execute('DELETE FROM gloss_bindings WHERE owner_kind=? AND owner_id=?',(kind,rid));return
-    raw=json.loads(row['body']);body=corpus.analyze(copy.deepcopy(raw))
-    old_effective=load(db,kind,rid,before or row['body']) if previous else None
-    if kind=='independent' and before and old_effective:
+    expected=association_rows(db,kind,rid,raw,force=force) if kind=='corpus' else None
+    if expected==[] and not previous:return
+    old_raw=record_sources.object_value(before) if before is not None else raw
+    if kind=='independent':
+        import independent_links
+        raw=independent_links.source_body(db,rid,dict(raw,words=list(raw['words'])))
+        if before:independent_links.before_body(db,rid,old_raw,link_changes or {})
+    body=corpus.analyze(copy.deepcopy(raw))
+    old_effective=None
+
+    def prior_render():
+        nonlocal old_effective
+        if old_effective is None and previous:
+            old_effective=resolve(db,kind,rid,copy.deepcopy(old_raw),metadata=False,rows=previous)
+        return old_effective
+
+    if kind=='independent' and before and prior_render():
         from text_replace import preserve_independent_refs
         changed=[]
         for i,word in enumerate(body['words']):
@@ -555,12 +625,13 @@ def reconcile_owner(db,kind,rid,before=None,*,force=False,already_changed=False)
             prior=old_effective['words'][i]
             if word.get('annotation_id')==prior.get('annotation_id') and word['form']==prior['form'] and [(m['key'],m['kind'],m['form']) for m in word['morphemes']]==[(m['key'],m['kind'],m['form']) for m in prior.get('morphemes',[])]:changed.append(i)
         preserve_independent_refs(old_effective,body,changed,set(),analyzed=True)
-    expected=association_rows(db,kind,rid,body,force=force)
     if kind=='corpus':
         for item in expected:
             i=item['word_position'];u=_unit(body['words'][i],'@word') if item['kind']=='word' else body['words'][i]['morphemes'][item['position']] if 0<=item['position']<len(body['words'][i]['morphemes']) else None
             item['key']=u['key'] if u and u['form']==item['form'] and body['words'][i].get('unit_type')=='word' else None
         expected=[r for r in expected if r['key'] is not None]
+    else:
+        expected=association_rows(db,kind,rid,body,force=force)
     wanted={r['id']:r for r in expected};old={r['id']:r for r in previous}
     if not expected and not previous:return
     frozen=False
@@ -568,9 +639,9 @@ def reconcile_owner(db,kind,rid,before=None,*,force=False,already_changed=False)
         following=wanted.get(bid)
         if following and (following['meaning_id'],following['word_id'],following['key'])==(prior['meaning_id'],prior['word_id'],prior['unit_key']):continue
         i=at_word(body,prior)
-        if i is not None and old_effective and i<len(old_effective['words']):
+        if i is not None and prior_render() and i<len(old_effective['words']):
             current=body['words'][i];unit=_unit(current,prior['unit_key']);was=_unit(old_effective['words'][i],prior['unit_key'])
-            typed=before and i<len(json.loads(before)['words']) and raw['words'][i]['gloss'] not in (json.loads(before)['words'][i]['gloss'],old_effective['words'][i]['gloss'])
+            typed=before and i<len(old_raw['words']) and raw['words'][i]['gloss'] not in (old_raw['words'][i]['gloss'],old_effective['words'][i]['gloss'])
             if unit and was and not typed:
                 body['words'][i]=transform(current,{prior['unit_key']:(unit['gloss'],was['gloss'])});frozen=True
                 if prior['unit_key']!='@word' and any(r['word_id']==prior['word_id'] and r['key']=='@word' for r in wanted.values()):
@@ -584,78 +655,483 @@ def reconcile_owner(db,kind,rid,before=None,*,force=False,already_changed=False)
         if same and not force:
             # Normal saves send effective values. Only a real annotation edit
             # establishes a local override; metadata saves preserve inheritance.
-            if before and old_effective and i<len(old_effective['words']):
-                old_raw=json.loads(before)['words'];old_unit=_unit(old_effective['words'][i],item['key'])
-                if i<len(old_raw) and raw['words'][i]['gloss'] not in (old_raw[i]['gloss'],old_effective['words'][i]['gloss']) and old_unit and u['gloss']!=old_unit['gloss']:
+            if (before and item['id'] not in new_bindings and i<len(old_raw['words'])
+                    and raw['words'][i]['gloss']!=old_raw['words'][i]['gloss']
+                    and prior_render() and i<len(old_effective['words'])):
+                old_unit=_unit(old_effective['words'][i],item['key'])
+                if raw['words'][i]['gloss']!=old_effective['words'][i]['gloss'] and old_unit and u['gloss']!=old_unit['gloss']:
                     db.execute("UPDATE gloss_bindings SET mode='override',override_text=?,revision=revision+1 WHERE id=?",(u['gloss'],item['id']))
             continue
         if u is None:continue
         if word.get('gloss_frozen'):
             word['gloss_frozen']=[v for v in word['gloss_frozen'] if v['key']!=item['key']]
             if not word['gloss_frozen']:word.pop('gloss_frozen')
-        template_unit=_unit(old_effective['words'][i],item['key']) if old_effective and i<len(old_effective['words']) else u
+        template_unit=_unit(old_effective['words'][i],item['key']) if prior_render() and i<len(old_effective['words']) else u
         if template_unit is None:template_unit=u
-        db.execute('''INSERT INTO gloss_bindings(id,owner_kind,owner_id,word_id,unit_key,meaning_id,mode,override_text,pattern,source_hash,revision)
-            VALUES(?,?,?,?,?,?,'inherit',NULL,?,?,1)
-            ON CONFLICT(id) DO UPDATE SET word_id=excluded.word_id,unit_key=excluded.unit_key,
-            meaning_id=excluded.meaning_id,mode='inherit',override_text=NULL,pattern=excluded.pattern,
-            source_hash=excluded.source_hash,revision=gloss_bindings.revision+1''',
-            (item['id'],kind,rid,item['word_id'],item['key'],item['meaning_id'],pattern(template_unit['gloss'],item['meaning_gloss']),source_hash(raw['words'][i])))
-        if not force and item.get('requested_mode')=='override':db.execute("UPDATE gloss_bindings SET mode='override',override_text=? WHERE id=?",(u['gloss'],item['id']))
+        _write_binding(db,kind,rid,item,raw['words'][i],template_unit,u,force=force)
     # Freeze on unlink, preserve independent target identities, and materialize
     # current values ONLY once during the explicitly authorized old-data migration.
     if force:body=resolve(db,kind,rid,body)
     if kind=='independent' or frozen or force or previous or expected:
-        _write_body(db,kind,rid,body,bump=not already_changed)
-        stored=db.execute('SELECT body FROM '+table+' WHERE id=?',(rid,)).fetchone()
-        if stored:
-            saved=json.loads(stored['body']);refresh_source_hashes(db,kind,rid,saved)
+        saved=_write_body(db,kind,rid,body,raw,bump=not already_changed)
+        if saved:
+            if kind=='independent':
+                # The writer may still hold this object as the journal image.
+                # Bindings and effective words belong to the read-side copy.
+                saved=independent_links.source_body(db,rid,dict(saved,words=list(saved['words'])))
+            refresh_source_hashes(db,kind,rid,saved)
             capture_canonical(db,kind,rid,saved)
+
+
+def _write_binding(db,kind,rid,item,source,template,unit,*,force=False):
+    db.execute('''INSERT INTO gloss_bindings(id,owner_kind,owner_id,word_id,unit_key,meaning_id,mode,override_text,pattern,source_hash,revision)
+        VALUES(?,?,?,?,?,?,'inherit',NULL,?,?,1)
+        ON CONFLICT(id) DO UPDATE SET word_id=excluded.word_id,unit_key=excluded.unit_key,
+        meaning_id=excluded.meaning_id,mode='inherit',override_text=NULL,pattern=excluded.pattern,
+        source_hash=excluded.source_hash,revision=gloss_bindings.revision+1''',
+        (item['id'],kind,rid,item['word_id'],item['key'],item['meaning_id'],pattern(template['gloss'],item['meaning_gloss']),source_hash(source)))
+    if not force and item.get('requested_mode')=='override':
+        db.execute("UPDATE gloss_bindings SET mode='override',override_text=? WHERE id=?",(unit['gloss'],item['id']))
+
+
+def independent_word(db,rid,word):
+    """Render just the word addressed by a relationship action."""
+    import corpus
+    previous=[dict(r) for r in db.execute('''SELECT b.*,m.gloss meaning_gloss,m.revision meaning_revision
+        FROM gloss_bindings b JOIN gloss_meanings m ON m.id=b.meaning_id
+        WHERE b.owner_kind='independent' AND b.owner_id=? AND b.word_id=? ORDER BY b.unit_key,b.id''',
+        (rid,word.get('annotation_id')))]
+    active=[r for r in previous if r['source_hash']==source_hash(word)]
+    if any(r['source_binding_revision']!=r['revision'] or (r['mode']!='override' and
+           r['source_meaning_revision']!=r['meaning_revision']) for r in active):
+        return render_word(word,active),previous,{r['id']:r for r in active}
+    analyzed=corpus.analyze(dict(ipa='',translation='',words=[copy.deepcopy(word)]))['words'][0]
+    return analyzed,previous,{r['id']:r for r in active}
+
+
+def reconcile_independent_words(db,rid,positions):
+    """Apply association changes without reading or writing a sentence body."""
+    import corpus
+    import independent_links
+    from dictionary_gloss_sync import transform
+    for position in sorted(positions):
+        source,raw=independent_links.word(db,rid,position)
+        if raw is None:continue
+        effective,previous,active=independent_word(db,rid,raw)
+        word=corpus.analyze(dict(ipa='',translation='',words=[copy.deepcopy(raw)]))['words'][0]
+        expected={}
+        rows=db.execute('SELECT * FROM independent_links WHERE example_id=? AND word_position=? ORDER BY position',(rid,position)).fetchall()
+        for row in independent_links.images(db,rows):
+            target=independent_links.target(row);ref=target['segmentation_ref']
+            if ref.get('detached'):continue
+            # Preserve a stale binding for review until its own relation changes.
+            bid=target.get('gloss_binding_id')
+            item=_independent_binding(db,rid,target,word,position)
+            if not item:
+                if bid:expected[bid]=None
+                continue
+            if item['id']!=bid:independent_links.put(db,rid,row['position'],target)
+            expected[item['id']]=item
+        prior_by_id={r['id']:r for r in previous}
+        def same(item,prior):
+            return item and (item['meaning_id'],item['word_id'],item['key'])==(prior['meaning_id'],prior['word_id'],prior['unit_key'])
+        frozen=False
+        for prior in previous:
+            bid=prior['id'];item=expected.get(bid)
+            if (bid in expected and item is None) or same(item,prior):continue
+            key=prior['unit_key'];unit=_unit(word,key);was=_unit(effective,key)
+            if bid in active and unit and was:
+                word=transform(word,{key:(unit['gloss'],was['gloss'])});frozen=True
+                if key!='@word' and any(r and r['key']=='@word' for r in expected.values()):
+                    literals=word.setdefault('gloss_frozen',[])
+                    literals[:]=[v for v in literals if v['key']!=key]
+                    literals.append(dict(key=key,form=was['form'],gloss=was['gloss']))
+            db.execute('DELETE FROM gloss_bindings WHERE id=?',(bid,))
+        for item in expected.values():
+            if item is None:continue
+            prior=prior_by_id.get(item['id'])
+            if prior and same(item,prior):continue
+            key=item['key'];unit=_unit(word,key)
+            if unit is None:continue
+            if any(v['key']==key for v in word.get('gloss_frozen',[])):
+                word['gloss_frozen']=[v for v in word['gloss_frozen'] if v['key']!=key]
+                if not word['gloss_frozen']:word.pop('gloss_frozen')
+                frozen=True
+            _write_binding(db,'independent',rid,item,word,_unit(effective,key) or unit,unit)
+        if frozen:
+            if source is None:source=raw
+            independent_links.freeze_word(db,rid,position,source,word)
+            for bid in expected:
+                if bid in active:
+                    db.execute('UPDATE gloss_bindings SET source_hash=?,revision=revision+1 WHERE id=? AND source_hash<>?',
+                               (source_hash(word),bid,source_hash(word)))
 
 
 def capture_canonical(db,kind,rid,source):
     """Record cache versions only when an explicit source save is already done."""
     rows=bindings(db,kind,rid)
+    rows=[row for row in rows if row['source_binding_revision']!=row['revision']
+          or row['source_meaning_revision']!=row['meaning_revision']]
     if not rows:return
-    effective=resolve(db,kind,rid,copy.deepcopy(source),metadata=False)
+    effective=resolve(db,kind,rid,dict(source,words=list(source['words'])),metadata=False,changed_only=True)
     ready=[]
     for row in rows:
         i=at_word(source,row)
         if i is None or source_hash(source['words'][i])!=source_hash(effective['words'][i]):continue
-        if row['source_binding_revision']!=row['revision'] or row['source_meaning_revision']!=row['meaning_revision']:ready.append(row['id'])
+        ready.append(row['id'])
     if ready:db.execute('''UPDATE gloss_bindings SET source_binding_revision=revision,
         source_meaning_revision=(SELECT revision FROM gloss_meanings WHERE id=gloss_bindings.meaning_id)
         WHERE id IN ('''+','.join('?' for _ in ready)+')',ready)
 
 
-def synchronize(db,changes):
-    owners={};changed_entries=set()
-    for (table,_),(before,after) in list(changes.items()):
+def same_annotation_source(before,after):
+    """Check that only sentence display fields changed."""
+    if not before or not after:
+        return False
+    if any(before.get(key)!=after.get(key) for key in before.keys()|after.keys() if key not in ('body','revision')):
+        return False
+    a,b=(record_sources.body(row,mutable=False) for row in (before,after))
+    display_fields=('translation','ipa','edited','notes')
+    return all(a.get(key)==b.get(key) and (key in a)==(key in b)
+               for key in a.keys()|b.keys() if key not in display_fields)
+
+
+def rebase_form_slots(db,writes,positions,states):
+    """Carry an unchanged label across a verified single-unit form edit."""
+    if not isinstance(db,record_sources.Connection):
+        return
+    candidates={}
+    slots=[]
+    for rid,old,new,_ in writes:
+        selected=positions[rid]
+        if (old.get('reduplications') or any(a!=b for i,(a,b) in enumerate(zip(old['words'],new['words']))
+                                           if i not in selected)):
+            continue
+        changed=[(i,old['words'][i],new['words'][i]) for i in selected]
+        if any(a['gloss']!=b['gloss'] or b.get('unit_type')!='word' or
+               len(b['morphemes'])!=1 or b['morphemes'][0]['kind']!='simple' or
+               any(c in a['form']+b['form']+b['gloss'] for c in '-=+~<>#[]\\') or
+               any(k in a or k in b for k in ('morph_groups','infix_confirmation','gloss_frozen'))
+               for _,a,b in changed):
+            continue
+        word_ids={u['position']:u['id'] for u in states[rid][0] if u['kind']=='word'}
+        slots.extend((rid,i,word_ids[i]) for i,_,_ in changed)
+        candidates[rid]=(new,{i:(a,b) for i,a,b in changed})
+    if not slots:
+        return
+    marks=','.join('(?,?,?)' for _ in slots)
+    declined=set()
+    updates=defaultdict(list)
+    for row in db.execute(f'''WITH slots(owner_id,position,word_id) AS (VALUES {marks})
+        SELECT s.owner_id,s.position,l.id link_id,m.id meaning_id,m.gloss meaning_gloss,m.revision meaning_revision,
+          g.id,g.mode,g.pattern,g.override_text,g.source_hash,
+          (SELECT 1 FROM corpus_units u JOIN lexical_links linked ON linked.unit_id=u.id
+            WHERE u.parent_id=s.word_id AND u.active=1 LIMIT 1) child,
+          (SELECT 1 FROM gloss_bindings other WHERE other.owner_kind='corpus'
+            AND other.owner_id=s.owner_id AND other.word_id=s.word_id AND other.id IS NOT g.id LIMIT 1) sibling,
+          COALESCE(x.language_id,morph.language_id)=COALESCE(NULLIF(e.language_id,''),t.language_id) same_language
+        FROM slots s JOIN corpus_sentence_keys e ON e.id=s.owner_id JOIN texts t ON t.id=e.text_id
+        LEFT JOIN lexical_links l ON l.unit_id=s.word_id
+        LEFT JOIN gloss_meanings m ON m.target_id=l.lexeme_id AND m.usage_id=l.usage_id AND m.sense_id=l.sense_id
+        LEFT JOIN gloss_bindings g ON g.id=l.id AND g.owner_kind='corpus' AND g.owner_id=s.owner_id
+          AND g.word_id=s.word_id AND g.unit_key='@word' AND g.meaning_id=m.id
+        LEFT JOIN lexemes x ON x.id=l.lexeme_id LEFT JOIN morphemes morph ON morph.id=l.lexeme_id''',
+        tuple(part for slot in slots for part in slot)):
+        rid=row['owner_id']
+        old,new=candidates[rid][1][row['position']]
+        if row['child'] or row['sibling']:
+            declined.add(rid)
+        elif row['meaning_id'] is not None:
+            if (not row['id'] or not row['same_language'] or
+                    row['source_hash']!=source_hash(old) or value(row)!=new['gloss']):
+                declined.add(rid)
+            else:
+                updates[rid].append((source_hash(new),row['meaning_revision'],row['id']))
+    verified=candidates.keys()-declined
+    db.executemany('''UPDATE gloss_bindings SET source_hash=?,source_meaning_revision=?,
+        revision=revision+1,source_binding_revision=revision+1 WHERE id=?''',
+        (update for rid in verified for update in updates[rid]))
+    if not hasattr(db,'rebased_forms'):
+        db.rebased_forms={}
+    db.rebased_forms.update((rid,candidates[rid][0]) for rid in verified)
+
+
+def freeze_removed_word_bindings(db,removed,source_edits):
+    """Freeze isolated whole-word removals and their stable units in batches."""
+    import corpus
+    import lexicon
+    import long_tasks
+    import sentence_rows
+    from dictionary_gloss_sync import transform
+    from functools import lru_cache
+
+    @lru_cache(maxsize=256)
+    def frozen(form,gloss,extra,label):
+        source=dict(json.loads(extra),form=form,gloss=gloss)
+        analyzed=corpus.analyze(dict(ipa='',translation='',words=[source]))['words'][0]
+        return transform(analyzed,{'@word':(gloss,label)})
+
+    links=list(removed.items())
+    eligible=defaultdict(list)
+    owners=set()
+    for start in range(0,len(links),200):
+        batch=links[start:start+200]
+        marks=','.join('(?,?)' for _ in batch)
+        for row in db.execute(f'''WITH removed(id,unit_id) AS (VALUES {marks})
+            SELECT u.entry_id,old.id,u.position,g.mode,g.override_text,g.pattern,m.gloss meaning_gloss,
+              g.revision,g.source_binding_revision,g.source_meaning_revision,m.revision meaning_revision,g.source_hash,
+              w.form,w.gloss,w.extra, u.kind='word' AND g.id IS NOT NULL AND m.id IS NOT NULL AND u.active=1 AND w.form=u.form
+                AND w.extra->'$.gloss_frozen' IS NULL AND w.extra->'$.group_id' IS NULL
+                AND NOT EXISTS (SELECT 1 FROM gloss_bindings sibling
+                  WHERE sibling.owner_kind='corpus' AND sibling.owner_id=u.entry_id
+                    AND sibling.word_id=u.id AND sibling.id<>g.id)
+                AND NOT EXISTS (SELECT 1 FROM corpus_units part
+                  JOIN lexical_links l ON l.unit_id=part.id JOIN gloss_meanings gm
+                    ON gm.target_id=l.lexeme_id AND gm.usage_id=l.usage_id AND gm.sense_id=l.sense_id
+                  WHERE part.parent_id=u.id AND part.active=1) safe
+            FROM removed old CROSS JOIN corpus_units u ON u.id=old.unit_id
+            LEFT JOIN gloss_bindings g ON g.id=old.id AND g.owner_kind='corpus'
+              AND g.owner_id=u.entry_id AND g.word_id=u.id AND g.unit_key='@word'
+            LEFT JOIN gloss_meanings m ON m.id=g.meaning_id
+            LEFT JOIN sentence_word_rows w ON w.kind='corpus' AND w.owner_id=u.entry_id AND w.position=u.position
+            ''',tuple(part for item in batch for part in item)):
+            owner=('corpus',row['entry_id'])
+            if owner in source_edits or not row['safe']:
+                owners.add(owner)
+                continue
+            word=None
+            label=value(row)
+            if not current_bindings((row,)) and row['gloss']!=label:
+                fields=(row['form'],row['gloss'],row['extra'],label)
+                raw=dict(json.loads(row['extra']),form=row['form'],gloss=row['gloss'])
+                # Script and multipart layouts use the complete renderer.
+                if (any(c in row['form']+row['gloss']+label for c in '-=+~<>#[]\\')
+                        or raw.get('morph_groups') or raw.get('infix_confirmation')
+                        or source_hash(raw)!=row['source_hash']):
+                    owners.add(owner)
+                    continue
+                get=frozen if sum(map(len,fields))<=4096 else frozen.__wrapped__
+                word=get(*fields)
+            eligible[owner].append((row['id'],row['position'],word))
+
+    ready=eligible.keys()-owners
+    changed={rid:{position:word for _,position,word in eligible[kind,rid] if word is not None}
+             for kind,rid in ready}
+    chosen=[rid for rid,words in changed.items() if words]
+    for start in long_tasks.steps(range(0,len(chosen),100)):
+        batch=chosen[start:start+100]
+        sources=sentence_rows.read(db,'corpus',batch)
+        positions={rid:set(changed[rid]) for rid in batch}
+        states=lexicon.prepare_sync(db,batch,positions)
+        writes=[]
+        for rid in batch:
+            source=sources[rid]
+            units,_=states[rid]
+            slots=[u for u in units if u['kind']=='word']
+            sizes=defaultdict(int)
+            for unit in units:
+                if unit['kind']=='morpheme':sizes[unit['parent_id']]+=1
+            if (source.get('reduplications') or len(slots)!=len(source['words']) or
+                    any(sizes[slots[i]['id']]!=len(w['morphemes']) for i,w in changed[rid].items())):
+                ready.discard(('corpus',rid))
+                continue
+            body=dict(source,words=list(source['words']),edited=True)
+            for i,word in changed[rid].items():
+                body['words'][i]=word
+            writes.append((rid,source,body,0))
+        if writes:
+            sentence_rows.write_corpus_batch(db,writes)
+            for rid,_,body,_ in writes:
+                lexicon.sync_entry(db,rid,preserve_complex=True,analyzed_body=body,preserve_slots=True,
+                                   word_positions=positions[rid],stored_body=body,source=body,unit_state=states[rid])
+
+    ids=[link for owner in ready for link,_,_ in eligible[owner]]
+    for start in range(0,len(ids),400):
+        batch=ids[start:start+400]
+        db.execute('DELETE FROM gloss_bindings WHERE id IN ('+','.join('?' for _ in batch)+')',batch)
+    return ready
+
+
+def bind_appended_words(db,appends):
+    """Attach one binding per unchanged word using its existing unit identities."""
+    import corpus
+    import long_tasks
+    import save_validation
+    from functools import lru_cache
+
+    if not appends or not save_validation.trusted(db) or not record_sources.native(db):return set()
+    @lru_cache(maxsize=512)
+    def recipe(value,label):
+        parts=pattern_parts(value,label)
+        return encoded(parts),''.join(label if part is None else part for part in parts)
+
+    ready=set();ids=sorted(appends)
+    db.execute('CREATE TEMP TABLE IF NOT EXISTS auto_gloss_append_words(entry_id TEXT,word_id TEXT,PRIMARY KEY(entry_id,word_id)) WITHOUT ROWID')
+    for start in long_tasks.steps(range(0,len(ids),200)):
+        batch=ids[start:start+200]
+        previous=defaultdict(dict);expected=defaultdict(dict);new=defaultdict(list)
+        # Limit inherited-label work to the words receiving a new link. Other
+        # links and bindings in the same sentence were already checked.
+        selected=[link for eid in batch for link in appends[eid]]
+        db.execute('DELETE FROM temp.auto_gloss_append_words')
+        for offset in range(0,len(selected),400):
+            links=selected[offset:offset+400]
+            db.execute('''INSERT OR IGNORE INTO temp.auto_gloss_append_words
+              SELECT u.entry_id,COALESCE(u.parent_id,u.id) FROM lexical_links l
+              JOIN corpus_units u ON u.id=l.unit_id WHERE l.id IN ('''+','.join('?' for _ in links)+')',links)
+        for row in db.execute(f"""SELECT b.owner_id,b.id,b.word_id,b.unit_key,b.meaning_id,b.mode,b.source_hash,
+            NOT {STALE_BINDING} current FROM temp.auto_gloss_append_words q
+            CROSS JOIN gloss_bindings b ON b.owner_kind='corpus' AND b.owner_id=q.entry_id AND b.word_id=q.word_id
+            JOIN gloss_meanings m ON m.id=b.meaning_id"""):
+            previous[row['owner_id']][row['id']]=row
+        for row in db.execute("""WITH units AS MATERIALIZED (
+            SELECT q.entry_id,w.id,w.id word_id,w.position word_position,w.kind,w.position,w.form,w.gloss
+            FROM temp.auto_gloss_append_words q CROSS JOIN corpus_units w ON w.id=q.word_id WHERE w.active=1
+            UNION ALL SELECT q.entry_id,u.id,w.id,w.position,u.kind,u.position,u.form,u.gloss
+            FROM temp.auto_gloss_append_words q CROSS JOIN corpus_units w ON w.id=q.word_id AND w.active=1
+            CROSS JOIN corpus_units u ON u.parent_id=w.id AND u.active=1 AND u.entry_id=q.entry_id
+            ) SELECT u.entry_id,l.id,u.form,u.gloss unit_gloss,u.kind,u.word_id,u.word_position position,
+            CASE WHEN u.kind='word' THEN '@word' ELSE z.body->>'$.key' END unit_key,
+            z.body->>'$.kind' segment_kind,z.body->>'$.form' segment_form,z.body->>'$.gloss' segment_gloss,
+            z.body->>'$.snapshot.form' old_form,z.body->>'$.snapshot.gloss' old_gloss,
+            m.id meaning_id,m.gloss,m.revision meaning_revision
+            FROM units u CROSS JOIN lexical_links l ON l.unit_id=u.id
+            CROSS JOIN gloss_meanings m ON m.target_id=l.lexeme_id AND m.usage_id=l.usage_id AND m.sense_id=l.sense_id
+            JOIN entries e ON e.id=u.entry_id JOIN texts t ON t.id=e.text_id
+            JOIN sentence_text_rows s ON s.kind='corpus' AND s.owner_id=e.id
+            LEFT JOIN lexemes x ON x.id=l.lexeme_id LEFT JOIN morphemes y ON y.id=l.lexeme_id
+            LEFT JOIN unit_segments z ON u.kind='morpheme' AND z.id=u.id
+            WHERE COALESCE(NULLIF(s.language_id,''),t.language_id)=COALESCE(x.language_id,y.language_id)"""):
+            eid=row['entry_id']
+            if row['id'] in appends[eid]:new[eid].append(row)
+            else:expected[eid][row['id']]=(row['word_id'],row['unit_key'],row['meaning_id'])
+        positions={eid:{row['position']:row for row in new[eid]} for eid in batch
+                   if {bid:(row['word_id'],row['unit_key'],row['meaning_id']) for bid,row in previous[eid].items()}==expected[eid]
+                   and {row['id'] for row in new[eid]}==appends[eid]}
+        prior_by_word=defaultdict(list)
+        for eid in positions:
+            for row in previous[eid].values():prior_by_word[eid,row['word_id']].append(row)
+        inserts=defaultdict(list)
+        if positions:
+            for row in db.execute("""SELECT s.owner_id,s.position,s.form,s.gloss,s.extra
+                 FROM temp.auto_gloss_append_words q CROSS JOIN corpus_units u ON u.id=q.word_id
+                 CROSS JOIN sentence_word_rows s ON s.kind='corpus' AND s.owner_id=q.entry_id AND s.position=u.position"""):
+                eid=row['owner_id'];link=positions.get(eid,{}).get(row['position'])
+                if not link or corpus.boundary_count(row['form']):continue
+                word={**json.loads(row['extra']),'form':row['form'],'gloss':row['gloss']}
+                if word.get('gloss_frozen') or word.get('punctuation') or word.get('group_id'):continue
+                fingerprint=source_hash(word)
+                prior=prior_by_word[eid,link['word_id']]
+                if prior and (link['kind']=='word' or len(prior)!=1 or prior[0]['unit_key']!='@word'
+                              or prior[0]['mode']!='inherit' or not prior[0]['current'] or prior[0]['source_hash']!=fingerprint):continue
+                if prior and (word.get('morph_groups') or any(mark in row['form']+row['gloss'] for mark in '<>#\\[]~')):continue
+                if link['kind']=='word':
+                    if row['form']!=link['form']:continue
+                    value=row['gloss']
+                else:
+                    if (link['segment_kind']!='simple' or not link['unit_key'] or word.get('morph_groups') or '~' in row['form'] or
+                        (link['old_form'],link['old_gloss'])!=(row['form'],row['gloss']) or
+                        (link['segment_form'],link['segment_gloss'])!=(link['form'],link['unit_gloss'])):continue
+                    value=link['unit_gloss']
+                compute=recipe if len(value)+len(link['gloss'])<8192 else recipe.__wrapped__
+                encoded_pattern,label=compute(value,link['gloss'])
+                if label!=value:continue
+                inserts[eid].append((link['id'],eid,link['word_id'],link['unit_key'],link['meaning_id'],
+                                     encoded_pattern,fingerprint,link['meaning_revision']))
+        pending=[]
+        for eid,rows in inserts.items():
+            if len(rows)!=len(appends[eid]):continue
+            pending.extend(rows)
+            ready.add(eid)
+        db.executemany('''INSERT INTO gloss_bindings(id,owner_kind,owner_id,word_id,unit_key,meaning_id,mode,
+            pattern,source_hash,revision,source_binding_revision,source_meaning_revision)
+            VALUES(?,'corpus',?,?,?,?,'inherit',?,?,1,1,?)''',long_tasks.steps(pending))
+    return ready
+
+
+def synchronize(db,changes,*,association_removals=False):
+    import independent_links
+    import long_tasks
+    owners={}
+    source_edits={}
+    new_bindings=defaultdict(set)
+    link_changes=defaultdict(dict)
+    independent_words=defaultdict(set)
+    units=set()
+    removed={}
+    rebased=getattr(db,'rebased_forms',{})
+    direct_independent=getattr(db,'auto_independent_appends',())
+    independent_source_edit=bool(direct_independent) and any(
+        table=='dictionary_examples' and not independent_links.revision_only(before,after)
+        for (table,_),(before,after) in changes.items())
+    for (table,key),(before,after) in list(changes.items()):
         if before==after:continue
+        if table=='dictionary_examples' and independent_links.revision_only(before,after):continue
         if table in ('entries','dictionary_examples'):
             row=after or before;kind='corpus' if table=='entries' else 'independent'
-            owners[(kind,row['id'])]=before['body'] if before else None;changed_entries.add((kind,row['id']))
+            owner=(kind,row['id'])
+            source_edits[owner]=(before['body'] if before else None,after['body'] if after else None)
+            if (not same_annotation_source(before,after) and
+                    (kind!='corpus' or not after or rebased.get(row['id'])!=after['body'])):
+                owners[owner]=None
         elif table=='lexical_links':
-            for row in (before,after):
-                if row:
-                    u=db.execute('SELECT entry_id FROM corpus_units WHERE id=?',(row['unit_id'],)).fetchone()
-                    if u:owners.setdefault(('corpus',u['entry_id']),None)
-    for (kind,rid),before in owners.items():reconcile_owner(db,kind,rid,before,already_changed=(kind,rid) in changed_entries)
+            units.update(row['unit_id'] for row in (before,after) if row)
+            if association_removals and before and not after:
+                removed[before['id']]=before['unit_id']
+        elif table=='gloss_bindings' and before is None and after:
+            new_bindings[after['owner_kind'],after['owner_id']].add(after['id'])
+        elif table in ('independent_links','independent_word_overrides'):
+            direct=table=='independent_links' and before is None and after['id'] in direct_independent
+            if direct and not independent_source_edit:continue
+            rid=(after or before)['example_id']
+            link_changes[rid][table,key]=(before,after)
+            if direct:continue  # Keep the old image for owners with body edits.
+            if table=='independent_links' and after and after['sense_id'] and after['word_position'] is not None:
+                ref=independent_links.target(after)
+                if not ref.get('gloss_binding_id') and not ref['segmentation_ref'].get('detached'):
+                    mid=meaning_id(after['lexeme_id'],after['usage_id'],after['sense_id'])
+                    if db.execute('SELECT 1 FROM gloss_meanings WHERE id=?',(mid,)).fetchone():
+                        independent_words[rid].add(after['word_position'])
+    units=list(units)
+    for start in range(0,len(units),400):
+        ids=units[start:start+400]
+        for rid, in db.execute('SELECT DISTINCT entry_id FROM corpus_units WHERE id IN ('+
+                               ','.join('?' for _ in ids)+')',ids):
+            owners['corpus',rid]=None
+    if removed and record_sources.mode(db) in ('single','drop'):
+        for owner in freeze_removed_word_bindings(db,removed,source_edits):
+            owners.pop(owner,None)
+    if not any(kind=='corpus' for kind,_ in source_edits) and not removed:
+        for rid in bind_appended_words(db,getattr(db,'auto_word_appends',None)):
+            owners.pop(('corpus',rid),None)
+    for kind,rid in long_tasks.steps(owners):
+        owner=(kind,rid)
+        before,after=source_edits.get(owner,(None,None))
+        reconcile_owner(db,kind,rid,before,already_changed=owner in source_edits,
+                        new_bindings=new_bindings.get(owner,()),link_changes=link_changes.get(rid),
+                        current=after if isinstance(after,dict) else None)
+    for rid,positions in independent_words.items():
+        if ('independent',rid) not in owners:reconcile_independent_words(db,rid,positions)
     for (table,_),(before,after) in list(changes.items()):
         if table in ('lexemes','morphemes') and before and not after:
             exists=db.execute('SELECT 1 FROM lexemes WHERE id=? UNION ALL SELECT 1 FROM morphemes WHERE id=?',(before['id'],before['id'])).fetchone()
             if not exists:db.execute('DELETE FROM gloss_meanings WHERE target_id=?',(before['id'],))
 
 
+def complex_meaning_change(old,new):
+    return not old.strip() or not new.strip() or any(c in old+new for c in '-=+<>')
+
+
 def validate_meaning_changes(db,deltas):
     # Ordinary labels cannot alter existing morpheme boundaries. Empty labels or
     # boundary syntax need the full existing structural check, with no writeback.
-    unsafe={mid for mid,old,new in deltas if not old.strip() or not new.strip() or any(c in old+new for c in '-=+<>')}
+    unsafe={mid for mid,old,new in deltas if complex_meaning_change(old,new)}
     owners=set()
     for mid in unsafe:owners.update((r['owner_kind'],r['owner_id']) for r in db.execute('SELECT DISTINCT owner_kind,owner_id FROM gloss_bindings WHERE meaning_id=?',(mid,)))
+    import sentence_rows
     for kind,rid in owners:
-        table='entries' if kind=='corpus' else 'dictionary_examples';row=db.execute('SELECT body FROM '+table+' WHERE id=?',(rid,)).fetchone()
-        if row:load(db,kind,rid,row['body'])
+        source=sentence_rows.one(db,kind,rid)
+        if source is not None:load(db,kind,rid,source)
 
 
 def set_mode(db,request,lid):
@@ -681,9 +1157,9 @@ def refresh_number_join(db):
     if db.execute('SELECT 1 FROM gloss_migrations WHERE id=?',(NUMBER_JOIN,)).fetchone():return
     from dictionary_gloss_sync import meanings
     count=0
+    import record_sources
     for table in ('lexemes','morphemes'):
-        for row in db.execute('SELECT * FROM '+table).fetchall():
-            target=dict(row)
+        for target in record_sources.with_bodies(db,table,db.execute('SELECT id,language_id FROM '+table)):
             for (usage,sense),label in meanings(target,table).items():
                 count+=db.execute('UPDATE gloss_meanings SET gloss=?,revision=revision+1 WHERE id=? AND gloss<>?',(label,meaning_id(target['id'],usage,sense),label)).rowcount
     if count:
@@ -700,7 +1176,7 @@ def migrate(db):
         return json.loads(saved['body'])
     sync_meanings(db);result=dict(corpus=0,independent=0,bindings=0)
     owners=[('corpus',r[0]) for r in db.execute('SELECT DISTINCT u.entry_id FROM lexical_links l JOIN corpus_units u ON u.id=l.unit_id WHERE u.active=1 AND l.sense_id IS NOT NULL')]
-    owners += [('independent',r[0]) for r in db.execute("SELECT id FROM dictionary_examples WHERE json_array_length(json_extract(body,'$.targets'))>0")]
+    owners += [('independent',r[0]) for r in db.execute("SELECT DISTINCT example_id FROM independent_links")]
     import long_tasks
     for kind,rid in long_tasks.steps(owners):
         reconcile_owner(db,kind,rid,force=True);result[kind]+=1
@@ -712,12 +1188,25 @@ def migrate(db):
 
 def after_legacy_undo(db,changes,preimages,redo):
     """Old journals predate bindings; reconcile their restored associations once."""
-    if any(c['table'] in TABLES for c in changes):return
+    if any(c.get('inheritance_complete') or c['table'] in TABLES for c in changes):return
     restored={}
     for i,c in enumerate(changes):
         table=c['table'];row=c['before'] or c['after'];key='text_id' if table=='text_info' else 'id'
         if table not in ('lexemes','morphemes','lexical_links','entries','dictionary_examples'):continue
-        current=db.execute('SELECT rowid,* FROM '+table+' WHERE '+key+'=?',(row[key],)).fetchone()
-        restored[(table,i)]=(preimages.get((table,row[key])),dict(current) if current else None)
+        if c.get('revision_only'):continue
+        fields=','.join(k for k in row if k not in ('rowid','body')) if table in record_sources.TABLES else '*'
+        current=db.execute('SELECT rowid,'+fields+' FROM '+table+' WHERE '+key+'=?',(row[key],)).fetchone()
+        current=dict(current) if current else None
+        if current is not None and table in record_sources.TABLES:
+            current['body']=record_sources.read(db,table,row[key])
+        restored[(table,i)]=(preimages.get((table,row[key])),current)
     sync_meanings(db,restored)
     synchronize(db,restored)
+    owners={(c['before'] or c['after'])['id'] for c in changes if c.get('legacy_links')}
+    affected=defaultdict(set)
+    for c in changes:
+        if c['table']!='independent_links':continue
+        for row in (c['before'],c['after']):
+            if row and row['example_id'] in owners and row['word_position'] is not None:
+                affected[row['example_id']].add(row['word_position'])
+    for rid,positions in affected.items():reconcile_independent_words(db,rid,positions)

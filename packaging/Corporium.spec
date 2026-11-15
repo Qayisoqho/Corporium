@@ -10,6 +10,7 @@ for family,names in (('STIXTwoText',tuple('STIXTwoText-'+face+'.ttf' for face in
     for name in (*names,'OFL.txt','SOURCE.json'):
         datas.append((str(root/'font'/family/name),'font/'+family))
 datas.append((str(root/'packaging'/'examples'/'Telira.corporium'),'packaging/examples'))
+datas.append((str(root/'packaging'/'examples'/'Telira.corporium-backup'),'packaging/examples'))
 datas.append((str(root/'packaging'/'examples'/'README.txt'),'packaging/examples'))
 a=Analysis([str(root/'desktop.py')],pathex=[str(root)],binaries=[],datas=datas,
     hiddenimports=['webview.platforms.winforms','webview.platforms.edgechromium','clr_loader','pythonnet'],

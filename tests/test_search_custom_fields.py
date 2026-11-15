@@ -1,3 +1,4 @@
+import source_fixtures
 import json
 import unittest
 from urllib.parse import urlencode
@@ -77,8 +78,8 @@ class CustomSearchTests(unittest.TestCase):
         layer=self.layer('他语言附注',_language=other)
         src=self.source('corpus',[('mixed','ROOT')])
         with server.connect() as db:
-            row=db.execute('SELECT body FROM entries WHERE id=?',(src['id'],)).fetchone();body=json.loads(row[0]);body['language_id']=other
-            db.execute('UPDATE entries SET body=?,revision=revision+1 WHERE id=?',(json.dumps(body),src['id']))
+            row=db.execute('SELECT body FROM entries_documents WHERE id=?',(src['id'],)).fetchone();body=json.loads(row[0]);body['language_id']=other
+            source_fixtures.replace(db,'entries',src['id'],json.dumps(body),bump=True)
         self.annotate(src,[(layer,0,'实际语言附加值')])
         self.assertEqual(self.results('corpus','实际语言附加值')['total'],1)
         self.assertEqual(self.api('entries?'+urlencode(dict(q='实际语言附加值',language=other)))['total'],0)
